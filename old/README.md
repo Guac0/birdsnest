@@ -1,0 +1,1 @@
+Old files dating back to Stabvest V1, which was developed in bash for securing services in Debian-based environments with a minimal focus on informing human operators.
