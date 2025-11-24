@@ -1,6 +1,6 @@
 ## Primary Application
-[ ] Detect OS
-[ ] Get system details (IP address, hostname)
+[X] Detect OS
+[X] Get system details (IP address, hostname)
 [ ] Config variables
 [ ] Separate threads for interaction / polling / watchdog
 

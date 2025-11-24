@@ -1,6 +1,11 @@
 #########################
 ######## Imports ########
 #region##################
+import platform
+import getpass
+import socket
+import ctypes
+import os
 
 #endregion###############
 # Configuration Options #
@@ -25,14 +30,59 @@ def get_os():
     For example: Ubuntu, Debian, Rocky, RHEL, Windows Workstation (7 8 10 11), Windows Server (2012 2016 2022 2025)
     Returns: osType(String)
     """
-    return True
+    system = platform.system()
+
+    if system == "Linux":
+        return ' '.join(platform.dist()) # Ubuntu 10.04 lucid, debian 4.0 , fedora 17 Beefy Miracle, redhat 5.6 Tikanga, redhat 5.9 Final (<- centos)
+
+    return f"{platform.system()} {platform.release()}" #Windows 10, Windows 2016Server, FreeBSD XXX
 
 def get_perms():
     """
     Gets the execution perm level (user and elevation level).
+    Intentionally
     Returns: isRunAsElevated(bool), runAsUser(String)
     """
-    return True, ""
+
+    system = platform.getsystem()
+
+    if system == "Windows":
+        try:
+            # Windows admin check using IsUserAnAdmin
+            is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+        except Exception:
+            # Fallback if call fails
+            is_admin = False
+
+        # Determine domain/local username
+        # USERDOMAIN = domain or machine name
+        domain = os.environ.get("USERDOMAIN", None)
+        user = getpass.getuser()
+
+        if domain:
+            runAsUser = f"{domain}\\{user}"
+        else:
+            runAsUser = user
+        
+        return is_admin, runAsUser
+    
+    if system in ("Linux", "FreeBSD"):
+        # euid 0 → root OR sudo
+        is_root = (os.geteuid() == 0)
+
+        # Detect sudo
+        sudo_user = os.environ.get("SUDO_USER")
+        if sudo_user:
+            runAsUser = sudo_user
+        else:
+            # Normal user or directly root
+            runAsUser = getpass.getuser()
+
+        return is_root, runAsUser
+    
+    # Unknown OS - shouldn't reach
+    print_debug("get_perms(): reached unexpected unsupported OS block")
+    return False, runAsUser
 
 def get_primary_ip():
     """
@@ -41,13 +91,14 @@ def get_primary_ip():
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # Connect to an external host (e.g., Google's public DNS)
+        # Connect to an external host (e.g., Google's public DNS or test-net-3)
         # This doesn't send any data, just establishes a connection
         # to find out which local interface would be used.
-        s.connect(("8.8.8.8", 80))
+        s.connect(("203.0.113.2", 80)) # Doesn't need to be reachable. Use non-routable address for stealth
         ip_address = s.getsockname()[0]
-    except Exception:
-        ip_address = "Unable to determine IP"
+    except Exception as E:
+        ip_address = "0.0.0.0"
+        print_debug(f"get_primary_ip(): {E}")
     finally:
         s.close()
     return ip_address
@@ -61,8 +112,8 @@ def get_system_details():
         "os": get_os(),
         "executionUser": get_perms()[1],
         "executionAdmin": get_perms()[0],
-        "hostname": socket.hostname(),
-        "ipadd": get_primary_ip
+        "hostname": socket.hostname(), #alt: socket.getfqdn()
+        "ipadd": get_primary_ip()
     }
     return sysInfo
 
