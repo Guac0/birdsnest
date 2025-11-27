@@ -1,6 +1,8 @@
+Note: \ means written but not tested, X means fully working
+
 ## Primary Application
-[X] Detect OS
-[X] Get system details (IP address, hostname)
+[\] Detect OS {tested on Win10}
+[\] Get system details (IP address, hostname) {tested on Win10}
 [ ] Config variables
 [ ] Separate threads for interaction / polling / watchdog
 
@@ -29,12 +31,12 @@
 [ ] Detect service in failed state multiple times and ignore
 [ ] Detect service in failed state multiple times and ignore
 [ ] Detect service - works for multiple services
-[ ] Detect network - detect and remediate deny port rule
+[\] Detect network - detect and remediate deny port rule {tested detection on Win10, wrote remediation}
 [ ] Detect network - detect and remediate deny all rule without allow
-[ ] Detect network - detect and remediate deny port range rule
+[\] Detect network - detect and remediate deny port range rule {tested detection on Win10, wrote remediation}
 [ ] Detect network - detect and report general network comms (8.8.8.8)
 [ ] Detect network - detect and remediate interface down
-[ ] Detect network - works for multiple ports
+[\] Detect network - works for multiple ports {tested on Win10}
 [ ] Create backup
 [ ] Detect protected file change and restore from backup
 [ ] Detect protected file change for service and restore from backup

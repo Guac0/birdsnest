@@ -6,10 +6,19 @@ import getpass
 import socket
 import ctypes
 import os
+import subprocess
+import re
+import json
+from datetime import datetime
 
 #endregion###############
 # Configuration Options #
 #region##################
+
+DISARM = True
+DEBUG_PRINT = True
+BACKUPDIR = ""
+LOGFILE = "agent_log.txt"
 
 #endregion###############
 # Generic Helper Funcs ##
@@ -44,7 +53,7 @@ def get_perms():
     Returns: isRunAsElevated(bool), runAsUser(String)
     """
 
-    system = platform.getsystem()
+    system = platform.system()
 
     if system == "Windows":
         try:
@@ -87,14 +96,13 @@ def get_perms():
 def get_primary_ip():
     """
     Attempts to get the primary IP address of the local machine.
-    Returns: ip(String)
+    Returns: ip(String) or "0.0.0.0" if failed
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         # Connect to an external host (e.g., Google's public DNS or test-net-3)
-        # This doesn't send any data, just establishes a connection
-        # to find out which local interface would be used.
-        s.connect(("203.0.113.2", 80)) # Doesn't need to be reachable. Use non-routable address for stealth
+        # This doesn't send any data, just establishes a connection to find out which local interface would be used.
+        s.connect(("8.8.8.8", 80)) # 203.0.113.2 # Doesn't need to be reachable. Use non-routable address for stealth
         ip_address = s.getsockname()[0]
     except Exception as E:
         ip_address = "0.0.0.0"
@@ -112,7 +120,7 @@ def get_system_details():
         "os": get_os(),
         "executionUser": get_perms()[1],
         "executionAdmin": get_perms()[0],
-        "hostname": socket.hostname(), #alt: socket.getfqdn()
+        "hostname": socket.gethostname(), #alt: socket.getfqdn()
         "ipadd": get_primary_ip()
     }
     return sysInfo
@@ -121,10 +129,23 @@ def create_backup_primary(path,backupDir=BACKUPDIR):
     """
     Creates a new primary backup by compressing the value of the path variable into a zip folder and placing it at backupDir.
     If there is already a file at backupDir, move it to backupDir-TIMESTAMP and return that path.
-    All backup files should be timestomped to a random value plus or minus 24 hours to the value of /bin/sh or C:\Windows\system32\cmd.exe
+    All backup files should be timestomped to a random value plus or minus 24 hours to the value of /bin/sh or C:\\Windows\\system32\\cmd.exe
     Returns: Success(bool), oldDir(String)
     """
     return True, ""
+
+def run_powershell(cmd):
+    """
+    Run a PowerShell command and return stdout text.
+    """
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", cmd],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        print_debug(f"PowerShell error: {result.stderr}")
+        return "" # This probably breaks a lot tbh
+    return result.stdout
 
 def audit_command(command,package="",packageManager="apt"):
     """
@@ -154,10 +175,83 @@ def send_message(message):
 
 def get_primary_interface():
     """
-    Determines the primary network interface.
+    Determines the primary network interface based on finding the interface with the primary IP.
     Returns: interface(String)
     """
-    return ""
+    system = platform.system()
+
+    if system == "Windows":
+        return get_primary_interface_windows(get_primary_ip())
+    else:
+        return get_primary_interface_unix(get_primary_ip())
+
+def get_primary_interface_windows(ip):
+    """
+    Gets interface name on unix using "ip" or "ifconfig"
+    TODO: make this not be AI slop
+    Returns: interface(String) or None
+    """
+    output = subprocess.check_output(["ipconfig"], text=True, encoding="utf-8", errors="ignore")
+
+    current_iface = None
+    for line in output.splitlines():
+        line = line.strip()
+
+        # Interface header (e.g., "Ethernet adapter Ethernet:")
+        m = re.match(r"(.+?) adapter (.+?):", line, re.IGNORECASE)
+        if m:
+            current_iface = m.group(2)
+            continue
+
+        # IPv4 Address line
+        if "IPv4 Address" in line and ip in line:
+            return current_iface
+
+    return None
+
+def get_primary_interface_unix(ip):
+    """
+    Gets interface name on unix using "ip" or "ifconfig"
+    TODO: make this not be AI slop
+    Returns: interface(String) or None
+    """
+    # Try "ip address"
+    try:
+        output = subprocess.check_output(["ip", "-4", "addr"], text=True)
+        iface = None
+        for line in output.splitlines():
+            line = line.strip()
+
+            # Match interface header: "2: ens33:"
+            m = re.match(r"\d+:\s+([^:]+):", line)
+            if m:
+                iface = m.group(1)
+                continue
+
+            # Match "inet 192.168.1.10/24"
+            if line.startswith("inet ") and ip in line:
+                return iface
+    except Exception:
+        pass
+
+    # Fallback: try "ifconfig"
+    try:
+        output = subprocess.check_output(["ifconfig"], text=True)
+        iface = None
+        for line in output.splitlines():
+            # Interface header: "eth0: flags=..."
+            m = re.match(r"^([a-zA-Z0-9._-]+):\s", line)
+            if m:
+                iface = m.group(1)
+                continue
+
+            # "inet 192.168.1.10"
+            if "inet " in line and ip in line:
+                return iface
+    except Exception:
+        pass
+
+    return None
 
 def check_interface(interface=get_primary_interface()):
     """
@@ -168,14 +262,152 @@ def check_interface(interface=get_primary_interface()):
     """
     return True, True, ""
 
-def check_firewall(protectedPort):
+def firewall_audit_rules_windows(port,direction="in",action="block"):
+    """
+    Uses Powershell to get Windows Firewall rules that block traffic on a specific LocalPort and return their names
+    Supports ports where firewall rule affects that specific port, range of ports including that port, or firewall rule using comma separated list
+    Does NOT support "any port" firewall rules
+    
+    Args: port (string), direction (string, in or out), action (string, block or accept)
+    Returns: dictionary of matching rules, with fields Name, DisplayName, Action, Direction, Profile
+    """
+
+    # Currently unused as returns too many matches
+    #if ($lp -eq 'Any') {{ return $true }}
+
+    ps_query = fr"""
+    Get-NetFirewallPortFilter |
+        Where-Object {{
+            $lp = $_.LocalPort
+
+            if ($lp -like '*,*') {{
+                return $lp.Split(',') -contains '{port}'
+            }}
+
+            if ($lp -like '*-*') {{
+                $a, $b = $lp.Split('-')
+                return ({port} -ge [int]$a -and {port} -le [int]$b)
+            }}
+
+            return $lp -eq '{port}'
+        }} |
+        Get-NetFirewallRule |
+        Where-Object {{ $_.Direction -eq '{direction}' -and $_.Action -eq '{action}' }} |
+        Select-Object Name, DisplayName, Action, Direction, Profile |
+        ConvertTo-Json
+    """
+
+    output = run_powershell(ps_query).strip()
+
+    if not output:
+        print_debug(f"firewall_audit_rules_windows({port},{direction},{action}): No matching firewall rules found")
+        return dict()
+
+    # Convert JSON into Python objects
+    try:
+        rules = json.loads(output)
+    except json.JSONDecodeError:
+        print_debug("Could not decode PowerShell JSON output.")
+        print_debug("Output was:", output)
+        return
+
+    # Handle the case where PowerShell returns a single object instead of a list
+    if isinstance(rules, dict):
+        rules = [rules]
+
+    return rules
+
+def firewall_audit_rules(port,direction="in",action="block"):
+    """
+    Wrapper for OS-specific firewall_audit_rules_* functions
+
+    Get firewall rules that block traffic on a specific LocalPort and return their names
+    Supports ports where firewall rule affects that specific port, range of ports including that port, or firewall rule using comma separated list
+    Does NOT support "any port" firewall rules
+    
+    Args: port (string), direction (string, in or out), action (string, block or accept)
+    Returns: dictionary of matching rules, with fields Name, DisplayName, Action, Direction, Profile
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return firewall_audit_rules_windows(port,direction,action)
+    else:
+        return False # TODO
+
+def firewall_delete_rules_windows(rules):
+    """
+    Given a firewall rules dict, deletes each rule
+    
+    Args: firewall rules dict (Name, DisplayName, Action, Direction, Profile)
+    returns: True if Powershell reports no failures when deleting rules, False if Powershell reports at least one failure
+    """
+    # Delete the rules by Name
+    print_debug("firewall_delete_rules_windows(): Deleting rules...")
+    status = True
+    for rule in rules:
+        if (not DISARM):
+            delete_cmd = f"Remove-NetFirewallRule -Name '{rule['Name']}'"
+            output = run_powershell(delete_cmd)
+            if output:
+                print_debug(f"firewall_delete_rules_windows(): Removed rule: {rule['Name']} ({rule['DisplayName']})")
+            else:
+                print_debug(f"firewall_delete_rules_windows(): FAILED to remove rule: {rule['Name']} ({rule['DisplayName']})")
+                status = False
+        else:
+            print_debug(f"firewall_delete_rules_windows(): DISARMED, but told to remove rule: {rule['Name']} ({rule['DisplayName']})")
+
+    print_debug("firewall_delete_rules_windows(): All provided rules deleted.")
+    return status
+
+def firewall_delete_rules(rules):
+    """
+    Wrapper for OS-specific firewall_delete_rules_* functions
+
+    Given a firewall rules dict, deletes each rule
+    
+    Args: firewall rules dict (Name, DisplayName, Action, Direction, Profile)
+    returns: True if shell reports no failures when deleting rules, False if shell reports at least one failure
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return firewall_delete_rules_windows(rules)
+    else:
+        return False # TODO
+
+def check_firewall(protectedPorts):
     """
     Detect and remediate common firewall issues and returns the remediated issue
     Supports: block scored port (including port range), block all without allowing port (including port range)
-    Args: interface(String), defaults to get_primary_interface()
-    Returns: firewallOldStatus(bool), firewallNewStatus(book), issue(String)
+    
+    Args: ports([Array containing single ports as strings])
+    Returns: firewallOldStatus(bool), firewallNewStatus(book), issues(String)
     """
-    return True, True, ""
+    oldStatus = True
+    newStatus = True
+    issues = []
+
+    for port in protectedPorts:
+        matched_rules = firewall_audit_rules(port,"in","block")
+        if matched_rules:
+            oldStatus = False
+            for rule in matched_rules:
+                issues.append(rule)
+            remediateStatus = firewall_delete_rules(matched_rules)
+            if not remediateStatus:
+                newStatus = False
+        
+        matched_rules = firewall_audit_rules(port,"out","block")
+        if matched_rules:
+            oldStatus = False
+            for rule in matched_rules:
+                issues.append(rule)
+            remediateStatus = firewall_delete_rules(matched_rules)
+            if not remediateStatus:
+                newStatus = False
+
+    return oldStatus, newStatus, issues
 
 #endregion###############
 ## File Protect Funcs ###
@@ -241,6 +473,9 @@ def reregister():
 
 if __name__ == "__main__":
     # TODO
-    beacon_loop(interval)
+    print(f"get_primary_interface(): {get_primary_interface()}")
+    print(f"get_system_details(): {get_system_details()}")
+    #print(f"firewall_audit_rules_windows('81'): {firewall_audit_rules_windows("81")}")
+    print(f"check_firewall(['81','82']): {check_firewall(["81","82"])}")
 
 #endregion###############
