@@ -137,6 +137,8 @@ def create_backup_primary(path,backupDir=BACKUPDIR):
 def run_powershell(cmd):
     """
     Run a PowerShell command and return stdout text.
+
+    Returns: output if success, "" if failure
     """
     result = subprocess.run(
         ["powershell", "-NoProfile", "-Command", cmd],
@@ -376,6 +378,93 @@ def firewall_delete_rules(rules):
     else:
         return False # TODO
 
+def firewall_rules_create_windows(port,direction,action):
+    """
+    Creates the specified firewall rule on Windows
+
+    Args: Port, Direction (inbound/outbound), Action (allow/block)
+    Returns: True if success, False if fail
+    """
+
+    rule_name = f"Stabvest_Rule_{port}_{direction}_{action}"
+
+    ps_cmd = fr"""
+    New-NetFirewallRule -DisplayName "{rule_name}" \
+                        -Direction {direction} \
+                        -Action {action} \
+                        -LocalPort {port} \
+                        -Profile Any \
+                        -ErrorAction Stop
+    """
+
+    if DISARM:
+        print_debug(f"firewall_rules_create_windows(): DISARMED, but told to create Stabvest_Rule_{port}_{direction}_{action}")
+        return True
+    if run_powershell(ps_cmd):
+        return True
+    else:
+        return False
+
+def firewall_rules_create(port,direction,action):
+    """
+    Wrapper for OS-specific firewall_rules_create_* functions
+
+    Creates the specified firewall rule on Windows
+
+    Args: Port, Direction (inbound/outbound), Action (allow/block)
+    Returns: True if success, False if fail
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return firewall_rules_create_windows(port,direction,action)
+    else:
+        return False # TODO
+
+def firewall_policy_audit_windows():
+    """
+    Check if any Windows Firewall profile is set to block all inbound connections.
+
+    Returns: True if no policies are set to default deny, False if at least one policy is set to default deny
+    """
+    ps_cmd = """
+    Get-NetFirewallProfile |
+        Select-Object Name, DefaultInboundAction |
+        ConvertTo-Json
+    """
+    output = run_powershell(ps_cmd)
+
+    if not output:
+        print_debug("No firewall profile data returned.")
+        return False
+
+    profiles = json.loads(output)
+
+    # Normalize single-object case
+    if isinstance(profiles, dict):
+        profiles = [profiles]
+
+    for p in profiles:
+        if (p["DefaultInboundAction"] == "Block"):
+            return False
+        
+    return True
+
+def firewall_policy_audit():
+    """
+    Wrapper for OS-specific firewall_policy_audit_* functions
+
+    Check if any Firewall profile is set to block all inbound connections.
+
+    Returns: True if no policies are set to default deny, False if at least one policy is set to default deny
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return firewall_policy_audit_windows()
+    else:
+        return False # TODO
+
 def check_firewall(protectedPorts):
     """
     Detect and remediate common firewall issues and returns the remediated issue
@@ -388,6 +477,7 @@ def check_firewall(protectedPorts):
     newStatus = True
     issues = []
 
+    # Ports
     for port in protectedPorts:
         matched_rules = firewall_audit_rules(port,"in","block")
         if matched_rules:
@@ -406,6 +496,20 @@ def check_firewall(protectedPorts):
             remediateStatus = firewall_delete_rules(matched_rules)
             if not remediateStatus:
                 newStatus = False
+
+    # Policy
+    if (not firewall_policy_audit()):
+        for port in protectedPorts:
+            if not firewall_audit_rules(port,"in","allow"):
+                if not firewall_rules_create(port,"inbound","allow"):
+                    newStatus = False
+                oldStatus = False
+                issues.append(f"Default policy is deny_all and no specific inbound allow rule for port {port} exists")
+            if not firewall_audit_rules(port,"out","allow"):
+                if not firewall_rules_create(port,"outbound","allow"):
+                    newStatus = False
+                oldStatus = False
+                issues.append(f"Default policy is deny_all and no specific outbound allow rule for port {port} exists")
 
     return oldStatus, newStatus, issues
 

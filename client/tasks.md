@@ -32,7 +32,7 @@ Note: \ means written but not tested, X means fully working
 [ ] Detect service in failed state multiple times and ignore
 [ ] Detect service - works for multiple services
 [\] Detect network - detect and remediate deny port rule {tested detection on Win10, wrote remediation}
-[ ] Detect network - detect and remediate deny all rule without allow
+[\] Detect network - detect and remediate deny all rule without allow {written but not tested}
 [\] Detect network - detect and remediate deny port range rule {tested detection on Win10, wrote remediation}
 [ ] Detect network - detect and report general network comms (8.8.8.8)
 [ ] Detect network - detect and remediate interface down
