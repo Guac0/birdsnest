@@ -312,14 +312,101 @@ def interface_mtu_windows(interface=interface_get_primary(),mtu_minimum=MTU_MIN,
 
     return True, True, ""
 
+def interface_ttl(interface=interface_get_primary()):
+    """
+    Wrapper for interface_ttl_*
+
+    Given an interface name, check if its TTL is within an acceptable range and remediate if not
+    
+    Args: interface name(string)
+    Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return interface_mtu_windows(interface)
+    else:
+        return False # TODO
+
+def interface_ttl_windows():
+    """
+    Given an interface name, check if its TTL is within an acceptable range and remediate if not
+    
+    Args: interface name(string)
+    Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+
+    check_script = r"""
+    $path = 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters'
+
+    if (Test-Path -Path '$path\DefaultTTL' -ErrorAction SilentlyContinue) {
+        Write-Output 'True'
+    }
+    elseif (Test-Path -Path '$path\DefaultCurHopLimit' -ErrorAction SilentlyContinue) {
+        Write-Output 'True'
+    }
+    else {
+        Write-Output 'False'
+    }
+    """
+
+    result = run_powershell(check_script).strip()
+    
+    if result:
+        # Reg key exists and is (presumably) not the default, so report and delete it
+        delete_script = r"""
+        $path = 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters'
+
+        if (Test-Path '$path\DefaultTTL') {
+            Remove-ItemProperty -Path $path -Name 'DefaultTTL'
+        }
+        if (Test-Path '$path\DefaultCurHopLimit') {
+            Remove-ItemProperty -Path $path -Name 'DefaultCurHopLimit'
+        }
+
+        Write-Output 'Deleted'
+        """
+        if DISARM:
+            print_debug(f"interface_ttl_windows(): DISARMED, but bad TTL detected and told to delete!")
+            return False, True, "Bad TTL set, remediation attempted but DISARMED"
+        else:
+            ps_result = run_powershell(delete_script).strip()
+            if ps_result:
+                return False, True, f"Bad TTL set"
+            return False, False, f"Bad TTL set"
+
+    # Reg key does not exist so system is (presumably) using the default of 128 (good)
+    return True, True, ""
+
 def interface_main(interface=interface_get_primary()):
     """
     Given an interface, detect and remediate (if possible) common issues and returns the remediated issue
     Supports: interface down, bad mtu, no IP address, no route, no default gateway, no connection to 8.8.8.8
+    
     Args: interface(String), defaults to interface_get_primary()
     Returns: interfacePriorStatus(bool), interfaceNewStatus(book), issue(String)
     """
-    return True, True, ""
+    oldStatus = True
+    newStatus = True
+    issues = []
+
+    result_oldStatus, result_newStatus, issue = interface_mtu(interface)
+    if not result_oldStatus:
+        oldStatus = False
+    if not result_newStatus:
+        newStatus = False
+    if issue:
+        issues.append(issue)
+    
+    result_oldStatus, result_newStatus, issue = interface_ttl()
+    if not result_oldStatus:
+        oldStatus = False
+    if not result_newStatus:
+        newStatus = False
+    if issue:
+        issues.append(issue)
+
+    return oldStatus, newStatus, issues
 
 def firewall_rules_audit(port,direction="in",action="block"):
     """
@@ -637,6 +724,7 @@ if __name__ == "__main__":
     print(f"interface_get_primary(): {interface_get_primary()}")
     print(f"get_system_details(): {get_system_details()}")
     print(f"interface_mtu(): {interface_mtu()}")
+    print(f"interface_ttl(): {interface_ttl()}")
     #print(f"firewall_rules_audit_windows('81'): {firewall_rules_audit_windows("81")}")
     print(f"firewall_main(['81','82']): {firewall_main(["81","82"])}")
 
