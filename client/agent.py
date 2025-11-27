@@ -19,6 +19,9 @@ DISARM = True
 DEBUG_PRINT = True
 BACKUPDIR = ""
 LOGFILE = "agent_log.txt"
+MTU_MIN = 1200
+MTU_DEFAULT = 1300
+MTU_MAX = 1514
 
 #endregion###############
 # Generic Helper Funcs ##
@@ -254,6 +257,60 @@ def interface_get_primary_unix(ip):
         pass
 
     return None
+
+def interface_mtu(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maximum=MTU_MAX,mtu_default=MTU_DEFAULT):
+    """
+    Wrapper for interface_mtu_*
+
+    Given an interface name, check if its MTU is within an acceptable range and remediate if not
+    
+    Args: interface name(string), mtu_min(int), mtu_max(int), mtu_default(int)
+    Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return interface_mtu_windows(interface,mtu_minimum,mtu_maximum,mtu_default)
+    else:
+        return False # TODO
+
+def interface_mtu_windows(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maximum=MTU_MAX,mtu_default=MTU_DEFAULT):
+    """
+    Given an interface name, check if its MTU is within an acceptable range and remediate if not
+    
+    Args: interface name(string), mtu_min(int), mtu_max(int), mtu_default(int)
+    Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+
+    ps_get_mtu = fr"""
+    Get-NetIPInterface -InterfaceAlias "{interface}" -AddressFamily IPv4 |
+        Select-Object -ExpandProperty NlMtu
+    """
+
+    output = run_powershell(ps_get_mtu).strip()
+
+    if not output.isdigit():
+        print_debug(f"interface_mtu_windows(): Failed to query MTU for interface '{interface}'. Output: {output}")
+        return False, False, f"interface_mtu_windows(): Failed to query MTU for interface '{interface}'. Output: {output}"
+
+    old_mtu = int(output)
+
+    # Check MTU range
+    if old_mtu < mtu_minimum or old_mtu > mtu_maximum:
+        new_mtu = mtu_default
+
+        ps_set_mtu = fr'''
+        Set-NetIPInterface -InterfaceAlias "{interface}" -NlMtu {new_mtu}
+        '''
+
+        if DISARM:
+            print_debug(f"DISARMED, but told to updated MTU for '{interface}' from {old_mtu} to {new_mtu}")
+        else:
+            run_powershell(ps_set_mtu)
+            print_debug(f"Updated MTU for '{interface}' from {old_mtu} to {new_mtu}")
+        return False, True, f"Interface {interface}'s MTU was set to {old_mtu}"
+
+    return True, True, ""
 
 def interface_main(interface=interface_get_primary()):
     """
@@ -579,6 +636,7 @@ if __name__ == "__main__":
     # TODO
     print(f"interface_get_primary(): {interface_get_primary()}")
     print(f"get_system_details(): {get_system_details()}")
+    print(f"interface_mtu(): {interface_mtu()}")
     #print(f"firewall_rules_audit_windows('81'): {firewall_rules_audit_windows("81")}")
     print(f"firewall_main(['81','82']): {firewall_main(["81","82"])}")
 

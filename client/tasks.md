@@ -36,6 +36,8 @@ Note: \ means written but not tested, X means fully working
 [\] Detect network - detect and remediate deny port range rule {tested detection on Win10, wrote remediation}
 [ ] Detect network - detect and report general network comms (8.8.8.8)
 [ ] Detect network - detect and remediate interface down
+[\] Detect network - detect and remediate mtu {partially tested on win10}
+[ ] Detect network - detect and remediate TTL
 [\] Detect network - works for multiple ports {tested on Win10}
 [ ] Create backup
 [ ] Detect protected file change and restore from backup
@@ -56,6 +58,8 @@ Note: \ means written but not tested, X means fully working
 [ ] Detect network - detect and remediate deny port range rule
 [ ] Detect network - detect and report general network comms (8.8.8.8)
 [ ] Detect network - detect and remediate interface down
+[ ] Detect network - detect and remediate mtu
+[ ] Detect network - detect and remediate TTL
 [ ] Detect network - works for multiple ports
 [ ] Create backup
 [ ] Detect protected file change and restore from backup
