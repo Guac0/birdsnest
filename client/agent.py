@@ -175,7 +175,7 @@ def send_message(message):
 # Network Protect Funcs #
 #region##################
 
-def get_primary_interface():
+def interface_get_primary():
     """
     Determines the primary network interface based on finding the interface with the primary IP.
     Returns: interface(String)
@@ -183,11 +183,11 @@ def get_primary_interface():
     system = platform.system()
 
     if system == "Windows":
-        return get_primary_interface_windows(get_primary_ip())
+        return interface_get_primary_windows(get_primary_ip())
     else:
-        return get_primary_interface_unix(get_primary_ip())
+        return interface_get_primary_unix(get_primary_ip())
 
-def get_primary_interface_windows(ip):
+def interface_get_primary_windows(ip):
     """
     Gets interface name on unix using "ip" or "ifconfig"
     TODO: make this not be AI slop
@@ -211,7 +211,7 @@ def get_primary_interface_windows(ip):
 
     return None
 
-def get_primary_interface_unix(ip):
+def interface_get_primary_unix(ip):
     """
     Gets interface name on unix using "ip" or "ifconfig"
     TODO: make this not be AI slop
@@ -255,16 +255,16 @@ def get_primary_interface_unix(ip):
 
     return None
 
-def check_interface(interface=get_primary_interface()):
+def interface_main(interface=interface_get_primary()):
     """
     Given an interface, detect and remediate (if possible) common issues and returns the remediated issue
     Supports: interface down, bad mtu, no IP address, no route, no default gateway, no connection to 8.8.8.8
-    Args: interface(String), defaults to get_primary_interface()
+    Args: interface(String), defaults to interface_get_primary()
     Returns: interfacePriorStatus(bool), interfaceNewStatus(book), issue(String)
     """
     return True, True, ""
 
-def firewall_audit_rules_windows(port,direction="in",action="block"):
+def firewall_rules_audit_windows(port,direction="in",action="block"):
     """
     Uses Powershell to get Windows Firewall rules that block traffic on a specific LocalPort and return their names
     Supports ports where firewall rule affects that specific port, range of ports including that port, or firewall rule using comma separated list
@@ -302,7 +302,7 @@ def firewall_audit_rules_windows(port,direction="in",action="block"):
     output = run_powershell(ps_query).strip()
 
     if not output:
-        print_debug(f"firewall_audit_rules_windows({port},{direction},{action}): No matching firewall rules found")
+        print_debug(f"firewall_rules_audit_windows({port},{direction},{action}): No matching firewall rules found")
         return dict()
 
     # Convert JSON into Python objects
@@ -319,9 +319,9 @@ def firewall_audit_rules_windows(port,direction="in",action="block"):
 
     return rules
 
-def firewall_audit_rules(port,direction="in",action="block"):
+def firewall_rules_audit(port,direction="in",action="block"):
     """
-    Wrapper for OS-specific firewall_audit_rules_* functions
+    Wrapper for OS-specific firewall_rules_audit_* functions
 
     Get firewall rules that block traffic on a specific LocalPort and return their names
     Supports ports where firewall rule affects that specific port, range of ports including that port, or firewall rule using comma separated list
@@ -333,11 +333,11 @@ def firewall_audit_rules(port,direction="in",action="block"):
     system = platform.system()
 
     if system == "Windows":
-        return firewall_audit_rules_windows(port,direction,action)
+        return firewall_rules_audit_windows(port,direction,action)
     else:
         return False # TODO
 
-def firewall_delete_rules_windows(rules):
+def firewall_rules_delete_windows(rules):
     """
     Given a firewall rules dict, deletes each rule
     
@@ -345,26 +345,26 @@ def firewall_delete_rules_windows(rules):
     returns: True if Powershell reports no failures when deleting rules, False if Powershell reports at least one failure
     """
     # Delete the rules by Name
-    print_debug("firewall_delete_rules_windows(): Deleting rules...")
+    print_debug("firewall_rules_delete_windows(): Deleting rules...")
     status = True
     for rule in rules:
         if (not DISARM):
             delete_cmd = f"Remove-NetFirewallRule -Name '{rule['Name']}'"
             output = run_powershell(delete_cmd)
             if output:
-                print_debug(f"firewall_delete_rules_windows(): Removed rule: {rule['Name']} ({rule['DisplayName']})")
+                print_debug(f"firewall_rules_delete_windows(): Removed rule: {rule['Name']} ({rule['DisplayName']})")
             else:
-                print_debug(f"firewall_delete_rules_windows(): FAILED to remove rule: {rule['Name']} ({rule['DisplayName']})")
+                print_debug(f"firewall_rules_delete_windows(): FAILED to remove rule: {rule['Name']} ({rule['DisplayName']})")
                 status = False
         else:
-            print_debug(f"firewall_delete_rules_windows(): DISARMED, but told to remove rule: {rule['Name']} ({rule['DisplayName']})")
+            print_debug(f"firewall_rules_delete_windows(): DISARMED, but told to remove rule: {rule['Name']} ({rule['DisplayName']})")
 
-    print_debug("firewall_delete_rules_windows(): All provided rules deleted.")
+    print_debug("firewall_rules_delete_windows(): All provided rules deleted.")
     return status
 
-def firewall_delete_rules(rules):
+def firewall_rules_delete(rules):
     """
-    Wrapper for OS-specific firewall_delete_rules_* functions
+    Wrapper for OS-specific firewall_rules_delete_* functions
 
     Given a firewall rules dict, deletes each rule
     
@@ -374,7 +374,7 @@ def firewall_delete_rules(rules):
     system = platform.system()
 
     if system == "Windows":
-        return firewall_delete_rules_windows(rules)
+        return firewall_rules_delete_windows(rules)
     else:
         return False # TODO
 
@@ -465,7 +465,7 @@ def firewall_policy_audit():
     else:
         return False # TODO
 
-def check_firewall(protectedPorts):
+def firewall_main(protectedPorts):
     """
     Detect and remediate common firewall issues and returns the remediated issue
     Supports: block scored port (including port range), block all without allowing port (including port range)
@@ -479,33 +479,33 @@ def check_firewall(protectedPorts):
 
     # Ports
     for port in protectedPorts:
-        matched_rules = firewall_audit_rules(port,"in","block")
+        matched_rules = firewall_rules_audit(port,"in","block")
         if matched_rules:
             oldStatus = False
             for rule in matched_rules:
                 issues.append(rule)
-            remediateStatus = firewall_delete_rules(matched_rules)
+            remediateStatus = firewall_rules_delete(matched_rules)
             if not remediateStatus:
                 newStatus = False
         
-        matched_rules = firewall_audit_rules(port,"out","block")
+        matched_rules = firewall_rules_audit(port,"out","block")
         if matched_rules:
             oldStatus = False
             for rule in matched_rules:
                 issues.append(rule)
-            remediateStatus = firewall_delete_rules(matched_rules)
+            remediateStatus = firewall_rules_delete(matched_rules)
             if not remediateStatus:
                 newStatus = False
 
     # Policy
     if (not firewall_policy_audit()):
         for port in protectedPorts:
-            if not firewall_audit_rules(port,"in","allow"):
+            if not firewall_rules_audit(port,"in","allow"):
                 if not firewall_rules_create(port,"inbound","allow"):
                     newStatus = False
                 oldStatus = False
                 issues.append(f"Default policy is deny_all and no specific inbound allow rule for port {port} exists")
-            if not firewall_audit_rules(port,"out","allow"):
+            if not firewall_rules_audit(port,"out","allow"):
                 if not firewall_rules_create(port,"outbound","allow"):
                     newStatus = False
                 oldStatus = False
@@ -577,9 +577,9 @@ def reregister():
 
 if __name__ == "__main__":
     # TODO
-    print(f"get_primary_interface(): {get_primary_interface()}")
+    print(f"interface_get_primary(): {interface_get_primary()}")
     print(f"get_system_details(): {get_system_details()}")
-    #print(f"firewall_audit_rules_windows('81'): {firewall_audit_rules_windows("81")}")
-    print(f"check_firewall(['81','82']): {check_firewall(["81","82"])}")
+    #print(f"firewall_rules_audit_windows('81'): {firewall_rules_audit_windows("81")}")
+    print(f"firewall_main(['81','82']): {firewall_main(["81","82"])}")
 
 #endregion###############
