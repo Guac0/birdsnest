@@ -321,6 +321,24 @@ def interface_main(interface=interface_get_primary()):
     """
     return True, True, ""
 
+def firewall_rules_audit(port,direction="in",action="block"):
+    """
+    Wrapper for OS-specific firewall_rules_audit_* functions
+
+    Get firewall rules that block traffic on a specific LocalPort and return their names
+    Supports ports where firewall rule affects that specific port, range of ports including that port, or firewall rule using comma separated list
+    Does NOT support "any port" firewall rules
+    
+    Args: port (string), direction (string, in or out), action (string, block or accept)
+    Returns: dictionary of matching rules, with fields Name, DisplayName, Action, Direction, Profile
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return firewall_rules_audit_windows(port,direction,action)
+    else:
+        return False # TODO
+
 def firewall_rules_audit_windows(port,direction="in",action="block"):
     """
     Uses Powershell to get Windows Firewall rules that block traffic on a specific LocalPort and return their names
@@ -376,21 +394,19 @@ def firewall_rules_audit_windows(port,direction="in",action="block"):
 
     return rules
 
-def firewall_rules_audit(port,direction="in",action="block"):
+def firewall_rules_delete(rules):
     """
-    Wrapper for OS-specific firewall_rules_audit_* functions
+    Wrapper for OS-specific firewall_rules_delete_* functions
 
-    Get firewall rules that block traffic on a specific LocalPort and return their names
-    Supports ports where firewall rule affects that specific port, range of ports including that port, or firewall rule using comma separated list
-    Does NOT support "any port" firewall rules
+    Given a firewall rules dict, deletes each rule
     
-    Args: port (string), direction (string, in or out), action (string, block or accept)
-    Returns: dictionary of matching rules, with fields Name, DisplayName, Action, Direction, Profile
+    Args: firewall rules dict (Name, DisplayName, Action, Direction, Profile)
+    returns: True if shell reports no failures when deleting rules, False if shell reports at least one failure
     """
     system = platform.system()
 
     if system == "Windows":
-        return firewall_rules_audit_windows(port,direction,action)
+        return firewall_rules_delete_windows(rules)
     else:
         return False # TODO
 
@@ -419,19 +435,19 @@ def firewall_rules_delete_windows(rules):
     print_debug("firewall_rules_delete_windows(): All provided rules deleted.")
     return status
 
-def firewall_rules_delete(rules):
+def firewall_rules_create(port,direction,action):
     """
-    Wrapper for OS-specific firewall_rules_delete_* functions
+    Wrapper for OS-specific firewall_rules_create_* functions
 
-    Given a firewall rules dict, deletes each rule
-    
-    Args: firewall rules dict (Name, DisplayName, Action, Direction, Profile)
-    returns: True if shell reports no failures when deleting rules, False if shell reports at least one failure
+    Creates the specified firewall rule on Windows
+
+    Args: Port, Direction (inbound/outbound), Action (allow/block)
+    Returns: True if success, False if fail
     """
     system = platform.system()
 
     if system == "Windows":
-        return firewall_rules_delete_windows(rules)
+        return firewall_rules_create_windows(port,direction,action)
     else:
         return False # TODO
 
@@ -462,19 +478,18 @@ def firewall_rules_create_windows(port,direction,action):
     else:
         return False
 
-def firewall_rules_create(port,direction,action):
+def firewall_policy_audit():
     """
-    Wrapper for OS-specific firewall_rules_create_* functions
+    Wrapper for OS-specific firewall_policy_audit_* functions
 
-    Creates the specified firewall rule on Windows
+    Check if any Firewall profile is set to block all inbound connections.
 
-    Args: Port, Direction (inbound/outbound), Action (allow/block)
-    Returns: True if success, False if fail
+    Returns: True if no policies are set to default deny, False if at least one policy is set to default deny
     """
     system = platform.system()
 
     if system == "Windows":
-        return firewall_rules_create_windows(port,direction,action)
+        return firewall_policy_audit_windows()
     else:
         return False # TODO
 
@@ -506,21 +521,6 @@ def firewall_policy_audit_windows():
             return False
         
     return True
-
-def firewall_policy_audit():
-    """
-    Wrapper for OS-specific firewall_policy_audit_* functions
-
-    Check if any Firewall profile is set to block all inbound connections.
-
-    Returns: True if no policies are set to default deny, False if at least one policy is set to default deny
-    """
-    system = platform.system()
-
-    if system == "Windows":
-        return firewall_policy_audit_windows()
-    else:
-        return False # TODO
 
 def firewall_main(protectedPorts):
     """
