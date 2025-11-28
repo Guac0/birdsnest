@@ -18,7 +18,7 @@ from datetime import datetime
 DISARM = True
 DEBUG_PRINT = True
 BACKUPDIR = ""
-LOGFILE = "agent_log.txt"
+LOGFILE = "" #"agent_log.txt"
 MTU_MIN = 1200
 MTU_DEFAULT = 1300
 MTU_MAX = 1514
@@ -31,9 +31,10 @@ def print_debug(msg):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if (DEBUG_PRINT):
         print(msg)
-    if len(LOGFILE) > 0:
-        with open(LOGFILE, "a") as f:
-            f.write(f"{timestamp} {msg}\n")
+    if LOGFILE:
+        if len(LOGFILE) > 0:
+            with open(LOGFILE, "a") as f:
+                f.write(f"{timestamp} {msg}\n")
     return
 
 def get_os():
@@ -378,6 +379,65 @@ def interface_ttl_windows():
     # Reg key does not exist so system is (presumably) using the default of 128 (good)
     return True, True, ""
 
+def interface_down(interface=interface_get_primary()):
+    """
+    Wrapper for interface_down_*
+
+    Given an interface name, check if it is in the down state and remediate if yes
+    
+    Args: interface name(string)
+    Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return interface_down_windows(interface)
+    else:
+        return False # TODO
+
+def interface_down_windows(interface=interface_get_primary()):
+    """
+    Given an interface name, check if it is in the down state and remediate if yes
+    
+    Args: interface name(string)
+    Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+
+    ps_check = fr"""
+    $iface = '{interface}'
+    $int = Get-NetAdapter -Name $iface
+
+    if ($int -eq $null) {{
+        Write-Output 'NotFound'
+    }}
+    elseif ($int.Status -eq 'Up') {{
+        Write-Output 'Up'
+    }}
+    else {{
+        Write-Output 'Down'
+    }}
+    """
+
+    status = run_powershell(ps_check).strip()
+
+    if status == "NotFound":
+        print_debug(f"interface_down_windows({interface}): Interface not found.")
+        return True, True, "" # TODO consistent errors
+
+    if status == "Down":
+        ps_enable = fr"""
+        Enable-NetAdapter -Name '{interface}' -Confirm:$false
+        """ # Write-Output 'Enabled'
+        if DISARM:
+            print_debug(f"interface_down_windows({interface}): DISARMED, but told to enable interface")
+            return False, True, f"Interface {interface} was set to DOWN"
+        else:
+            if run_powershell(ps_enable).strip():
+                return False, True, f"Interface {interface} was set to DOWN"
+            return False, False, f"Interface {interface} was set to DOWN"
+    
+    return True, True, ""
+
 def interface_main(interface=interface_get_primary()):
     """
     Given an interface, detect and remediate (if possible) common issues and returns the remediated issue
@@ -390,6 +450,16 @@ def interface_main(interface=interface_get_primary()):
     newStatus = True
     issues = []
 
+    # Interface Down
+    result_oldStatus, result_newStatus, issue = interface_down()
+    if not result_oldStatus:
+        oldStatus = False
+    if not result_newStatus:
+        newStatus = False
+    if issue:
+        issues.append(issue)
+
+    # MTU
     result_oldStatus, result_newStatus, issue = interface_mtu(interface)
     if not result_oldStatus:
         oldStatus = False
@@ -398,6 +468,7 @@ def interface_main(interface=interface_get_primary()):
     if issue:
         issues.append(issue)
     
+    # TTL
     result_oldStatus, result_newStatus, issue = interface_ttl()
     if not result_oldStatus:
         oldStatus = False
@@ -723,8 +794,9 @@ if __name__ == "__main__":
     # TODO
     print(f"interface_get_primary(): {interface_get_primary()}")
     print(f"get_system_details(): {get_system_details()}")
-    print(f"interface_mtu(): {interface_mtu()}")
-    print(f"interface_ttl(): {interface_ttl()}")
+    #print(f"interface_mtu(): {interface_mtu()}")
+    #print(f"interface_ttl(): {interface_ttl()}")
+    print(f"interface_main(): {interface_main()}")
     #print(f"firewall_rules_audit_windows('81'): {firewall_rules_audit_windows("81")}")
     print(f"firewall_main(['81','82']): {firewall_main(["81","82"])}")
 
