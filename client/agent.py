@@ -441,6 +441,82 @@ def interface_down_windows(interface=interface_get_primary()):
     
     return True, True, ""
 
+def interface_uninstall():
+    # Not fully implemented
+    """
+    Wrapper for interface_uninstall_*
+
+    Detects and remediates core networking breaks
+    
+    Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+    return False
+
+    system = platform.system()
+
+    if system == "Windows":
+        return interface_uninstall_windows()
+    else:
+        return False # TODO
+
+def interface_uninstall_windows(
+    interface_name,
+    ipv4_address,
+    prefix_length,
+    gateway,
+    dns_servers
+):
+    # Heavily vibecoded, just left as a placeholder/idea for now
+    """
+    Detects whether IPv4 is uninstalled on Windows.
+    If uninstalled, reinstalls IPv4.
+    Then restores static IPv4 settings (address, gateway, DNS).
+    """
+
+    # --- Step 1: detect IPv4 presence ---
+    ps_detect = r'''
+    $int = Get-NetIPInterface -AddressFamily IPv4 -ErrorAction SilentlyContinue
+    if ($int -eq $null -or $int.Count -eq 0) { "Missing" } else { "Present" }
+    '''
+
+    ipv4_state = run_powershell(ps_detect).strip()
+
+    # --- Step 2: reinstall IPv4 if missing ---
+    if ipv4_state == "Missing":
+        print("[+] IPv4 is not installed. Reinstalling...")
+        ps_install = r'''
+        netsh interface ipv4 install
+        Write-Output "Installed"
+        '''
+        run_powershell(ps_install)
+    else:
+        print("[+] IPv4 already installed.")
+
+    # --- Step 3: restore IPv4 address ---
+    print(f"[+] Restoring IPv4 address on {interface_name}...")
+    ps_set_ip = fr'''
+    netsh interface ipv4 set address name="{interface_name}" static {ipv4_address} {prefix_length} {gateway}
+    '''
+    run_powershell(ps_set_ip)
+
+    # --- Step 4: restore DNS ---
+    print("[+] Restoring DNS servers...")
+    # Clear existing DNS entries
+    ps_clear_dns = fr'''
+    netsh interface ipv4 set dnsservers name="{interface_name}" source=static address={dns_servers[0]} register=primary
+    '''
+    run_powershell(ps_clear_dns)
+
+    # Add additional DNS servers, if any
+    for dns in dns_servers[1:]:
+        ps_add_dns = fr'''
+        netsh interface ipv4 add dnsservers name="{interface_name}" address={dns} index=2
+        '''
+        run_powershell(ps_add_dns)
+
+    print("[+] IPv4 configuration restored successfully.")
+    return True
+
 def interface_main(interface=interface_get_primary()):
     """
     Given an interface, detect and remediate (if possible) common issues and returns the remediated issue
