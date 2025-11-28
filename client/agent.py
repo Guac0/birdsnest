@@ -259,6 +259,96 @@ def interface_get_primary_unix(ip):
 
     return None
 
+def interface_address(interface,ip_address,subnet,gateway):
+    """
+    Wrapper for interface_address_*
+
+    Given an interface name, check if its IP address and gateway are set, and restore them from backup if not
+    
+    Args: interface name(string), ip_address(string), subnet(int), gateway(string)
+    Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return interface_address_windows(interface,ip_address,subnet,gateway)
+    else:
+        return False # TODO
+
+def interface_address_windows(interface,ip_address,subnet,gateway):
+    """
+    Given an interface name, check if its IP address and gateway are set, and restore them from backup if not
+    
+    Args: interface name(string), ip_address(string), subnet(int), gateway(string)
+    Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+
+    # Query configuration
+    query_cmd = fr"""
+        Get-NetIPConfiguration -InterfaceAlias '{interface}' |
+        Select-Object IPv4Address, IPv4DefaultGateway | ConvertTo-Json
+    """
+
+    output = run_powershell(query_cmd)
+    if not output:
+        print_debug(f"interface_address_windows({interface}): Failed to query interface")
+        return False, False, "interface_address_windows({interface}) Failed to query interface"
+
+    # Parse JSON result
+    try:
+        data = json.loads(output)
+    except json.JSONDecodeError:
+        print_debug(f"interface_address_windows({interface}): Error parsing PowerShell output")
+        return
+
+    # Determine if address or gateway exist
+    has_address = bool(data.get("IPv4Address"))
+    has_gateway = bool(data.get("IPv4DefaultGateway"))
+
+    issue = ""
+
+    # Diagnostics
+    if has_address and has_gateway:
+        return True, True, ""
+    elif not has_address and not has_gateway:
+        issue = "Missing IPv4 Address and Gateway Address"
+    elif not has_address:
+        issue = "Missing IPv4 Address"
+    elif not has_gateway:
+        issue = "Missing Gateway Address"
+
+    statusFix = True
+    # Fix missing IPv4 address
+    if not has_address:
+        set_ip_cmd = fr"""
+            New-NetIPAddress -InterfaceAlias '{interface}' |
+            -IPAddress {ip_address} -PrefixLength {subnet}
+        """
+        if DISARM:
+            print_debug(f"interface_address_windows({interface}): DISARMED, but told to set IP address: {ip_address}/{subnet}")
+            statusFix = False
+        else:
+            print_debug(f"interface_address_windows({interface}): Setting IP address: {ip_address}/{subnet}")
+            if not run_powershell(set_ip_cmd):
+                statusFix = False
+
+    # Fix missing gateway
+    if not has_gateway:
+        set_gw_cmd = (
+            f"New-NetRoute -InterfaceAlias '{interface}' "
+            f"-DestinationPrefix '0.0.0.0/0' -NextHop {gateway} "
+            f"-ErrorAction SilentlyContinue"
+        )
+        if DISARM:
+            print_debug(f"interface_address_windows({interface}): DISARMED, but told to set gateway address: {gateway}")
+            statusFix = False
+        else:
+            print_debug(f"interface_address_windows({interface}): Setting gateway address: {gateway}")
+            if not run_powershell(set_gw_cmd):
+                statusFix = False
+
+    return False, statusFix, issue
+
 def interface_mtu(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maximum=MTU_MAX,mtu_default=MTU_DEFAULT):
     """
     Wrapper for interface_mtu_*
@@ -517,7 +607,7 @@ def interface_uninstall_windows(
     print("[+] IPv4 configuration restored successfully.")
     return True
 
-def interface_main(interface=interface_get_primary()):
+def interface_main(interface,ip_address,subnet,gateway):
     """
     Given an interface, detect and remediate (if possible) common issues and returns the remediated issue
     Supports: interface down, bad mtu, no IP address, no route, no default gateway, no connection to 8.8.8.8
@@ -528,6 +618,18 @@ def interface_main(interface=interface_get_primary()):
     oldStatus = True
     newStatus = True
     issues = []
+
+    # Interface Uninstalled
+    # Not implemented
+
+    # Interface Address
+    result_oldStatus, result_newStatus, issue = interface_address(interface,ip_address,subnet,gateway)
+    if not result_oldStatus:
+        oldStatus = False
+    if not result_newStatus:
+        newStatus = False
+    if issue:
+        issues.append(issue)
 
     # Interface Down
     result_oldStatus, result_newStatus, issue = interface_down()
@@ -748,7 +850,11 @@ def firewall_policy_audit_windows():
         print_debug("No firewall profile data returned.")
         return False
 
-    profiles = json.loads(output)
+    try:
+        profiles = json.loads(output)
+    except json.JSONDecodeError:
+        print_debug("firewall_policy_audit_windows(): Could not decode PowerShell JSON output.")
+        return False
 
     # Normalize single-object case
     if isinstance(profiles, dict):
@@ -870,13 +976,79 @@ def reregister():
 ######### Main ##########
 #region##################
 
+def init_int_vars(interface=interface_get_primary()):
+    """
+    Reads the current IPv4 address, prefix, and gateway for the interface.
+    """
+
+    # Query current config
+    query_cmd = fr"""
+        Get-NetIPConfiguration -InterfaceAlias '{interface}' | 
+        Select-Object IPv4Address, IPv4DefaultGateway | ConvertTo-Json
+    """
+
+    output = run_powershell(query_cmd)
+    if not output:
+        print_debug(f"init_int_vars({interface}): Failed to query interface '{interface}'.")
+        return "", "", ""    
+    try:
+        data = json.loads(output)
+    except json.JSONDecodeError:
+        print_debug(f"init_int_vars({interface}): Error parsing PowerShell output.")
+        return "", "", ""
+
+    # Extract current IP/prefix
+    if data.get("IPv4Address"):
+        addressData = data["IPv4Address"][0]
+        props = addressData.get("CimInstanceProperties", "")
+        match = re.search(r'IPv4Address\s*=\s*"([^"]+)"', props)
+        if match:
+            ip_address = match.group(1)
+        match = re.search(r'PrefixLength\s*=\s*([0-9]+)', props)
+        if match:
+            prefix = int(match.group(1))
+    else:
+        ip_address = None
+        prefix = None
+
+    # Extract gateway
+    query_cmd = fr"""
+        Get-NetIPConfiguration -InterfaceAlias "{interface}" |
+        Select-Object -ExpandProperty IPv4DefaultGateway | ConvertTo-Json
+    """
+
+    output = run_powershell(query_cmd)
+    if not output:
+        print_debug(f"init_int_vars({interface}): Failed to query interface '{interface}' for gateway info.")
+        return "", "", ""
+    
+    try:
+        data = json.loads(output)
+    except json.JSONDecodeError:
+        print_debug(f"init_int_vars({interface}): Error parsing PowerShell output for gateway info.")
+        return "", "", ""
+    
+    if data.get("NextHop"):
+        gateway = data["NextHop"]
+    else:
+        gateway = None
+
+    print_debug(f"init_int_vars({interface}): {ip_address} {prefix} {gateway}")
+    return ip_address, prefix, gateway
+
 if __name__ == "__main__":
     # TODO
-    print(f"interface_get_primary(): {interface_get_primary()}")
+
+    # vars
+    interface = interface_get_primary() # This needs valid network conf to work
+    ip_address,prefix,gateway = init_int_vars()
+
+    # main
+    print(f"interface_get_primary(): {interface}")
     print(f"get_system_details(): {get_system_details()}")
     #print(f"interface_mtu(): {interface_mtu()}")
     #print(f"interface_ttl(): {interface_ttl()}")
-    print(f"interface_main(): {interface_main()}")
+    print(f"interface_main({interface,ip_address,prefix,gateway}): {interface_main(interface,ip_address,prefix,gateway)}")
     #print(f"firewall_rules_audit_windows('81'): {firewall_rules_audit_windows("81")}")
     print(f"firewall_main(['81','82']): {firewall_main(["81","82"])}")
 
