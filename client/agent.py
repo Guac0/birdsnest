@@ -306,10 +306,13 @@ def interface_mtu_windows(interface=interface_get_primary(),mtu_minimum=MTU_MIN,
 
         if DISARM:
             print_debug(f"DISARMED, but told to updated MTU for '{interface}' from {old_mtu} to {new_mtu}")
+            return False, False, f"Interface {interface}'s MTU was set to {old_mtu}, attempted remediation but DISARMED"
         else:
-            run_powershell(ps_set_mtu)
             print_debug(f"Updated MTU for '{interface}' from {old_mtu} to {new_mtu}")
-        return False, True, f"Interface {interface}'s MTU was set to {old_mtu}"
+            if run_powershell(ps_set_mtu):
+                return False, True, f"Interface {interface}'s MTU was set to {old_mtu}"
+            else:
+                return False, False, f"Interface {interface}'s MTU was set to {old_mtu}"
 
     return True, True, ""
 
@@ -369,7 +372,7 @@ def interface_ttl_windows():
         """
         if DISARM:
             print_debug(f"interface_ttl_windows(): DISARMED, but bad TTL detected and told to delete!")
-            return False, True, "Bad TTL set, remediation attempted but DISARMED"
+            return False, False, "Bad TTL set, attempted remediation but DISARMED"
         else:
             ps_result = run_powershell(delete_script).strip()
             if ps_result:
@@ -430,7 +433,7 @@ def interface_down_windows(interface=interface_get_primary()):
         """ # Write-Output 'Enabled'
         if DISARM:
             print_debug(f"interface_down_windows({interface}): DISARMED, but told to enable interface")
-            return False, True, f"Interface {interface} was set to DOWN"
+            return False, False, f"Interface {interface} was set to DOWN, attempted remediation but DISARMED"
         else:
             if run_powershell(ps_enable).strip():
                 return False, True, f"Interface {interface} was set to DOWN"
@@ -588,6 +591,7 @@ def firewall_rules_delete_windows(rules):
                 print_debug(f"firewall_rules_delete_windows(): FAILED to remove rule: {rule['Name']} ({rule['DisplayName']})")
                 status = False
         else:
+            status = False
             print_debug(f"firewall_rules_delete_windows(): DISARMED, but told to remove rule: {rule['Name']} ({rule['DisplayName']})")
 
     print_debug("firewall_rules_delete_windows(): All provided rules deleted.")
@@ -630,7 +634,7 @@ def firewall_rules_create_windows(port,direction,action):
 
     if DISARM:
         print_debug(f"firewall_rules_create_windows(): DISARMED, but told to create Stabvest_Rule_{port}_{direction}_{action}")
-        return True
+        return False
     if run_powershell(ps_cmd):
         return True
     else:
