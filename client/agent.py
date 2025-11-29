@@ -1024,6 +1024,157 @@ def service_audit_windows(service_name):
 
     return oldStatus, newStatus, issue_msg
 
+def service_uninstall(service,package):
+    """
+    Wrapper for service_uninstall_*
+
+    Given a service, see if it is installed (service is found/responsible package is installed) and perform appropriate remediation if not.
+
+    Args: service name (string), package name (string)
+    Returns: Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+
+    if (not service) and (not package):
+        return True, True, "" # no package or service provided. unreachable as should be handled elsewhere but oh well
+
+    system = platform.system()
+
+    if system == "Windows":
+        return service_uninstall_windows(service,package)
+    else:
+        return False # TODO
+
+def service_uninstall_windows(service,package):
+    """
+    Given a service, see if it is installed (service is found/responsible package is installed) and perform appropriate remediation if not.
+
+    Args: service name (string)
+    Returns: Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+
+    issues = []
+    old_status = False
+    new_status = False
+
+    # ---------------------------------------------------------
+    # 1. Check if Windows feature (package) is installed
+    # ---------------------------------------------------------
+    if package:
+        feature_cmd = (
+            f"Get-WindowsOptionalFeature -Online -FeatureName {package} | ConvertTo-Json"
+        )
+        feature_raw = run_powershell(feature_cmd)
+
+        try:
+            feature = json.loads(feature_raw)
+        except:
+            feature = {}
+
+        feature_state = feature.get("State", "")
+
+        if feature_state == "Enabled":
+            old_status = True
+        else:
+            issues.append(f"missing package {package}")
+
+            if not DISARM:
+                # Remediate only when disarm == False
+                enable_cmd = ( # This will take a while to run!
+                    f"Enable-WindowsOptionalFeature -Online -FeatureName {package} -All -NoRestart"
+                )
+                run_powershell(enable_cmd)
+
+                # re-check state
+                feature_raw = run_powershell(feature_cmd)
+                try:
+                    feature = json.loads(feature_raw)
+                except:
+                    feature = {}
+
+                feature_state = feature.get("State", "")
+                if feature_state == "Enabled":
+                    new_status = True
+                else:
+                    issues[-1] = f"missing package {package} and failed to reinstall"
+
+    # ---------------------------------------------------------
+    # 2. Check if Windows service exists
+    # ---------------------------------------------------------
+    if service:
+        svc_cmd = (
+            f"Get-Service -Name {service} | ConvertTo-Json"
+        )
+        svc_raw = run_powershell(svc_cmd)
+
+        if not svc_raw:
+            issues.append(f"missing service {service}")
+            old_status = False
+            new_status = False
+            return old_status, new_status, issues
+
+        try:
+            svc = json.loads(svc_raw)
+        except:
+            svc = None
+
+        if not svc:
+            issues.append(f"missing service {service}")
+            new_status = False
+            return old_status, new_status, issues
+
+        # If we reached here, the service is present
+        new_status = True
+        new_status = True
+
+        return old_status, new_status, issues
+
+    return True, True, "" # no package or service provided. unreachable as should be handled elsewhere but oh well
+
+def service_main(services,packages):
+    """
+    Performs detection and remediation of common service problems
+    
+    Args: services (list of service names)
+    Returns: Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+
+    if len(services) != len(packages):
+        return False, False, f"service_main({services},{packages}): services and packages lists are not the same size"
+
+    oldStatus = True
+    newStatus = True
+    issues = []
+
+    for service,package in services,packages:
+
+        # dunno why this would happen but i think there might be a use... maybe
+        if (not service) and (not package):
+            continue
+
+        # Check if service is found, attempt reinstall, and early out if failed
+        result_oldStatus, result_newStatus, issue = service_uninstall(service,package)
+        if not result_oldStatus:
+            oldStatus = False
+        if not result_newStatus:
+            newStatus = False
+        if issue:
+            issues.append(issue)
+
+        # Check for service integrity
+
+        # Check if service is running/enabled
+        result_oldStatus, result_newStatus, issue = service_audit(service)
+        if not result_oldStatus:
+            oldStatus = False
+        if not result_newStatus:
+            newStatus = False
+        if issue:
+            issues.append(issue)
+
+        # Check service last run status
+
+    return oldStatus, newStatus, issues
+
 #endregion###############
 ### Interaction Funcs ###
 #region##################
