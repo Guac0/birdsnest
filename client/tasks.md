@@ -26,11 +26,11 @@ Note: \ means written but not tested, X means fully working
 [ ] Encryption
 
 ## Functionality - Windows
-[ ] Detect service stopped and restart/re-enable it
-[ ] Detect service in failed state and restart it
+[\] Detect service stopped and restart/re-enable it
+[\] Detect service in failed state and restart it
 [ ] Detect service in failed state multiple times and ignore
-[ ] Detect service in failed state multiple times and ignore
-[ ] Detect service - works for multiple services
+[\] Detect service - works for multiple services
+[ ] Detect service - reinstall if missing
 [\] Detect network - detect and remediate deny port rule {tested detection on Win10, wrote remediation}
 [\] Detect network - detect and remediate deny all rule without allow {written but not tested}
 [\] Detect network - detect and remediate deny port range rule {tested detection on Win10, wrote remediation}
@@ -39,7 +39,7 @@ Note: \ means written but not tested, X means fully working
 [\] Detect network - detect and remediate mtu {partially tested on win10}
 [\] Detect network - detect and remediate TTL {partially tested on win10}
 [\] Detect network - works for multiple ports {tested on Win10}
-[ ] Detect network - netsh interface IPv4 uninstall
+[\] Detect network - netsh interface IPv4 uninstall
 [ ] Create backup
 [ ] Detect protected file change and restore from backup
 [ ] Detect protected file change for service and restore from backup
@@ -52,7 +52,8 @@ Note: \ means written but not tested, X means fully working
 [ ] Detect service stopped and restart/re-enable it
 [ ] Detect service in failed state and restart it
 [ ] Detect service in failed state multiple times and ignore
-[ ] Detect service in failed state multiple times and ignore
+[ ] Detect service - works for multiple services
+[ ] Detect service - reinstall if missing
 [ ] Detect service - works for multiple services
 [ ] Detect network - detect and remediate deny port rule
 [ ] Detect network - detect and remediate deny all rule without allow

@@ -336,8 +336,7 @@ def interface_address_windows(interface,ip_address,subnet,gateway):
     if not has_gateway:
         set_gw_cmd = (
             f"New-NetRoute -InterfaceAlias '{interface}' "
-            f"-DestinationPrefix '0.0.0.0/0' -NextHop {gateway} "
-            f"-ErrorAction SilentlyContinue"
+            f"-DestinationPrefix '0.0.0.0/0' -NextHop {gateway}"
         )
         if DISARM:
             print_debug(f"interface_address_windows({interface}): DISARMED, but told to set gateway address: {gateway}")
@@ -931,8 +930,99 @@ def file_diff():
 def service_get_status():
     return True
 
-def service_restart():
-    return True
+def service_audit(service):
+    """
+    Wrapper for OS-specific service_audit_* functions
+
+    Given the name of a Windows service, detect if it is nonfunctional and attempt fixes.
+    Supports: service not running (script prints the last status message of the service and starts it), service not set to automatic start (script sets it to automatic), service not found (script does not do anything but returns that as the issue)
+    
+    Returns: Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return service_audit_windows(service)
+    else:
+        return False # TODO
+
+def service_audit_windows(service_name):
+    """
+    Given the name of a Windows service, detect if it is nonfunctional and attempt fixes.
+    Supports: service not running (script prints the last status message of the service and starts it), service not set to automatic start (script sets it to automatic), service not found (script does not do anything but returns that as the issue)
+
+    Returns: Returns: oldStatus(bool), newStatus(bool), issue(string)
+    """
+    # 1. Check whether service exists and get its current state
+    ps_check = fr"""
+    $svc = Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue
+    if ($svc -eq $null) {{
+        Write-Output 'NotFound'
+    }} else {{
+        $obj = New-Object PSObject -Property @{{
+            Status = $svc.Status
+            StartType = (Get-CimInstance Win32_Service -Filter "Name='{service_name}'").StartMode
+        }}
+        $obj | ConvertTo-Json
+    }}
+    """
+
+    raw = run_powershell(ps_check).strip()
+
+    # Case: Service not found
+    if raw == "NotFound" or raw == "":
+        return False, False, f"ServiceNotFound for service {service_name}"
+
+    # Parse the JSON result
+    try:
+        data = json.loads(raw)
+    except:
+        return False, False, f"ParseError for service {service_name}"
+
+    current_status  = data.get("Status", "")
+    current_start   = data.get("StartType", "")
+
+    oldStatus = True
+    if (current_status == "Running") or (current_start not in ("Auto", "Automatic")):
+        oldStatus = False
+
+    # Track whether we changed anything
+    newStatus = oldStatus
+    issue_msg = ""
+
+    # ----------------------------------------------------------
+    # 2. If service is not running → start it
+    # ----------------------------------------------------------
+    if current_status != "Running":
+        issue_msg = "ServiceStopped"
+        ps_start = fr"""
+        Start-Service -Name '{service_name}'
+        """
+
+        if DISARM:
+            print(f"[DISARM] Would start service {service_name}")
+            newStatus = False
+        else:
+            if run_powershell(ps_start):
+                newStatus = True # Assume successful start. TODO don't assume
+
+    # ----------------------------------------------------------
+    # 3. If service is not Automatic → set it to Automatic
+    # ----------------------------------------------------------
+    if current_start not in ("Auto", "Automatic"):
+        issue_msg = issue_msg or "WrongStartType"
+
+        ps_auto = fr"""
+        Set-Service -Name '{service_name}' -StartupType Automatic
+        """
+
+        if DISARM:
+            print(f"[DISARM] Would set {service_name} startup to Automatic")
+        else:
+            if run_powershell(ps_auto):
+                newStatus = True
+
+    return oldStatus, newStatus, issue_msg
 
 #endregion###############
 ### Interaction Funcs ###
@@ -1036,20 +1126,28 @@ def init_int_vars(interface=interface_get_primary()):
     print_debug(f"init_int_vars({interface}): {ip_address} {prefix} {gateway}")
     return ip_address, prefix, gateway
 
-if __name__ == "__main__":
-    # TODO
-
+def test_network():
     # vars
     interface = interface_get_primary() # This needs valid network conf to work
     ip_address,prefix,gateway = init_int_vars()
 
     # main
     print(f"interface_get_primary(): {interface}")
-    print(f"get_system_details(): {get_system_details()}")
     #print(f"interface_mtu(): {interface_mtu()}")
     #print(f"interface_ttl(): {interface_ttl()}")
     print(f"interface_main({interface,ip_address,prefix,gateway}): {interface_main(interface,ip_address,prefix,gateway)}")
     #print(f"firewall_rules_audit_windows('81'): {firewall_rules_audit_windows("81")}")
     print(f"firewall_main(['81','82']): {firewall_main(["81","82"])}")
+
+def test_service():
+    service = "AxInstSV"
+    print(f"service_audit({service}): {service_audit(service)}")
+
+if __name__ == "__main__":
+    # TODO
+
+    print(f"get_system_details(): {get_system_details()}")
+    #test_network()
+    test_service()
 
 #endregion###############
