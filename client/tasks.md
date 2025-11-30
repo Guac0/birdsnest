@@ -13,16 +13,10 @@ Note: \ means written but not tested, X means fully working
 
 ## Network comms
 [ ] Initial registration
-[ ] Paused
-[ ] Resume
-[ ] Re-registration
-[ ] Remediation - Service Stop
-[ ] Remediation - Service Error 1
-[ ] Remediation - Service Error Multiple
-[ ] Remediation - Network Firewall
-[ ] Remediation - Network Other
-[ ] Remediation - File
-[ ] Remediation - Service File
+[\] Paused
+[\] Resume
+[\] Re-registration
+[\] Remediation - Generic
 [ ] Encryption
 
 ## Functionality - Windows

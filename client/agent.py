@@ -11,6 +11,7 @@ import re
 import json
 from datetime import datetime
 import time
+import urllib
 
 #endregion###############
 # Configuration Options #
@@ -23,6 +24,11 @@ LOGFILE = "" #"agent_log.txt"
 MTU_MIN = 1200
 MTU_DEFAULT = 1300
 MTU_MAX = 1514
+AGENT_NAME="agenttest1"
+SERVER_URL="http://127.0.0.1:8080/agent"
+AUTH_TOKEN="testtoken"
+AGENT_TYPE="stabvest_test1"
+SERVER_TIMEOUT=5
 
 #endregion###############
 # Generic Helper Funcs ##
@@ -174,14 +180,64 @@ def audit_command(command,package="",packageManager="apt"):
 ## Server Comms Funcs ###
 #region##################
 
-def send_message(message):
+def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
     """
     Sends the specified data to the server
     Handles the full process and attaching agent name/auth
+
     Args: message(any)
     Returns: status(Bool)
     """
-    return True
+    if not SERVER_URL:
+        # Server comms are intentionally disabled
+        # Maybe redirect to print_debug instead?
+        return True
+
+    # Prep payload. TODO encrypt
+    payload = {
+        "hostname": systemInfo["hostname"],
+        "ip": systemInfo["ipadd"],
+        "os": systemInfo["os"],
+        "executionUser": systemInfo["executionUser"],
+        "executionAdmin": systemInfo["executionAdmin"],
+        "auth": AUTH_TOKEN,
+        "beacon_type": AGENT_TYPE,
+        "oldStatus": oldStatus,
+        "newStatus": newStatus,
+        "message": message
+    }
+
+    try:
+        # Prepare data
+        data = json.dumps(payload).encode("utf-8")
+
+        # Build request
+        req = urllib.request.Request(
+            SERVER_URL,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        # Send payload
+        with urllib.request.urlopen(req, timeout=SERVER_TIMEOUT) as response:
+            if response.getcode() == 200:
+                # Parse result if we get one. Actually, we don't care as it's just one way
+                #response_body = response.read().decode("utf-8")
+                #result = json.loads(response_body)
+                return True
+            else:
+                print_debug(f"[-] Server error: {response.getcode()}")
+
+    # Error handling
+    except urllib.error.HTTPError as e:
+        print_debug(f"[!] HTTP error: {e.code} {e.reason}")
+    except urllib.error.URLError as e:
+        print_debug(f"[!] URL error: {e.reason}")
+    except Exception as e:
+        # Various requests errors - networking failure or 4xx/5xx code from server
+        print_debug(f"[!] Beacon error: {e}")
+    return False
 
 #endregion###############
 # Network Protect Funcs #
@@ -1292,7 +1348,7 @@ def pause(seconds=60):
     Sends message to server.
     Returns: Success(bool)
     """
-    send_message(f"pausing for seconds {seconds}")
+    send_message(True,True,f"pausing for seconds {seconds}")
     return True
 
 def resume(scheduled=False):
@@ -1302,7 +1358,7 @@ def resume(scheduled=False):
     Sends message to server.
     Returns: Success(bool)
     """
-    send_message("resuming")
+    send_message(True,True,f"resuming - scheduled: {scheduled}")
     return True
 
 def reregister():
@@ -1310,7 +1366,7 @@ def reregister():
     Performs a re-init of protected files for legitimate changes
     Returns Success(bool)
     """
-    send_message("reregister")
+    send_message(True,True,"reregister")
     return True
 
 #endregion###############
@@ -1453,6 +1509,7 @@ def main():
         print_debug(f"main(): newStatus - {newStatus}")
         for issue in issues:
             print_debug(f"main(): issue - {issue}")
+            send_message(oldStatus,newStatus,issue)
         
         print_debug(f"main(): sleeping for {sleeptime} seconds")
         print_debug(f"")
