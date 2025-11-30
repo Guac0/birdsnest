@@ -195,6 +195,7 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
 
     # Prep payload. TODO encrypt
     payload = {
+        "name": AGENT_NAME,
         "hostname": systemInfo["hostname"],
         "ip": systemInfo["ipadd"],
         "os": systemInfo["os"],
