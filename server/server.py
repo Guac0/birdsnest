@@ -16,6 +16,8 @@ import json
 from collections import Counter
 import base64
 
+# TODO synch
+
 # =================================
 # ======= START USER CONFIG =======
 # =================================
@@ -28,9 +30,15 @@ webgui_users    = {                     # Valid roles: admin or guest
 # === SERVER CONFIG ===
 HOST            = "127.0.0.1"           # Listen IP
 PORT            = 8080                  # Listen Port
+PUBLIC_URL      = f"http://{HOST}:{PORT}"
 LOGFILE         = f"log_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.txt"   # File to write logs to
 SAVEFILE        = f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"#f"save_testing2.json" # Savefile to save/load data from. Default f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"
 SAVE_INTERVAL   = 60                    # Seconds between autosaves
+STALE_TIME      = 300                   # If agent has not checked in for this time period in seconds, mark them as stale
+# test
+WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
+# ccdc
+#WEBHOOK_URL     = "https://discord.com/api/webhooks/1445154855214780459/N1mBMKjo2mvzCdGuRa6sH92UG394rFVr8PR9ZXuapcvLWDsGCYji47LN-GRQ5L2NTRzY"
 # === BEACON CONFIG ===
 AUTH_TOKEN              = "testtoken" # Change this per engagement. Allows beacons to authenticate to the server
 
@@ -70,7 +78,7 @@ login_manager.login_view = 'login'  # redirect to login page if not authenticate
 # === DATA STRUCTURES ===
 # Note: all timestamps are logged in unix time
 # Note: all ids are created via joining the stated fields with "|" characters and base64ing the resulting string
-agents              = {}    # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int),lastStatus(bool)}
+agents              = {}    # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int),lastStatus(bool),stale(bool)}
 messages            = {}    # message_id (timestamp,agent_id): {timestamp(int),agent_id(str),oldStatus(bool),newStatus(bool),message(str)}
 incidents           = {}    # incident_id (increments with each incident): {timestamp(int),agent_id(str),tag(str),oldStatus(bool),newStatus(bool),message(str)}. TAG can be "New", "Active", or "Closed". TODO: consider refactoring this using a reference to messages
 
@@ -90,6 +98,141 @@ def hash_id(*args):
 
 def matches_pattern(value, pattern):
     return pattern is None or re.fullmatch(pattern, value) is not None
+
+def create_incident(messageDict,tag="New",createAlert=True):
+    """
+    Creates an incident and sends alerts
+    """
+    global incidents
+
+    incident_id = len(incidents) + 1
+    incidentDict = {
+        "timestamp": messageDict["timestamp"],
+        "agent_id": messageDict["agent_id"],
+        "oldStatus": messageDict["oldStatus"],
+        "tag": tag,
+        "newStatus": messageDict["newStatus"],
+        "message": messageDict["message"]
+    }
+
+    if incident_id in incidents:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /create_incident - incidents hash collision. Old incident: {incidents[incident_id]}. New incident: {incidentDict}\n")
+    incidents[incident_id] = incidentDict
+
+    if createAlert:
+        discord_webhook(incident_id,incidentDict)
+        # TODO trigger web alert
+    
+    return
+
+def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
+    #compare rules level to set colors of the alert
+    if not url:
+        return
+    
+    if (incident["message"].split('-')[0].strip().lower() == "firewall issue"):
+    	#green
+        color = "7210752"
+    elif (incident["message"].split('-')[0].strip().lower() == "interface issue"):
+        #yellow
+        color = "86542"
+    elif (incident["message"].split('-')[0].strip().lower() == "service issue"):
+        #yellow
+        color = "77158"
+    elif (incident["message"].split('-')[0].strip().lower() == "custom issue"):
+        #yellow
+        color = "6179074"
+    elif (incident["message"].split('-')[0].strip().lower() == "agent issue"):
+        #yellow
+        color = "3407966"
+    else:
+        #red
+        color = "6184542"
+
+    #data that the webhook will receive and use to display the alert in discord chat
+    # TODO: proper agent name
+    payload = json.dumps({
+      "embeds": [
+        {
+          "title": "Stabvest Alert - {} on {} for {}".format(incident["message"].split('-')[0].strip(),agents[incident["agent_id"]]["hostname"],agents[incident["agent_id"]]["agent_name"]),
+          "color": int(color),
+          "description": "{}".format(incident["message"]),
+          #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
+          "url": f"{PUBLIC_URL}?incident={incident_id}",
+          "fields": [
+            {
+              "name": "Incident #",
+              "value": "{}".format(incident_id),
+              "inline": True
+            },
+            {
+              "name": "Timestamp",
+              "value": "{}".format(datetime.fromtimestamp(incident["timestamp"])),
+              "inline": True
+            },
+            {
+              "name": "Autofix Status",
+              "value": "{}".format(incident["newStatus"]),
+              "inline": True
+            },
+            {
+              "name": "Agent Name",
+              "value": "{}".format(agents[incident["agent_id"]]["agent_name"]),
+              "inline": True
+            },
+            {
+              "name": "Hostname",
+              "value": "{}".format(agents[incident["agent_id"]]["hostname"]),
+              "inline": True
+            },
+            {
+              "name": "IP Address",
+              "value": "{}".format(agents[incident["agent_id"]]["ip"]),
+              "inline": True
+            }
+          ]
+        }
+      ]
+    })
+
+    headers = {'content-type': 'application/json', 'Accept-Charset': 'UTF-8'}
+    result = requests.post(f"{url}", data=payload, headers=headers, timeout=10)
+
+    try:
+        result.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /discord_webhook - failed to send message for incident {incident_id}. Exception: {err}. StatusCode: {result.status_code}. StatusText: {result.text}.\n")
+    else:
+         with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /discord_webhook - sent message for incident {incident_id}.\n")
+
+    return
+
+def check_stale(agents,incidents):
+    """
+    Given an agents dict, check their lastSeenTime and stale values and update stale if required.
+    If agent moves in to stale state, generate an incident.
+    If an agent moves out of stale state, close the relevant incident
+    """
+    for agent_id in agents:
+        if agents[agent_id]["stale"]:
+            # If agent was previously stale, see if they've checked in recently
+            if (time.time() - agents[agent_id]["lastSeenTime"]) < STALE_TIME:
+                # No longer stale, so close the relevant incident
+                agents[agent_id]["stale"] = False
+                
+            else:
+                # Still stale - update incident time
+                continue
+        else:
+            # Agent not previously stale - check if they have not checked in recently
+            if (time.time() - agents[agent_id]["lastSeenTime"]) > STALE_TIME:
+                # Stale
+                agents[agent_id]["stale"] = True
+
+    return agents
 
 # === SAVE AND LOAD ===
 def save_state(filepath=SAVEFILE):
@@ -202,27 +345,43 @@ def get_random_time_offset_epoch(minutes_offset=30, direction="either"):
 
     return current_epoch_time + random_offset
 
-def add_test_data_incidents(num=20):
+def add_test_data_agents(num=5):
+    # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int),lastStatus(bool),stale(bool)}
+    global agents
     for i in range(1,num + 1):
-        incidents[i] = {
+        agent = {
+            "agent_name": random.choice(["apache2","iis","smb","mysql","vsftpd"]),
+            "hostname": random.choice(["webserver1","webserver2","fileshare1","fileshare2","dc01"]),
+            "ip": random.choice(["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5"]),
+            "os": random.choice(["Windows 10","Windows 2016Server","Ubuntu 16.03 Name","RHEL 9.3","Rocky 8"]),
+            "executionUser": random.choice(["root","admin",".\\administrator","domain\\dadmin","user"]),
+            "executionAdmin": random.choice([True,False]),
+            "lastSeenTime": time.time() - ((num - i) * 100),
+            "lastStatus": random.choice([True,False]),
+            "stale": False
+        }
+        agents[f"agent_{i}"] = agent
+
+def add_test_data_incidents(num=2):
+    for i in range(1,num + 1):
+        incident = {
             "timestamp": time.time() - ((num - i) * 100),
             "agent_id":f"agent_{random.randint(1,5)}",
-            "tag": random.choice(["New","Active","Closed"]),
             "oldStatus": random.choice([False,True]),
             "newStatus": random.choice([False,True]),
             "message": random.choice([
                 "Service Issue - Missing required package {package} for service {service}, DISARMED.",
                 "Service Issue - Service {service_name} not running, RESTORED service to START state.",
                 "Service Issue - Service {service_name} not set to automatic start, FAILED to set to automatic start.",
-                "Firewall Issue - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. SUCCESSFULLY created firewall rule Stabvest_Rule_{port}_{direction}_{action}",
-                "Firewall Issue - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. DISARMED, but told to create firewall rule Stabvest_Rule_{port}_{direction}_{action}",
+                "Firewall Issue - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. SUCCESSFULLY created firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
+                "Firewall Issue - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. DISARMED, but told to create firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
                 "Firewall Issue - SUCCESSFULLY removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.",
                 "Firewall Issue - Could not get firewall rule information due to PowerShell error.",
                 "Interface Issue - Interface {interface} was set to DOWN, RESTORED UP state.",
                 "Interface Issue - Bad system TTL set, DISARMED.",
                 "Interface Issue - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
                 "Agent Issue - No logs from agent in {minutes} minutes.",
-                "Agent Issue - Agent paused For {seconds} seconds.",
+                "Agent Issue - Agent paused for {seconds} seconds.",
                 "Agent Issue - Agent re-registered.",
                 "Custom Issue - MySQL users changed.",
                 "Custom Issue - MySQL data changed.",
@@ -232,6 +391,7 @@ def add_test_data_incidents(num=20):
                 "Generic Issue - Test Test Test."
             ])
         }
+        create_incident(incident,random.choice(["New","Active","Closed"]),True)
 
 # =================================
 # ========= API ENDPOINTS =========
@@ -354,7 +514,6 @@ def handle_beacon():
         return "Missing data", 400
 
     # Register client if new, or update agent fields if not
-    # TODO re-register stale agents or registration agents
     agent_id = hash_id(agent_name, hostname, ip, os_name)
 
     if agent_id not in agents:
@@ -366,9 +525,11 @@ def handle_beacon():
             "executionUser": executionUser,
             "executionAdmin": executionAdmin,
             "lastSeenTime": time.time(),
-            "lastStatus": newStatus
+            "lastStatus": newStatus,
+            "stale": False
         }
     else:
+        # TODO re-register agents might need a refresh on hostname and etc
         agents[agent_id]["last_seen"] = time.time()
         agents[agent_id]["lastStatus"] = newStatus
     
@@ -389,21 +550,7 @@ def handle_beacon():
 
     # Trigger incident if needed. Incident means that oldStatus is FALSE (malicious action or critical error detected)
     if oldStatus == False:
-        incident_id = len(incidents) + 1
-        incidentDict = {
-            "timestamp": timestamp,
-            "agent_id": agent_id,
-            "oldStatus": oldStatus,
-            "tag": "New",
-            "newStatus": newStatus,
-            "message": message
-        }
-
-        if incident_id in incidents:
-            with open(LOGFILE, "a") as f:
-                f.write(f"[-] {timestamp} /beacon - incidents hash collision. Old incident: {incidents[incident_id]}. New incident: {incidentDict}\n")
-        incidents[incident_id] = incidentDict
-        # TODO trigger incident alert
+        create_incident(messageDict)
 
     # Return
     return "ok", 200
@@ -546,6 +693,7 @@ if __name__ == "__main__":
     load_state()
 
     # Test data
+    add_test_data_agents()
     add_test_data_incidents()
     #add_test_data_comp(0)
     #add_test_data_cmds()
