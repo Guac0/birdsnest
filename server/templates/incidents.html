@@ -133,7 +133,7 @@ Security & production notes:
 
     <!-- Controls: search, filters, sort, refresh -->
     <div class="controls" role="toolbar" aria-label="dashboard controls">
-      <input type="search" id="search" placeholder="Search message, agent ID, host..." aria-label="Search incidents">
+      <input type="search" id="search" placeholder="Search message, agent, incident #..." aria-label="Search incidents">
 
       <select id="tagFilter" aria-label="Filter by tag">
         <option value="alive">New or Active</option>
@@ -144,9 +144,9 @@ Security & production notes:
       </select>
 
       <select id="statusFilter" aria-label="Filter by incident status">
-        <option value="all">Any remediation status</option>
-        <option value="Success">Successful auto remediation</option>
-        <option value="Failed">Failed auto remediation</option>
+        <option value="all">Any autofix status</option>
+        <option value="Success">Successful autofix</option>
+        <option value="Failed">Failed autofix</option>
       </select>
 
       <select id="typeFilter" aria-label="Filter by incident type">
@@ -190,6 +190,21 @@ Security & production notes:
   <div id="toast" class="toast" style="display:none"></div>
 
 <script>
+
+// first time load - populate search for incident
+// Get search input element
+const searchInput = document.getElementById('search');
+
+// Parse URL parameters
+const params = new URLSearchParams(window.location.search);
+
+// Check for ?incident=#
+const incidentId = params.get('incident');
+
+if (incidentId) {
+    // Populate search input on page load
+    searchInput.value = `Incident ${incidentId}`;
+}
 /* ------------------------------
    utils: small utility helpers
    ------------------------------ */
@@ -398,7 +413,7 @@ const ui = (function(){
     const type = utils.inferStatus(inc);
     const typeLine = document.createElement('div');
     typeLine.className = 'small';
-    typeLine.innerHTML = `<span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Successful auto remediation' : 'Failed auto remediation'}</span> • Agent: <strong>${utils.safeText(inc.agent_id || 'unknown')}</strong>`;
+    typeLine.innerHTML = `<span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Successful autofix' : 'Failed autofix'}</span> • Agent: <strong>${utils.safeText(inc.agent_id || 'unknown')}</strong>`;
     wrapper.appendChild(typeLine);
 
     // actions
@@ -456,7 +471,7 @@ const ui = (function(){
       badge.className = `badge tag-${inc.tag}`;
       // update type
       const newType = utils.inferStatus(inc);
-      typeLine.innerHTML = `<span class="type-${newType === 'Success' ? 'Success' : 'Failed'}">${newType === 'Success' ? 'Successful remediation' : 'Failed remediation'}</span> • Host: <strong>${utils.safeText(inc.agent_id || 'unknown')}</strong>`;
+      typeLine.innerHTML = `<span class="type-${newType === 'Success' ? 'Success' : 'Failed'}">${newType === 'Success' ? 'Successful autofix' : 'Failed autofix'}</span> • Host: <strong>${utils.safeText(inc.agent_id || 'unknown')}</strong>`;
       msg.textContent = inc.message || '—';
       // refresh button disabled states
       refreshButtonStates();
@@ -514,11 +529,21 @@ const ui = (function(){
       if (q){
         return (String(r.agent_id || '').toLowerCase().includes(q))
           || (String(r.message || '').toLowerCase().includes(q))
-          || (String(r.host || '').toLowerCase().includes(q))
+          || (String(r.id || '').toLowerCase().includes(q))
           || (String(r.tag || '').toLowerCase().includes(q));
       }
       return true;
     });
+
+    // specific force search for incident
+    if (q.split(" ")[0].toLowerCase() === "incident") {
+      filtered = rows.filter(r => {
+        if (q.split(" ")[1]){
+          return (r.id === q.split(" ")[1]);
+        }
+        return true;
+      });
+    }
 
     // filter by status
     const statusVal = statusFilter.value;

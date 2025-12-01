@@ -15,6 +15,7 @@ import threading, time
 import json
 from collections import Counter
 import base64
+from urllib.parse import urlparse, unquote_plus
 
 # TODO synch
 
@@ -159,7 +160,7 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
           "color": int(color),
           "description": "{}".format(incident["message"]),
           #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
-          "url": f"{PUBLIC_URL}?incident={incident_id}",
+          "url": f"{PUBLIC_URL}/incidents?incident_id={incident_id}",
           "fields": [
             {
               "name": "Incident #",
@@ -318,6 +319,15 @@ def load_user(id):
         return User(id, user['role'])
     return None
 
+def is_safe_path(next_url: str) -> bool:
+    if not next_url:
+        return False
+    # percent-decoded already by Flask for request.args/form, but be safe:
+    next_url = unquote_plus(next_url)
+    parsed = urlparse(next_url)
+    # allow only relative paths (no scheme/netloc)
+    return (parsed.scheme == "" and parsed.netloc == "" and next_url.startswith("/"))
+
 # === TEST DATA ===
 def get_random_time_offset_epoch(minutes_offset=30, direction="either"):
     """
@@ -434,28 +444,35 @@ def background():
 def login():
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        # Very basic password check (TODO: replace with hashing & salting!)
-        user = webgui_users.get(username)
-        if user and password == user['password']:
-            user_obj = User(username, user['role'])
-            login_user(user_obj)
-            session.permanent = True # Without session.permanent = True, Flask sets a session that expires when the browser closes - so not compatible with timeouts
-            with open(LOGFILE, "a") as f:
-                f.write(f"[+] {timestamp} /login - Successful authentication for {username} from {request.remote_addr}\n")
-            return redirect(url_for('page_dashboard'))
-        else:
-            flash('Invalid username or password', 'danger')
-            with open(LOGFILE, "a") as f:
-                f.write(f"[-] {timestamp} /login - Unsuccessful connection for {username} with password {password} from {request.remote_addr}\n")
-    else:
+    # For GET render pass the next param to template so the form includes it
+    if request.method == 'GET':
+        next_param = request.args.get('next', '')
         with open(LOGFILE, "a") as f:
             f.write(f"[+] {timestamp} /login - Successful connection at {request.remote_addr}\n")
+        return render_template('login.html', next=next_param)
 
-    return render_template('login.html')
+    # POST
+    username = request.form.get('username')
+    password = request.form.get('password')
+    next_param = request.form.get('next') or request.args.get('next') or ''
+
+    user = webgui_users.get(username)
+    if user and password == user['password']:
+        user_obj = User(username, user['role'])
+        login_user(user_obj)
+        session.permanent = True
+        with open(LOGFILE, "a") as f:
+            f.write(f"[+] {timestamp} /login - Successful authentication for {username} from {request.remote_addr}\n")
+
+        # Validate next and redirect safely
+        if is_safe_path(next_param):
+            return redirect(unquote_plus(next_param))
+        return redirect(url_for('page_dashboard'))
+
+    flash('Invalid username or password', 'danger')
+    with open(LOGFILE, "a") as f:
+        f.write(f"[-] {timestamp} /login - Unsuccessful connection for {username} with password {password} from {request.remote_addr}\n")
+    return render_template('login.html', next=next_param)
 
 @app.route('/logout')
 @login_required

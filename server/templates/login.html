@@ -34,6 +34,7 @@
             <label for="password" class="form-label">Password</label>
             <input type="password" name="password" id="password" class="form-control" required>
         </div>
+        <input type="hidden" name="next" value="{{ next or '' }}">
         <button class="btn btn-primary" type="submit">Login</button>
     </form>
     <!--
