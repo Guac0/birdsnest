@@ -24,8 +24,9 @@ from urllib.parse import urlparse, unquote_plus
 # =================================
 
 # === WEBGUI CONFIG ===
-webgui_users    = {                     # Valid roles: admin or guest
+webgui_users    = {                     # Valid roles: admin or analyst or guest
     "admin": {"password": "admin", "role": "admin"},  # TODO: use hashed passwords
+    "analyst": {"password": "analyst", "role": "analyst"},
     "guest": {"password": "guest", "role": "guest"}
 }
 # === SERVER CONFIG ===
@@ -308,6 +309,14 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or current_user.role != "admin":
+            abort(403)  # Forbidden
+        return f(*args, **kwargs)
+    return decorated_function
+
+def analyst_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or (current_user.role != "analyst" and current_user.role != "admin" ):
             abort(403)  # Forbidden
         return f(*args, **kwargs)
     return decorated_function
@@ -643,25 +652,31 @@ def add_user():
     data = request.json
     username = data.get("username")
     password = data.get("password")
+    role = data.get("role")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    if not all([username, password]):
+    if not all([username, password, role]):
         with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /add_user - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[username, password]}\n")
+            f.write(f"[-] {timestamp} /add_user - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[username, password, role]}\n")
         return "Missing data", 400
+    
+    if role != "guest" and role != "analyst":
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /add_user - Failed connection from {current_user.id} at {request.remote_addr} - bad role value. Full details: {[username, password, role]}\n")
+        return "Bad role value", 400
 
     epoch_time = time.time()
 
-    webgui_users[username] = {"password": password, "role": "guest"} # TODO hash
+    webgui_users[username] = {"password": password, "role": role} # TODO hash
 
     with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /add_user - Successful connection from {current_user.id} at {request.remote_addr}. Adding user {username}\n")
+        f.write(f"[+] {timestamp} /add_user - Successful connection from {current_user.id} at {request.remote_addr}. Adding user {username} with role {role}\n")
     return jsonify({"status": "ok"})
 
 @app.route("/update_incident_tag", methods=["POST"])
 @login_required
-@admin_required
+@analyst_required
 def update_incident_tag():
     data = request.json
     incident_id = data.get("incident_id")
