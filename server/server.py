@@ -381,7 +381,7 @@ def add_test_data_agents(num=5):
         }
         agents[f"agent_{i}"] = agent
 
-def add_test_data_incidents(num=2):
+def add_test_data_incidents(num=10):
     for i in range(1,num + 1):
         incident = {
             "timestamp": time.time() - ((num - i) * 100),

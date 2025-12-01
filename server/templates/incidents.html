@@ -145,7 +145,7 @@ Security & production notes:
 
       <select id="statusFilter" aria-label="Filter by incident status">
         <option value="all">Any autofix status</option>
-        <option value="Success">Successful autofix</option>
+        <option value="Success">Good autofix</option>
         <option value="Failed">Failed autofix</option>
       </select>
 
@@ -273,12 +273,30 @@ const utils = (function(){
 const api = (function(){
   // base paths - adapt if your server sits under a prefix
   const LIST_PATH = '/list_incidents';
+  const LIST_AGENTS_PATH = '/list_agents';
   const UPDATE_TAG_PATH = '/update_incident_tag';
 
   function getHeaders(){
     // Add auth header or CSRF token here if needed
     return {'Content-Type':'application/json'};
   }
+
+  /**
+   * Fetch agents from server.
+   * Returns a Promise resolving to object mapping agent_id -> agent info.
+   */
+  async function listAgents(){
+    try {
+      const res = await fetch(LIST_AGENTS_PATH, { method:'POST', headers:getHeaders(), body: JSON.stringify({}) });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const json = await res.json();
+      return json;
+    } catch (err){
+      console.warn('listAgents failed:', err);
+      return {};
+    }
+  }
+
 
   /**
    * Fetch incidents from server.
@@ -321,7 +339,7 @@ const api = (function(){
     }
   }
 
-  return { listIncidents, updateIncidentTag };
+  return { listAgents, listIncidents, updateIncidentTag };
 })();
 
 /* ------------------------------
@@ -351,6 +369,8 @@ const ui = (function(){
   let incidents = {};
   let refreshTimer = null;
   const AUTO_INTERVAL_MS = 20_000; // 20s auto refresh (adjustable)
+
+  let agents = {}; // agent_id -> { agent_name, hostname, ip, ... }
 
   // -- helpers --
   function showToast(msg, ms=3500){
@@ -395,9 +415,10 @@ const ui = (function(){
 
     // header meta row
     const metaRow = document.createElement('div');
+    const type = utils.inferStatus(inc);
     metaRow.className = 'meta';
     metaRow.innerHTML = `
-      <div class="small">Incident <strong>${utils.safeText(id)}</strong> • ${utils.formatTimestamp(inc.timestamp)}</div>
+      <div class="small">Incident <strong>${utils.safeText(id)}</strong> • ${utils.formatTimestamp(inc.timestamp)} • <span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Good autofix' : 'Failed autofix'}</span></div>
       <div><span class="badge tag-${inc.tag}" title="Incident tag">${inc.tag}</span></div>
     `;
     wrapper.appendChild(metaRow);
@@ -409,12 +430,20 @@ const ui = (function(){
     msg.textContent = inc.message || '—';
     wrapper.appendChild(msg);
 
-    // type line
-    const type = utils.inferStatus(inc);
-    const typeLine = document.createElement('div');
-    typeLine.className = 'small';
-    typeLine.innerHTML = `<span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Successful autofix' : 'Failed autofix'}</span> • Agent: <strong>${utils.safeText(inc.agent_id || 'unknown')}</strong>`;
-    wrapper.appendChild(typeLine);
+    // agent display row
+    const agentRow = document.createElement('div');
+    agentRow.className = 'small';
+    if (agents[inc.agent_id]){
+      agentRow.innerHTML = `
+        <strong>Agent:</strong> ${agents[inc.agent_id].agent_name} • 
+        <strong>Host:</strong> ${agents[inc.agent_id].hostname} • 
+        <strong>IP:</strong> ${agents[inc.agent_id].ip}
+      `;
+    } else {
+      agentRow.textContent = 'Agent info unavailable';
+    }
+    wrapper.appendChild(agentRow);
+
 
     // actions
     const actions = document.createElement('div');
@@ -463,17 +492,27 @@ const ui = (function(){
 
     // attach a method to update the card if the underlying inc changes
     wrapper.update = function(newInc){
-      // update local inc
       inc = newInc;
-      // update badge
+      // badge
       const badge = wrapper.querySelector('.badge');
       badge.textContent = inc.tag;
       badge.className = `badge tag-${inc.tag}`;
-      // update type
-      const newType = utils.inferStatus(inc);
-      typeLine.innerHTML = `<span class="type-${newType === 'Success' ? 'Success' : 'Failed'}">${newType === 'Success' ? 'Successful autofix' : 'Failed autofix'}</span> • Host: <strong>${utils.safeText(inc.agent_id || 'unknown')}</strong>`;
+
+      // message
       msg.textContent = inc.message || '—';
-      // refresh button disabled states
+
+      // update agent info row
+      if (agents[inc.agent_id]){
+        agentRow.innerHTML = `
+          <strong>Agent:</strong> ${agents[inc.agent_id].agent_name} • 
+          <strong>Host:</strong> ${agents[inc.agent_id].hostname} • 
+          <strong>IP:</strong> ${agents[inc.agent_id].ip}
+        `;
+      } else {
+        agentRow.textContent = 'Agent info unavailable';
+      }
+
+      // refresh button states
       refreshButtonStates();
     };
 
@@ -671,8 +710,10 @@ const ui = (function(){
   // initialize UI
   async function init(){
     setupControls();
+    agents = await api.listAgents(); // load agents info
     await loadIncidents();
   }
+
 
   return { init, render, loadIncidents, showToast };
 })();
