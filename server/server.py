@@ -202,8 +202,8 @@ def get_random_time_offset_epoch(minutes_offset=30, direction="either"):
 
     return current_epoch_time + random_offset
 
-def add_test_data_incidents(num=11):
-    for i in range(1,num):
+def add_test_data_incidents(num=20):
+    for i in range(1,num + 1):
         incidents[i] = {
             "timestamp": time.time() - ((num - i) * 100),
             "agent_id":f"agent_{random.randint(1,5)}",
@@ -221,7 +221,15 @@ def add_test_data_incidents(num=11):
                 "Interface Issue - Interface {interface} was set to DOWN, RESTORED UP state.",
                 "Interface Issue - Bad system TTL set, DISARMED.",
                 "Interface Issue - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
-                "Interface Issue - Missing IPv4 Address for interface {interface}, FAILED to restore {ip_address}/{subnet}."
+                "Agent Issue - No logs from agent in {minutes} minutes.",
+                "Agent Issue - Agent paused For {seconds} seconds.",
+                "Agent Issue - Agent re-registered.",
+                "Custom Issue - MySQL users changed.",
+                "Custom Issue - MySQL data changed.",
+                "Custom Issue - IIS Site Config changed.",
+                "Custom Issue - IIS Application Pool changed.",
+                "Generic Issue - Test Test Test.",
+                "Generic Issue - Test Test Test."
             ])
         }
 

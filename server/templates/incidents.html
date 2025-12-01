@@ -37,13 +37,19 @@ Security & production notes:
 <!-- Minimal, modern styling (no external frameworks so this is drop-in) -->
 <style>
   :root{
-    --bg:#0f1724;
+    --bg:#272b33; /*--bg:#0f1724;*/
     --card:#0b1320;
     --muted:#9aa6b2;
     --accent:#60a5fa;
     --success:#16a34a;
     --danger:#ef4444;
     --warning:#f59e0b;
+    --color-firewall:    #6e0700;
+    --color-interface:  #01520e;
+    --color-service-generic:   #012d66;
+    --color-service-custom: #5e4902;
+    --color-agent-alert: #34005e;
+    --color-unknown:   #5e5e5e;
     --glass: rgba(255,255,255,0.03);
     --radius:12px;
     --max-width:1200px;
@@ -51,6 +57,13 @@ Security & production notes:
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     color-scheme: dark;
   }
+
+  .color-firewall        { color: var(--color-firewall); }
+  .color-interface       { color: var(--color-interface); }
+  .color-service-generic { color: var(--color-service-generic); }
+  .color-service-custom  { color: var(--color-service-custom); }
+  .color-agent-alert     { color: var(--color-agent-alert); }
+  .color-unknown         { color: var(--color-unknown); }
   html,body{height:100%;margin:0;background:linear-gradient(180deg,#061026 0%, #071426 100%);color:#dbe7f0;}
   .container{max-width:var(--max-width);margin:28px auto;padding:20px;}
   header{display:flex;gap:16px;align-items:center;margin-bottom:18px;}
@@ -107,6 +120,7 @@ Security & production notes:
       <div>
         <h1>Stabvest — Incidents Dashboard</h1>
         <div class="sub">Click <strong>Claim</strong> to tag an incident as <em>Active</em>, <strong>Resolve</strong> to tag as <em>Closed</em>, or <strong>Reopen</strong> to mark as <em>New</em>. You must have <code>Administrator</code> permissions to do this.</div>
+        <div class="sub">Issue Colors: <span class="color-firewall">Red</span> for <strong>Firewall</strong>, <span class="color-interface">Green</span> for <strong>Interface</strong>, <span class="color-service-generic">Blue</span> for <strong>Service Generic</strong>, <span class="color-service-custom">Yellow</span> for <strong>Service Custom</strong>, <span class="color-agent-alert">Purple</span> for <strong>Agent Alert</strong>, <span class="color-unknown">Gray</span> for <strong>Unknown</strong>.</div>
       </div>
       <div style="flex:1"></div>
       <div class="topbar-stats" aria-hidden>
@@ -122,14 +136,15 @@ Security & production notes:
       <input type="search" id="search" placeholder="Search message, agent ID, host..." aria-label="Search incidents">
 
       <select id="tagFilter" aria-label="Filter by tag">
-        <option value="any">Any tag</option>
+        <option value="alive">New or Active</option>
         <option value="New">New</option>
         <option value="Active">Active</option>
         <option value="Closed">Closed</option>
+        <option value="any">Any tag</option>
       </select>
 
       <select id="statusFilter" aria-label="Filter by incident status">
-        <option value="all">Any status</option>
+        <option value="all">Any remediation status</option>
         <option value="Success">Successful auto remediation</option>
         <option value="Failed">Failed auto remediation</option>
       </select>
@@ -354,17 +369,14 @@ const ui = (function(){
     const incidentType = utils.inferType(inc);
 
     const colors = {
-        firewall:  "#6e0700",  // red
-        interface: "#01520e",  // green
-        service:   "#012d66",  // blue
-        custom:    "#5e4902",  // yellow
-        agent:     "#34005e",  // purple
-        unknown:   "#5e5e5e"   // gray
+      firewall:  "var(--color-firewall)",
+      interface: "var(--color-interface)",
+      service:   "var(--color-service-generic)",
+      custom:    "var(--color-service-custom)",
+      agent:     "var(--color-agent-alert)",
+      unknown:   "var(--color-unknown)"
     };
-    if (incidentType !== "unknown") {
-        wrapper.style.backgroundColor = colors[incidentType];
-    }
-    //wrapper.style.backgroundColor = colors[incidentType] || colors.unknown;
+    wrapper.style.backgroundColor = colors[incidentType];
 
     // header meta row
     const metaRow = document.createElement('div');
@@ -523,7 +535,11 @@ const ui = (function(){
     // filter by tag
     const tagVal = tagFilter.value;
     if (tagVal !== 'any'){
-      filtered = filtered.filter(r => r.tag === tagVal);
+      if (tagVal === 'alive') {
+        filtered = filtered.filter(r => ((r.tag === 'New') || (r.tag === 'Active')));
+      } else {
+        filtered = filtered.filter(r => r.tag === tagVal);
+      }
     }
 
     // sort
