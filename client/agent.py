@@ -11,7 +11,8 @@ import re
 import json
 from datetime import datetime
 import time
-import urllib
+import urllib.request
+import urllib.error
 
 #endregion###############
 # Configuration Options #
@@ -360,14 +361,14 @@ def interface_address_windows(interface,ip_address,subnet,gateway):
     output = run_powershell(query_cmd)
     if not output:
         #print_debug(f"interface_address_windows({interface}): Failed to query interface")
-        return False, False, [f"interface_address_windows({interface}) Failed to query interface."]
+        return False, False, [f"Failed to query interface {interface} due to PowerShell error."]
 
     # Parse JSON result
     try:
         data = json.loads(output)
     except json.JSONDecodeError as E:
         #print_debug(f"interface_address_windows({interface}): Error parsing PowerShell output")
-        return False, False, [f"interface_address_windows({interface}): Error parsing PowerShell output - {E}."]
+        return False, False, [f"Failed to query interface {interface} due to PowerShell JSON parsing error."]
 
     # Determine if address or gateway exist
     has_address = bool(data.get("IPv4Address"))
@@ -386,15 +387,15 @@ def interface_address_windows(interface,ip_address,subnet,gateway):
         """
         if DISARM:
             #print_debug(f"interface_address_windows({interface}): DISARMED, but told to set IP address: {ip_address}/{subnet}")
-            issues.append("Missing IPv4 Address, DISARMED.")
+            issues.append(f"Missing IPv4 Address for interface {interface}, DISARMED.")
             statusFix = False
         else:
             #print_debug(f"interface_address_windows({interface}): Setting IP address: {ip_address}/{subnet}")
             if not run_powershell(set_ip_cmd):
                 statusFix = False
-                issues.append(f"Missing IPv4 Address, FAILED to restore {ip_address}/{subnet}.")
+                issues.append(f"Missing IPv4 Address for interface {interface}, FAILED to restore {ip_address}/{subnet}.")
             else:
-                issues.append(f"Missing IPv4 Address, RESTORED {ip_address}/{subnet}.")
+                issues.append(f"Missing IPv4 Address for interface {interface}, RESTORED {ip_address}/{subnet}.")
 
     # Fix missing gateway
     if not has_gateway:
@@ -404,15 +405,15 @@ def interface_address_windows(interface,ip_address,subnet,gateway):
         )
         if DISARM:
             #print_debug(f"interface_address_windows({interface}): DISARMED, but told to set gateway address: {gateway}")
-            issues.append("Missing Gateway Address, DISARMED.")
+            issues.append(f"Missing Gateway Address for interface {interface}, DISARMED.")
             statusFix = False
         else:
             #print_debug(f"interface_address_windows({interface}): Setting gateway address: {gateway}")
             if not run_powershell(set_gw_cmd):
                 statusFix = False
-                issues.append(f"Missing Gateway Address, FAILED to restore {gateway}.")
+                issues.append(f"Missing Gateway Address for interface {interface}, FAILED to restore {gateway}.")
             else:
-                issues.append(f"Missing Gateway Address, RESTORED {gateway}.")
+                issues.append(f"Missing Gateway Address for interface {interface}, RESTORED {gateway}.")
 
     return False, statusFix, issues
 
@@ -447,11 +448,11 @@ def interface_mtu_windows(interface=interface_get_primary(),mtu_minimum=MTU_MIN,
 
     output = run_powershell(ps_get_mtu).strip()
     if not output:
-        return False, False, [f"interface_mtu_windows(): Failed to query MTU for interface '{interface}' due to powershell command failure."]
+        return False, False, [f"Failed to query MTU for interface '{interface}' due to PowerShell error."]
 
     if not output.isdigit():
         #print_debug(f"interface_mtu_windows(): Failed to query MTU for interface '{interface}'. Output: {output}")
-        return False, False, [f"interface_mtu_windows(): Failed to query MTU for interface '{interface}' due to invalid parsing. Output: {output}."]
+        return False, False, [f"Failed to query MTU for interface '{interface}' due to invalid PowerShell output parsing."]
 
     old_mtu = int(output)
 
@@ -531,12 +532,12 @@ def interface_ttl_windows():
         """
         if DISARM:
             #print_debug(f"interface_ttl_windows(): DISARMED, but bad TTL detected and told to delete!")
-            return False, False, [f"Bad TTL set, DISARMED."]
+            return False, False, [f"Bad system TTL set, DISARMED."]
         else:
             ps_result = run_powershell(delete_script).strip()
             if ps_result:
-                return False, True, [f"Bad TTL set, RESTORED default TTL."]
-            return False, False, [f"Bad TTL set, FAILED to restore default TTL."]
+                return False, True, [f"Bad system TTL set, RESTORED default TTL."]
+            return False, False, [f"Bad system TTL set, FAILED to restore default TTL."]
 
     # Reg key(s) do not exist so system is (presumably) using the default of 128 (good)
     return True, True, []
@@ -581,10 +582,13 @@ def interface_down_windows(interface=interface_get_primary()):
     """
 
     status = run_powershell(ps_check).strip()
+    
+    if not status:
+        return False, False, [f"Interface {interface}'s up/down status cannot be determined due to PowerShell error."]
 
     if status == "NotFound":
         #print_debug(f"interface_down_windows({interface}): Interface not found.")
-        return False, False, [f"Interface {interface} not found and its up/down state cannot be determined."]
+        return False, False, [f"Interface {interface}'s up/down status cannot be determined as it cannot be found."]
 
     if status == "Down":
         ps_enable = fr"""
@@ -794,7 +798,7 @@ def firewall_rules_audit_windows(port,direction="in",action="block"):
 
     if not output:
         #print_debug(f"firewall_rules_audit_windows({port},{direction},{action}): No matching firewall rules found")
-        return [f"firewall_rules_audit_windows({port},{direction},{action}): No matching firewall rules found due to powershell error."], dict()
+        return [f"Could not get firewall rule information due to PowerShell error."], dict()
 
     if output.strip() == "none found":
         return [], dict()
@@ -805,7 +809,7 @@ def firewall_rules_audit_windows(port,direction="in",action="block"):
     except json.JSONDecodeError:
         #print_debug("Could not decode PowerShell JSON output.")
         #print_debug("Output was:", output)
-        return [f"firewall_rules_audit_windows({port},{direction},{action}): No matching firewall rules found due to powershell json error. Output: {output}."], dict()
+        return [f"Could not get firewall rule information due to PowerShell JSON error."], dict()
 
     # Handle the case where PowerShell returns a single object instead of a list
     if isinstance(rules, dict):
@@ -846,15 +850,15 @@ def firewall_rules_delete_windows(rules,port):
             output = run_powershell(delete_cmd)
             if output:
                 #print_debug(f"firewall_rules_delete_windows(): Removed rule: {rule['Name']} ({rule['DisplayName']})")
-                issues.append(f"SUCCESSFULLY Removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.")
+                issues.append(f"SUCCESSFULLY removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.")
             else:
                 #print_debug(f"firewall_rules_delete_windows(): FAILED to remove rule: {rule['Name']} ({rule['DisplayName']})")
-                issues.append(f"FAILED to Removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.")
+                issues.append(f"FAILED to remove firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.")
                 status = False
         else:
             status = False
             #print_debug(f"firewall_rules_delete_windows(): DISARMED, but told to remove rule: {rule['Name']} ({rule['DisplayName']})")
-            issues.append(f"DISARMED, but told to Removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.")
+            issues.append(f"DISARMED, but told to remove firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.")
 
     #print_debug("firewall_rules_delete_windows(): All provided rules deleted.")
     return status, issues
@@ -935,13 +939,13 @@ def firewall_policy_audit_windows(direction):
 
     if not output:
         #print_debug("No firewall profile data returned.")
-        return False, False, [f"firewall_policy_audit_windows(): failed to load firewall policy information due to powershell error."]
+        return False, False, [f"Failed to load firewall policy information due to PowerShell error."]
 
     try:
         profiles = json.loads(output)
     except json.JSONDecodeError:
         #print_debug("firewall_policy_audit_windows(): Could not decode PowerShell JSON output.")
-        return False, False, [f"firewall_policy_audit_windows(): failed to load firewall policy information due to could not decode PowerShell JSON output."]
+        return False, False, [f"Failed to load firewall policy information due to could not decode PowerShell JSON output."]
 
     # Normalize single-object case
     if isinstance(profiles, dict):
@@ -1001,22 +1005,20 @@ def firewall_main(protectedPorts):
         if funcStatus:
             if not policyStatus:
                 for port in protectedPorts:
-                    if not firewall_rules_audit(port,"in","allow"):
-                        result_status, result_issues = firewall_rules_create(port,"inbound","allow")
+                    dirShort = ""
+                    if direction == "Inbound":
+                        dirShort = "in"
+                    else:
+                        dirShort = "out"
+                    if not firewall_rules_audit(port,dirShort,"allow"):
+                        result_status, result_issues = firewall_rules_create(port,direction.lower(),"allow")
                         if not result_status:
                             newStatus = False
                         oldStatus = False
-                        issues.append(f"Default policy is deny_all and no specific inbound allow rule for port {port} exists.")
+                        msgMain = [f"Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists."]
                         for issue in result_issues:
-                            issues.append(issue)
-                    if not firewall_rules_audit(port,"out","allow"):
-                        result_status, result_issues = firewall_rules_create(port,"outbound","allow")
-                        if not result_status:
-                            newStatus = False
-                        oldStatus = False
-                        issues.append(f"Default policy is deny_all and no specific outbound allow rule for port {port} exists.")
-                        for issue in result_issues:
-                            issues.append(issue)
+                            msgMain.append(issue)
+                        issues.append(" ".join(msgMain))
         else:
             for issue in result_issues:
                 issues.append(issue)
@@ -1076,7 +1078,7 @@ def service_audit_windows(service_name):
 
     raw = run_powershell(ps_check).strip()
     if not raw:
-        return False, False, [f"service_audit_windows({service_name}): powershell command failed."]
+        return False, False, [f"FAILED to get status information for service {service_name}, PowerShell error."]
 
     # Case: Service not found
     if raw == "NotFound" or raw == "":
@@ -1086,7 +1088,7 @@ def service_audit_windows(service_name):
     try:
         data = json.loads(raw)
     except:
-        return False, False, [f"ParseError for service {service_name}."]
+        return False, False, [f"FAILED to get status information for service {service_name}, PowerShell JSON parse error."]
 
     current_status  = data.get("Status", "")
     current_start   = data.get("StartType", "")
@@ -1183,7 +1185,7 @@ def service_uninstall_windows(service,package):
         feature_raw = run_powershell(feature_cmd)
 
         if not feature_raw:
-            return False, False, [f"service_uninstall_windows(): powershell error when getting package install info for package {package}."]
+            return False, False, [f"FAILED to get install status for required package {package} for service {service} due to PowerShell error."]
 
         try:
             feature = json.loads(feature_raw)
@@ -1203,7 +1205,7 @@ def service_uninstall_windows(service,package):
                     f"Enable-WindowsOptionalFeature -Online -FeatureName {package} -All -NoRestart"
                 )
                 if run_powershell(enable_cmd):
-                    issues.append(f"Missing required package {package} for service {service}, FAILED to reinstall package due to powershell error.")
+                    issues.append(f"Missing required package {package} for service {service}, FAILED to reinstall package due to PowerShell error.")
 
                 # re-check state
                 feature_raw = run_powershell(feature_cmd)
@@ -1228,7 +1230,7 @@ def service_uninstall_windows(service,package):
         svc_raw = run_powershell(svc_cmd)
 
         if not svc_raw:
-            issues.append(f"Missing service {service}, FAILED to restore due to powershell get error and remediation not being implemented.")
+            issues.append(f"Missing service {service}, FAILED to restore due to PowerShell get error and remediation not being implemented.")
             old_status = False
             new_status = False
             return old_status, new_status, issues
@@ -1239,7 +1241,7 @@ def service_uninstall_windows(service,package):
             svc = None
 
         if not svc:
-            issues.append(f"Missing service {service}, FAILED to restore due to powershell get  json parse error and remediation not being implemented.")
+            issues.append(f"Missing service {service}, FAILED to restore due to PowerShell get json parse error and remediation not being implemented.")
             new_status = False
             return old_status, new_status, issues
 
@@ -1483,7 +1485,10 @@ def main():
         if not result_newStatus:
             newStatus = False
         for issue in result_issues:
-            issues.append(issue)
+            issues.append(f"Firewall Issue - {issue}")
+
+            print_debug(issues[-1])
+            send_message(result_oldStatus,result_newStatus,issues[-1])
 
         # Interface
         print_debug(f"main(): running interface checks")
@@ -1493,7 +1498,10 @@ def main():
         if not result_newStatus:
             newStatus = False
         for issue in result_issues:
-            issues.append(issue)
+            issues.append(f"Interface Issue - {issue}")
+
+            print_debug(issues[-1])
+            send_message(result_oldStatus,result_newStatus,issues[-1])
 
         # Service
         print_debug(f"main(): running service checks")
@@ -1503,14 +1511,17 @@ def main():
         if not result_newStatus:
             newStatus = False
         for issue in result_issues:
-            issues.append(issue)
+            issues.append(f"Service Issue - {issue}")
+
+            print_debug(issues[-1])
+            send_message(result_oldStatus,result_newStatus,issues[-1])
 
         # Finish up
         print_debug(f"main(): oldStatus - {oldStatus}")
         print_debug(f"main(): newStatus - {newStatus}")
-        for issue in issues:
-            print_debug(f"main(): issue - {issue}")
-            send_message(oldStatus,newStatus,issue)
+        #for issue in issues:
+            #print_debug(f"main(): issue - {issue}")
+            #send_message(oldStatus,newStatus,issue)
         
         print_debug(f"main(): sleeping for {sleeptime} seconds")
         print_debug(f"")
