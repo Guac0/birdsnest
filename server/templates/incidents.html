@@ -1,0 +1,650 @@
+<!--
+incidents_dashboard.html
+Incidents Dashboard UI for Stabvest Agent incidents
+
+How to use:
+1. Place this file on the same origin as your Flask backend (recommended) so fetch() to /list_incidents and /update_incident_tag works without CORS issues.
+2. If you must serve it separately, enable CORS on your Flask server or proxy requests.
+3. The page will try to POST {} to /list_incidents to fetch incidents.
+   To update tags it will POST { incident_id, tag } to /update_incident_tag.
+4. The server responses expected:
+   - /list_incidents returns a JSON mapping of incident_id -> incident object,
+     e.g. {"1": { "agent_id": 5, "message": "Cannot read firewall powershell", "newStatus": true, "oldStatus": true, "tag": "Closed", "timestamp": 1764542841.9764404 }, ... }
+   - /update_incident_tag returns 200 OK with body "ok" or appropriate error codes.
+
+Design notes & assumptions:
+- Incident "type" is inferred client-side from message and statuses:
+  * If message contains "Cannot read" -> "No Logs"
+  * If newStatus !== oldStatus -> "Successful remediation"
+  * If newStatus === oldStatus -> "Failed remediation"
+  These mappings are intentionally local so you can change heuristics without touching the server.
+- Tag values accepted by server: "New", "Active", "Closed".
+- The UI supports search, type filters, tag filters, sorting, and optimistic updates.
+- The code is modular: `api`, `ui`, and `utils` sections so future functions can be dropped in easily.
+
+Security & production notes:
+- /update_incident_tag may require operator/admin privileges (per server). The UI will still attempt the POST and surface errors.
+- If you need CSRF/auth tokens, extend `api.getHeaders()` to include them.
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Stabvest — Incidents Dashboard</title>
+
+<!-- Minimal, modern styling (no external frameworks so this is drop-in) -->
+<style>
+  :root{
+    --bg:#0f1724;
+    --card:#0b1320;
+    --muted:#9aa6b2;
+    --accent:#60a5fa;
+    --success:#16a34a;
+    --danger:#ef4444;
+    --warning:#f59e0b;
+    --glass: rgba(255,255,255,0.03);
+    --radius:12px;
+    --max-width:1200px;
+    --card-gap:18px;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color-scheme: dark;
+  }
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#061026 0%, #071426 100%);color:#dbe7f0;}
+  .container{max-width:var(--max-width);margin:28px auto;padding:20px;}
+  header{display:flex;gap:16px;align-items:center;margin-bottom:18px;}
+  h1{margin:0;font-size:22px;letter-spacing:0.2px;}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px;}
+  /* controls */
+  .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:14px 0 20px 0;}
+  .control, input[type="search"], select, button {
+    background:var(--card);
+    border:1px solid rgba(255,255,255,0.03);
+    padding:8px 12px;
+    border-radius:10px;
+    color:inherit;
+    outline:none;
+    font-size:13px;
+  }
+  input[type="search"]{min-width:250px}
+  .chip{padding:6px 10px;border-radius:999px;font-weight:600;background:var(--glass);border:1px solid rgba(255,255,255,0.03);cursor:pointer}
+  .chip.active{box-shadow:0 6px 18px rgba(0,0,0,0.6);transform:translateY(-1px);}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--card-gap);}
+  .card{
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    padding:14px;border-radius:var(--radius);box-shadow:0 6px 20px rgba(2,6,23,0.75);border:1px solid rgba(255,255,255,0.02);
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .meta{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted)}
+  .message{font-weight:600;font-size:15px}
+  .small{font-size:13px;color:var(--muted)}
+  .badge{display:inline-flex;gap:8px;align-items:center;padding:6px 8px;border-radius:999px;font-weight:700;font-size:12px}
+  .badge.tag-New{background:rgba(96,165,250,0.14);color:var(--accent);border:1px solid rgba(96,165,250,0.08)}
+  .badge.tag-Active{background:rgba(245,158,11,0.12);color:var(--warning);border:1px solid rgba(245,158,11,0.08)}
+  .badge.tag-Closed{background:rgba(16,163,127,0.08);color:var(--success);border:1px solid rgba(16,163,127,0.06)}
+  .type-NoLogs{color:var(--warning);font-weight:700}
+  .type-Failed{color:var(--danger);font-weight:700}
+  .type-Success{color:var(--success);font-weight:700}
+  .actions{display:flex;gap:8px;margin-top:6px}
+  .btn{padding:8px 10px;border-radius:8px;border:none;cursor:pointer;font-weight:700}
+  .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.03)}
+  .btn.claim{background:linear-gradient(90deg,#f97316,#ef4444);color:white}
+  .btn.resolve{background:linear-gradient(90deg,#10b981,#059669);color:white}
+  .btn.reopen{background:linear-gradient(90deg,#60a5fa,#3b82f6);color:white;}
+  .footer{margin-top:18px;color:var(--muted);font-size:13px}
+  .topbar-stats{display:flex;gap:12px;align-items:center}
+  .stat{background:var(--card);padding:8px;border-radius:10px;font-size:13px;color:var(--muted)}
+  .toast{position:fixed;right:20px;bottom:20px;background:#061426;padding:12px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.03)}
+  .muted-note{color:var(--muted);font-size:13px}
+  /* responsive tweaks */
+  @media (max-width:700px){ .controls{flex-direction:column;align-items:stretch} header{flex-direction:column;align-items:flex-start} .topbar-stats{flex-wrap:wrap} }
+</style>
+</head>
+<body>
+  <div class="container" id="app">
+    <header>
+      <div>
+        <h1>Stabvest — Incidents Dashboard</h1>
+        <div class="sub">Click <strong>Claim</strong> to tag an incident as <em>Active</em>, <strong>Resolve</strong> to tag as <em>Closed</em>, or <strong>Reopen</strong> to mark as <em>New</em>. You must have <code>Administrator</code> permissions to do this.</div>
+      </div>
+      <div style="flex:1"></div>
+      <div class="topbar-stats" aria-hidden>
+        <div class="stat" id="stat-total">Total: —</div>
+        <div class="stat" id="stat-active">Active: —</div>
+        <div class="stat" id="stat-new">New: —</div>
+        <div class="stat" id="stat-closed">Closed: —</div>
+      </div>
+    </header>
+
+    <!-- Controls: search, filters, sort, refresh -->
+    <div class="controls" role="toolbar" aria-label="dashboard controls">
+      <input type="search" id="search" placeholder="Search message, agent ID, host..." aria-label="Search incidents">
+
+      <select id="tagFilter" aria-label="Filter by tag">
+        <option value="any">Any tag</option>
+        <option value="New">New</option>
+        <option value="Active">Active</option>
+        <option value="Closed">Closed</option>
+      </select>
+
+      <select id="statusFilter" aria-label="Filter by incident status">
+        <option value="all">Any status</option>
+        <option value="Success">Successful auto remediation</option>
+        <option value="Failed">Failed auto remediation</option>
+      </select>
+
+      <select id="typeFilter" aria-label="Filter by incident type">
+        <option value="all">Any type</option>
+        <option value="firewall">Firewall</option>
+        <option value="interface">Interface</option>
+        <option value="service">Service</option>
+        <option value="custom">Custom Service</option>
+        <option value="agent">Agent Alerts</option>
+      </select>
+
+      <select id="sortSelect" aria-label="Sort incidents">
+        <option value="date_desc">Newest first</option>
+        <option value="date_asc">Oldest first</option>
+        <option value="agent_asc">Agent ↑</option>
+        <option value="agent_desc">Agent ↓</option>
+      </select>
+
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button id="refreshBtn" class="chip" title="Refresh incidents">Refresh ⟳</button>
+        <label class="chip" title="Auto-refresh (20s)">
+          <input id="autoRefresh" type="checkbox" style="margin-right:8px" checked>Auto
+        </label>
+      </div>
+    </div>
+
+    <!-- Grid -->
+    <main>
+      <div id="grid" class="grid" aria-live="polite" aria-busy="false"></div>
+      <div id="emptyState" class="muted-note" style="display:none;margin-top:20px">No incidents match your filters.</div>
+    </main>
+
+    <!-- Old 
+    <div class="footer">
+      <div>Tip: Click <strong>Claim</strong> to tag an incident as <em>Active</em>, <strong>Resolve</strong> to tag as <em>Closed</em>, or <strong>Reopen</strong> to mark as <em>New</em>. You must have <code>Administrator</code> permissions to do this.</div>
+    </div>
+    -->
+  </div>
+
+  <!-- Toast area -->
+  <div id="toast" class="toast" style="display:none"></div>
+
+<script>
+/* ------------------------------
+   utils: small utility helpers
+   ------------------------------ */
+const utils = (function(){
+  /**
+   * Format UNIX-like timestamp (float seconds) into readable local string.
+   * If timestamp looks like JS ms (>=1e12), adjust accordingly.
+   */
+  function formatTimestamp(ts){
+    if (!ts) return '—';
+    let t = Number(ts);
+    // support both seconds and milliseconds
+    if (t > 1e12) t = Math.floor(t/1000);
+    // if the provided value looks like epoch seconds with decimals (as in server example)
+    const date = new Date(Math.floor(t*1000));
+    return date.toLocaleString();
+  }
+
+  /**
+   * Infer incident type from message and status booleans.
+   * This logic is intentionally client-side and adjustable.
+   * Returns one of: 'NoLogs', 'Success', 'Failed'
+   */
+  function inferStatus(incident){
+    const msg = (incident.message||'').toLowerCase();
+    if (msg.includes('cannot read') || msg.includes('no logs')) return 'NoLogs';
+    // If status changed between old and new -> remediation effected (success)
+    if (typeof incident.newStatus !== 'undefined' && typeof incident.oldStatus !== 'undefined' && (incident.newStatus !== incident.oldStatus)) return 'Success';
+    // Otherwise treat as Failed remediation/unchanged
+    return 'Failed';
+  }
+
+  /**
+   * Infer incident type from first characters before the hyphen
+   */
+  function inferType(incident){
+    let msg = (incident.message||'').toLowerCase();
+    const indexOfHyphen = msg.indexOf('-');
+
+    if (indexOfHyphen !== -1) {
+        msg = msg.substring(0, indexOfHyphen);
+    } else {
+        // If no hyphen is found, the entire string is returned
+        msg = msg; 
+    }
+    //if (msg.includes('cannot read') || msg.includes('no logs')) return 'NoLogs';
+    if (msg.trim() === 'firewall issue') return 'firewall';
+    if (msg.trim() === 'interface issue') return 'interface';
+    if (msg.trim() === 'service issue') return 'service';
+    if (msg.trim() === 'custom issue') return 'custom';
+    if (msg.trim() === 'agent issue') return 'agent';
+
+    // Otherwise treat as unknown
+    return 'unknown';
+  }
+
+  function safeText(s){ return String(s ?? ''); }
+
+  return { formatTimestamp, inferStatus, inferType, safeText };
+})();
+
+/* ------------------------------
+   api: server interactions
+   Keep all network logic here for easy substitution/mocking.
+   ------------------------------ */
+const api = (function(){
+  // base paths - adapt if your server sits under a prefix
+  const LIST_PATH = '/list_incidents';
+  const UPDATE_TAG_PATH = '/update_incident_tag';
+
+  function getHeaders(){
+    // Add auth header or CSRF token here if needed
+    return {'Content-Type':'application/json'};
+  }
+
+  /**
+   * Fetch incidents from server.
+   * Returns a Promise resolving to an object mapping id -> incident.
+   * If server is unreachable, resolves to null so caller can use fallback/mock data.
+   */
+  async function listIncidents(){
+    try {
+      const res = await fetch(LIST_PATH, { method:'POST', headers:getHeaders(), body: JSON.stringify({}) });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const json = await res.json();
+      return json;
+    } catch (err){
+      console.warn('listIncidents failed:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Update an incident tag on the server.
+   * Expects { incident_id, tag }.
+   * Returns { ok: boolean, message: string }
+   */
+  async function updateIncidentTag(incident_id, tag){
+    try {
+      const res = await fetch(UPDATE_TAG_PATH, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ incident_id: String(incident_id), tag })
+      });
+      if (res.ok) {
+        // server may return text; treat 200 as success
+        return { ok:true, message: await res.text() };
+      } else {
+        const txt = await res.text().catch(()=>res.statusText);
+        return { ok:false, message: txt || `HTTP ${res.status}` };
+      }
+    } catch (err) {
+      return { ok:false, message: err.message || String(err) };
+    }
+  }
+
+  return { listIncidents, updateIncidentTag };
+})();
+
+/* ------------------------------
+   ui: DOM rendering and interactions
+   ------------------------------ */
+const ui = (function(){
+  const grid = document.getElementById('grid');
+  const toastEl = document.getElementById('toast');
+  const emptyState = document.getElementById('emptyState');
+
+  // controls
+  const searchInput = document.getElementById('search');
+  const statusFilter = document.getElementById('statusFilter');
+  const typeFilter = document.getElementById('typeFilter');
+  const tagFilter = document.getElementById('tagFilter');
+  const sortSelect = document.getElementById('sortSelect');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const autoRefresh = document.getElementById('autoRefresh');
+
+  // stats
+  const statTotal = document.getElementById('stat-total');
+  const statActive = document.getElementById('stat-active');
+  const statNew = document.getElementById('stat-new');
+  const statClosed = document.getElementById('stat-closed');
+
+  // in-memory incidents (keyed by id as string)
+  let incidents = {};
+  let refreshTimer = null;
+  const AUTO_INTERVAL_MS = 20_000; // 20s auto refresh (adjustable)
+
+  // -- helpers --
+  function showToast(msg, ms=3500){
+    toastEl.textContent = msg;
+    toastEl.style.display = 'block';
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(()=> toastEl.style.display='none', ms);
+  }
+
+  function setBusy(isBusy){
+    grid.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+  }
+
+  function updateStats(){
+    const vals = Object.entries(incidents).map(([id, inc]) => ({ id, ...inc }));
+    statTotal.textContent = `Total: ${vals.length}`;
+    statActive.textContent = `Active: ${vals.filter(i=>i.tag==='Active').length}`;
+    statNew.textContent = `New: ${vals.filter(i=>i.tag==='New').length}`;
+    statClosed.textContent = `Closed: ${vals.filter(i=>i.tag==='Closed').length}`;
+  }
+
+  // Creates a DOM node for a single incident card
+  function makeIncidentCard(id, inc){
+    const wrapper = document.createElement('article');
+    wrapper.className = 'card';
+    wrapper.setAttribute('data-id', id);
+    wrapper.setAttribute('role','article');
+    wrapper.setAttribute('aria-labelledby', `msg-${id}`);
+
+    // color
+    const incidentType = utils.inferType(inc);
+
+    const colors = {
+        firewall:  "#6e0700",  // red
+        interface: "#01520e",  // green
+        service:   "#012d66",  // blue
+        custom:    "#5e4902",  // yellow
+        agent:     "#34005e",  // purple
+        unknown:   "#5e5e5e"   // gray
+    };
+    if (incidentType !== "unknown") {
+        wrapper.style.backgroundColor = colors[incidentType];
+    }
+    //wrapper.style.backgroundColor = colors[incidentType] || colors.unknown;
+
+    // header meta row
+    const metaRow = document.createElement('div');
+    metaRow.className = 'meta';
+    metaRow.innerHTML = `
+      <div class="small">Incident <strong>${utils.safeText(id)}</strong> • ${utils.formatTimestamp(inc.timestamp)}</div>
+      <div><span class="badge tag-${inc.tag}" title="Incident tag">${inc.tag}</span></div>
+    `;
+    wrapper.appendChild(metaRow);
+
+    // message
+    const msg = document.createElement('div');
+    msg.className = 'message';
+    msg.id = `msg-${id}`;
+    msg.textContent = inc.message || '—';
+    wrapper.appendChild(msg);
+
+    // type line
+    const type = utils.inferStatus(inc);
+    const typeLine = document.createElement('div');
+    typeLine.className = 'small';
+    typeLine.innerHTML = `<span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Successful auto remediation' : 'Failed auto remediation'}</span> • Agent: <strong>${utils.safeText(inc.agent_id || 'unknown')}</strong>`;
+    wrapper.appendChild(typeLine);
+
+    // actions
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    // buttons: Claim (Active), Resolve (Closed), Reopen (New)
+    const btnClaim = document.createElement('button');
+    btnClaim.className = 'btn claim';
+    btnClaim.textContent = 'Claim';
+    btnClaim.title = 'Mark Active (claim)';
+
+    const btnResolve = document.createElement('button');
+    btnResolve.className = 'btn resolve';
+    btnResolve.textContent = 'Resolve';
+    btnResolve.title = 'Mark Closed (resolve)';
+
+    const btnReopen = document.createElement('button');
+    btnReopen.className = 'btn reopen';
+    btnReopen.textContent = 'Reopen';
+    btnReopen.title = 'Mark New (reopen)';
+
+    // Secondary details button - placeholder for future expansion
+    const btnDetails = document.createElement('button');
+    btnDetails.className = 'btn secondary';
+    btnDetails.textContent = 'Details';
+    btnDetails.title = 'View details (expand)';
+
+    // wire up button actions with optimistic UI update
+    btnClaim.addEventListener('click', () => handleTagChange(id, 'Active', wrapper, inc));
+    btnResolve.addEventListener('click', () => handleTagChange(id, 'Closed', wrapper, inc));
+    btnReopen.addEventListener('click', () => handleTagChange(id, 'New', wrapper, inc));
+    btnDetails.addEventListener('click', () => showDetailsModal(id, inc));
+
+    // disable a button if already in that state (visual affordance)
+    function refreshButtonStates(){
+      btnClaim.disabled = (inc.tag === 'Active');
+      btnResolve.disabled = (inc.tag === 'Closed');
+      btnReopen.disabled = (inc.tag === 'New');
+      // small opacity change for disabled look
+      [btnClaim, btnResolve, btnReopen].forEach(b => b.style.opacity = b.disabled ? '0.6' : '1');
+    }
+    refreshButtonStates();
+
+    actions.append(btnClaim, btnResolve, btnReopen, btnDetails);
+    wrapper.appendChild(actions);
+
+    // attach a method to update the card if the underlying inc changes
+    wrapper.update = function(newInc){
+      // update local inc
+      inc = newInc;
+      // update badge
+      const badge = wrapper.querySelector('.badge');
+      badge.textContent = inc.tag;
+      badge.className = `badge tag-${inc.tag}`;
+      // update type
+      const newType = utils.inferStatus(inc);
+      typeLine.innerHTML = `<span class="type-${newType === 'Success' ? 'Success' : 'Failed'}">${newType === 'Success' ? 'Successful remediation' : 'Failed remediation'}</span> • Host: <strong>${utils.safeText(inc.agent_id || 'unknown')}</strong>`;
+      msg.textContent = inc.message || '—';
+      // refresh button disabled states
+      refreshButtonStates();
+    };
+
+    return wrapper;
+  }
+
+  // Show more details - placeholder modal implementation (simple)
+  function showDetailsModal(id, inc){
+    // showToast(`Details for incident ${id}: Agent ${inc.agent_id} — ${inc.message}`, 4500);
+    let fullDetails = "";
+    Object.entries(inc).forEach(([key, value]) => {
+        fullDetails += `${key}: ${value}, `;
+    });
+    showToast(`Details for incident ${id}:   ${fullDetails}`, 20000);
+    // In a future iteration we can show a proper modal with raw JSON and remediation history.
+  }
+
+  // Handle tag change with optimistic UI: update client immediately, then call server.
+  async function handleTagChange(id, newTag, cardEl, inc){
+    const oldTag = inc.tag;
+    // optimistic change in-memory and card UI
+    inc.tag = newTag;
+    incidents[id] = inc;
+    updateStats();
+    cardEl.update(inc);
+
+    // attempt server call
+    const res = await api.updateIncidentTag(id, newTag);
+    if (!res.ok){
+      // revert
+      inc.tag = oldTag;
+      incidents[id] = inc;
+      cardEl.update(inc);
+      updateStats();
+      showToast(`Failed to update incident: ${res.message}`, 6000);
+    } else {
+      showToast(`Incident ${id} tagged ${newTag}`);
+      // Optionally remove closed incidents from view (spec: "completed removes them from dashboard")
+      // We'll keep them but filter them visually; if you prefer auto-removal, uncomment the next line:
+      // if (newTag === 'Closed') delete incidents[id], render();
+    }
+  }
+
+  // Render grid from current incidents + filters + sorts
+  function render(){
+    setBusy(true);
+    grid.innerHTML = '';
+    const rows = Object.entries(incidents).map(([id, inc]) => ({ id, ...inc }));
+
+    // apply search
+    const q = (searchInput.value || '').trim().toLowerCase();
+    let filtered = rows.filter(r => {
+      if (q){
+        return (String(r.agent_id || '').toLowerCase().includes(q))
+          || (String(r.message || '').toLowerCase().includes(q))
+          || (String(r.host || '').toLowerCase().includes(q))
+          || (String(r.tag || '').toLowerCase().includes(q));
+      }
+      return true;
+    });
+
+    // filter by status
+    const statusVal = statusFilter.value;
+    if (statusVal !== 'all'){
+      filtered = filtered.filter(r => utils.inferStatus(r) === statusVal);
+    }
+
+    // filter by type (inferred)
+    const typeVal = typeFilter.value;
+    if (typeVal !== 'all'){
+      filtered = filtered.filter(r => utils.inferType(r) === typeVal);
+    }
+
+    // filter by tag
+    const tagVal = tagFilter.value;
+    if (tagVal !== 'any'){
+      filtered = filtered.filter(r => r.tag === tagVal);
+    }
+
+    // sort
+    const sort = sortSelect.value;
+    filtered.sort((a,b) => {
+      if (sort === 'date_desc') return (b.timestamp || 0) - (a.timestamp || 0);
+      if (sort === 'date_asc') return (a.timestamp || 0) - (b.timestamp || 0);
+      if (sort === 'agent_asc') return String(a.agent_id).localeCompare(String(b.agent_id));
+      if (sort === 'agent_desc') return String(b.agent_id).localeCompare(String(a.agent_id));
+      return 0;
+    });
+
+    // If there are no results show empty state
+    if (filtered.length === 0){
+      emptyState.style.display = 'block';
+    } else {
+      emptyState.style.display = 'none';
+    }
+
+    // render each card
+    for (const r of filtered){
+      const card = makeIncidentCard(r.id, r);
+      grid.appendChild(card);
+    }
+
+    updateStats();
+    setBusy(false);
+  }
+
+  // load incidents (calls API and falls back to sample data if needed)
+  async function loadIncidents(){
+    setBusy(true);
+    const data = await api.listIncidents();
+    if (!data){
+      // fallback/mock data (from your example). Keep identical data shape the server uses.
+      /*console.warn('Using mock incidents fallback; configure CORS / start server for live data.');
+      const mock = {
+        "1":{"agent_id":5,"message":"Cannot read firewall powershell","newStatus":true,"oldStatus":true,"tag":"Closed","timestamp":1764542841.9764404},
+        "2":{"agent_id":3,"message":"Service stopped","newStatus":false,"oldStatus":false,"tag":"Closed","timestamp":1764542671.462257},
+        "3":{"agent_id":2,"message":"Malicious firewall rule added","newStatus":true,"oldStatus":false,"tag":"Active","timestamp":1764542398.2008908},
+        "4":{"agent_id":2,"message":"Malicious firewall rule added","newStatus":true,"oldStatus":true,"tag":"New","timestamp":1764542609.2806077},
+        "5":{"agent_id":4,"message":"Service stopped","newStatus":false,"oldStatus":true,"tag":"Active","timestamp":1764542752.1379178},
+        "6":{"agent_id":1,"message":"Service stopped","newStatus":true,"oldStatus":false,"tag":"Closed","timestamp":1764543286.1802673},
+        "7":{"agent_id":5,"message":"Service stopped","newStatus":true,"oldStatus":false,"tag":"Active","timestamp":1764542344.4441807},
+        "8":{"agent_id":1,"message":"Cannot read firewall powershell","newStatus":true,"oldStatus":true,"tag":"Active","timestamp":1764542290.0252995},
+        "9":{"agent_id":2,"message":"Cannot read firewall powershell","newStatus":false,"oldStatus":false,"tag":"New","timestamp":1764542144.6028805}
+      };
+      incidents = mock;
+      */
+      //incidents = {};
+      showToast('Cannot read incidents from server, current list may be out of date!',600000);
+    } else {
+      // server returned data successfully
+      incidents = data;
+      showToast('Incidents refreshed.');
+    }
+
+    // ensure every incident has 'host' key for display (server may add it in future)
+    //for (const [id, inc] of Object.entries(incidents)){
+    //  if (!inc.host) inc.host = inc.host || `host-${inc.agent_id || 'unknown'}`; // placeholder
+    //}
+
+    render();
+  }
+
+  // wire control listeners
+  function setupControls(){
+    const triggerRender = () => render();
+
+    searchInput.addEventListener('input', debounce(triggerRender, 180));
+    statusFilter.addEventListener('change', triggerRender);
+    typeFilter.addEventListener('change', triggerRender);
+    tagFilter.addEventListener('change', triggerRender);
+    sortSelect.addEventListener('change', triggerRender);
+
+    refreshBtn.addEventListener('click', () => {
+      showToast('Refreshing incidents...');
+      loadIncidents();
+    });
+
+    autoRefresh.addEventListener('change', (e) => {
+      if (e.target.checked){
+        refreshTimer = setInterval(() => loadIncidents(), AUTO_INTERVAL_MS);
+        showToast('Auto-refresh enabled');
+      } else {
+        clearInterval(refreshTimer);
+        refreshTimer = null;
+        showToast('Auto-refresh disabled');
+      }
+    });
+
+    autoRefresh.dispatchEvent(new Event('change'));
+  }
+
+  // small debounce utility for UI responsiveness
+  function debounce(fn, wait=200){
+    let t = null;
+    return function(...args){
+      clearTimeout(t);
+      t = setTimeout(()=>fn.apply(this,args), wait);
+    };
+  }
+
+  // initialize UI
+  async function init(){
+    setupControls();
+    await loadIncidents();
+  }
+
+  return { init, render, loadIncidents, showToast };
+})();
+
+/* ------------------------------
+   Boot
+   ------------------------------ */
+document.addEventListener('DOMContentLoaded', () => {
+  ui.init().catch(err => {
+    console.error('Failed to init UI', err);
+    alert('Dashboard failed to initialize. See console for details.');
+  });
+});
+</script>
+</body>
+</html>

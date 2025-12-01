@@ -175,6 +175,56 @@ def load_user(id):
         return User(id, user['role'])
     return None
 
+# === TEST DATA ===
+def get_random_time_offset_epoch(minutes_offset=30, direction="either"):
+    """
+    Returns a random timestamp in seconds since the epoch,
+    within a specified minute offset from the current time.
+
+    Args:
+        minutes_offset (int): The maximum number of minutes for the offset.
+        direction (str): "past", "future", or "either".
+
+    Returns:
+        float: A random timestamp in seconds since the epoch.
+    """
+    current_epoch_time = time.time()
+    seconds_offset = minutes_offset * 60
+
+    if direction == "past":
+        random_offset = -random.uniform(0, seconds_offset)
+    elif direction == "future":
+        random_offset = random.uniform(0, seconds_offset)
+    elif direction == "either":
+        random_offset = random.uniform(-seconds_offset, seconds_offset)
+    else:
+        raise ValueError("direction must be 'past', 'future', or 'either'")
+
+    return current_epoch_time + random_offset
+
+def add_test_data_incidents(num=11):
+    for i in range(1,num):
+        incidents[i] = {
+            "timestamp": time.time() - ((num - i) * 100),
+            "agent_id":f"agent_{random.randint(1,5)}",
+            "tag": random.choice(["New","Active","Closed"]),
+            "oldStatus": random.choice([False,True]),
+            "newStatus": random.choice([False,True]),
+            "message": random.choice([
+                "Service Issue - Missing required package {package} for service {service}, DISARMED.",
+                "Service Issue - Service {service_name} not running, RESTORED service to START state.",
+                "Service Issue - Service {service_name} not set to automatic start, FAILED to set to automatic start.",
+                "Firewall Issue - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. SUCCESSFULLY created firewall rule Stabvest_Rule_{port}_{direction}_{action}",
+                "Firewall Issue - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. DISARMED, but told to create firewall rule Stabvest_Rule_{port}_{direction}_{action}",
+                "Firewall Issue - SUCCESSFULLY removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.",
+                "Firewall Issue - Could not get firewall rule information due to PowerShell error.",
+                "Interface Issue - Interface {interface} was set to DOWN, RESTORED UP state.",
+                "Interface Issue - Bad system TTL set, DISARMED.",
+                "Interface Issue - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
+                "Interface Issue - Missing IPv4 Address for interface {interface}, FAILED to restore {ip_address}/{subnet}."
+            ])
+        }
+
 # =================================
 # ========= API ENDPOINTS =========
 # =================================
@@ -182,12 +232,21 @@ def load_user(id):
 # === BASIC WEBSITE FUNCTIONALITY ===
 
 @app.route("/")
+@app.route("/dashboard")
 @login_required
-def dashboard():
+def page_dashboard():
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /dashboard - Successful connection from {current_user.id} at {request.remote_addr}\n")
     return render_template("dashboard.html")
+
+@app.route("/incidents")
+@login_required
+def page_incidents():
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /dashboard - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    return render_template("incidents.html")
 
 @app.route('/favicon.ico')
 def favicon():
@@ -219,7 +278,7 @@ def login():
             session.permanent = True # Without session.permanent = True, Flask sets a session that expires when the browser closes - so not compatible with timeouts
             with open(LOGFILE, "a") as f:
                 f.write(f"[+] {timestamp} /login - Successful authentication for {username} from {request.remote_addr}\n")
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('page_dashboard'))
         else:
             flash('Invalid username or password', 'danger')
             with open(LOGFILE, "a") as f:
@@ -386,7 +445,7 @@ def list_messages():
 @app.route("/list_incidents", methods=["POST"])
 @login_required
 def list_incidents():
-    # TODO add filtering
+    # TODO add filtering for only active incidents
     
     data = request.json
     #auth = data.get("auth")
@@ -428,10 +487,10 @@ def add_user():
         f.write(f"[+] {timestamp} /add_user - Successful connection from {current_user.id} at {request.remote_addr}. Adding user {username}\n")
     return jsonify({"status": "ok"})
 
-@app.route("/update_tag", methods=["POST"])
+@app.route("/update_incident_tag", methods=["POST"])
 @login_required
 @admin_required
-def update_tag():
+def update_incident_tag():
     data = request.json
     incident_id = data.get("incident_id")
     tag = data.get("tag")
@@ -440,22 +499,29 @@ def update_tag():
     
     if not all([incident_id, tag]):
         with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /update_tag - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[incident_id, tag]}\n")
+            f.write(f"[-] {timestamp} /update_incident_tag - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[incident_id, tag]}\n")
         return "Missing data", 400
+    
+    try:
+        incident_id = int(incident_id)
+    except:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /update_incident_tag - Failed connection from {current_user.id} at {request.remote_addr} - Invalid incident ID {incident_id} (failed to parse to int). Full details: {[incident_id, tag]}\n")
+        return "Bad incident value", 400
     
     if tag not in ["New","Active","Closed"]:
         with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_tag - Successful connection from {current_user.id} at {request.remote_addr}. Invalid tag {tag}\n")
+            f.write(f"[+] {timestamp} /update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. Invalid tag {tag}\n")
         return "Bad tag value", 400
     
     if incident_id in incidents:
-        incidents[incident_id][tag] = tag
+        incidents[incident_id]["tag"] = tag
         with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_tag - Successful connection from {current_user.id} at {request.remote_addr}. Updating tag for incident {incident_id} to {tag}\n")
+            f.write(f"[+] {timestamp} /update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. Updating tag for incident {incident_id} to {tag}\n")
         return "ok", 200
     else:
         with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_tag - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}\n")
+            f.write(f"[+] {timestamp} /update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}\n")
         return "Invalid incident ID", 400
 
 # =================================
@@ -467,14 +533,14 @@ if __name__ == "__main__":
     with open(LOGFILE, "a") as f:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         f.write(f"[+] {timestamp} Starting server on {HOST}:{PORT}\n")
-    
-    # Test data
-    #add_test_data()
-    #add_test_data_comp(0)
-    #add_test_data_cmds()
 
     # Load previous state if available
     load_state()
+
+    # Test data
+    add_test_data_incidents()
+    #add_test_data_comp(0)
+    #add_test_data_cmds()
 
     # Save on exit setup - see signal_handler() and save_state()
         # Registering both signal and atexit may cause saves to happen twice, but oh well. Not like it's a ton of work anyways.
