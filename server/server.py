@@ -88,7 +88,7 @@ login_manager.login_view = 'login'  # redirect to login page if not authenticate
 # Note: all ids are created via joining the stated fields with "|" characters and base64ing the resulting string
 agents              = {}    # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int),lastStatus(bool),stale(bool)}
 messages            = {}    # message_id (timestamp,agent_id): {timestamp(int),agent_id(str),oldStatus(bool),newStatus(bool),message(str)}
-incidents           = {}    # incident_id (increments with each incident): {timestamp(int),agent_id(str),tag(str),oldStatus(bool),newStatus(bool),message(str)}. TAG can be "New", "Active", or "Closed". TODO: consider refactoring this using a reference to messages
+incidents           = {}    # incident_id (increments with each incident): {timestamp(int),agent_id(str),tag(str),oldStatus(bool),newStatus(bool),message(str),assignee(str)}. TAG can be "New", "Active", or "Closed". TODO: consider refactoring this using a reference to messages
 
 # =================================
 # ======= UTILITY FUNCTIONS =======
@@ -107,7 +107,7 @@ def hash_id(*args):
 def matches_pattern(value, pattern):
     return pattern is None or re.fullmatch(pattern, value) is not None
 
-def create_incident(messageDict,tag="New",createAlert=True):
+def create_incident(messageDict,tag="New",assignee="",createAlert=True):
     """
     Creates an incident and sends alerts
     """
@@ -120,7 +120,8 @@ def create_incident(messageDict,tag="New",createAlert=True):
         "oldStatus": messageDict["oldStatus"],
         "tag": tag,
         "newStatus": messageDict["newStatus"],
-        "message": messageDict["message"]
+        "message": messageDict["message"],
+        "assignee": assignee
     }
 
     if incident_id in incidents:
@@ -418,7 +419,7 @@ def add_test_data_incidents(num=10):
                 "Generic Issue - Test Test Test."
             ])
         }
-        create_incident(incident,random.choice(["New","Active","Closed"]),True)
+        create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),True)
 
 # =================================
 # ========= API ENDPOINTS =========
@@ -618,6 +619,29 @@ def list_users():
         f.write(f"[+] {timestamp} /list_users - Successful connection from {current_user.id} at {request.remote_addr}\n")
     
     return jsonify(webgui_users)
+
+@app.route("/list_users_simple", methods=["POST"])
+@login_required
+@analyst_required
+def list_users_simple():
+    data = request.json
+    #auth = data.get("auth")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    #if auth != OPERATOR_TOKEN:
+    #    with open(LOGFILE, "a") as f:
+    #        f.write(f"[-] {timestamp} /list_agents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
+    #    return "Unauthorized", 403
+    
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /list_users_simple - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    
+    users = []
+    for user in webgui_users:
+        users.append(user)
+
+    return users
 
 @app.route("/list_tokens", methods=["POST"])
 @login_required
@@ -903,6 +927,38 @@ def update_incident_tag():
     else:
         with open(LOGFILE, "a") as f:
             f.write(f"[+] {timestamp} /update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}\n")
+        return "Invalid incident ID", 400
+
+@app.route("/update_incident_assignee", methods=["POST"])
+@login_required
+@analyst_required
+def update_incident_assignee():
+    data = request.json
+    incident_id = data.get("incident_id")
+    assignee = data.get("assignee")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    if not all([incident_id, assignee]):
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /update_incident_assignee - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[incident_id, assignee]}\n")
+        return "Missing data", 400
+    
+    try:
+        incident_id = int(incident_id)
+    except:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /update_incident_assignee - Failed connection from {current_user.id} at {request.remote_addr} - Invalid incident ID {incident_id} (failed to parse to int). Full details: {[incident_id, assignee]}\n")
+        return "Bad incident value", 400
+    
+    if incident_id in incidents:
+        incidents[incident_id]["assignee"] = assignee
+        with open(LOGFILE, "a") as f:
+            f.write(f"[+] {timestamp} /update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. Updating assignee for incident {incident_id} to {assignee}\n")
+        return "ok", 200
+    else:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[+] {timestamp} /update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}\n")
         return "Invalid incident ID", 400
 
 # =================================

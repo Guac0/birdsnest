@@ -80,7 +80,7 @@ Security & production notes:
     outline:none;
     font-size:13px;
   }
-  input[type="search"]{min-width:250px}
+  input[type="search"]{min-width:260px}
   .chip{padding:6px 10px;border-radius:999px;font-weight:600;background:var(--glass);border:1px solid rgba(255,255,255,0.03);cursor:pointer}
   .chip.active{box-shadow:0 6px 18px rgba(0,0,0,0.6);transform:translateY(-1px);}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--card-gap);}
@@ -133,7 +133,7 @@ Security & production notes:
 
     <!-- Controls: search, filters, sort, refresh -->
     <div class="controls" role="toolbar" aria-label="dashboard controls">
-      <input type="search" id="search" placeholder="Search message, agent, incident #..." aria-label="Search incidents">
+      <input type="search" id="search" placeholder="Search msg, agent, assignee, inc #..." aria-label="Search incidents">
 
       <select id="tagFilter" aria-label="Filter by tag">
         <option value="alive">New or Active</option>
@@ -415,10 +415,11 @@ const ui = (function(){
 
     // header meta row
     const metaRow = document.createElement('div');
-    const type = utils.inferStatus(inc);
+    //const type = utils.inferStatus(inc);
     metaRow.className = 'meta';
+    // <div class="small">Incident <strong>${utils.safeText(id)}</strong> • ${utils.formatTimestamp(inc.timestamp)} • <span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Good autofix' : 'Failed autofix'}</span></div>
     metaRow.innerHTML = `
-      <div class="small">Incident <strong>${utils.safeText(id)}</strong> • ${utils.formatTimestamp(inc.timestamp)} • <span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Good autofix' : 'Failed autofix'}</span></div>
+      <div class="small">Incident <strong>${utils.safeText(id)}</strong> • ${utils.formatTimestamp(inc.timestamp)}</div>
       <div><span class="badge tag-${inc.tag}" title="Incident tag">${inc.tag}</span></div>
     `;
     wrapper.appendChild(metaRow);
@@ -444,6 +445,43 @@ const ui = (function(){
     }
     wrapper.appendChild(agentRow);
 
+    // Assignee row (editable)
+    const assigneeRow = document.createElement('div');
+    assigneeRow.className = 'small';
+    const type = utils.inferStatus(inc);
+    assigneeRow.innerHTML = `
+      <span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Good autofix' : 'Failed autofix'}</span> • 
+      <strong>Assignee:</strong> 
+      <input type="text" value="${utils.safeText(inc.assignee)}" style="background:var(--card);color:inherit;border:1px solid rgba(255,255,255,0.03);padding:2px 6px;border-radius:6px;width:120px">
+    `;
+    wrapper.appendChild(assigneeRow);
+
+    const assigneeInput = assigneeRow.querySelector('input');
+    assigneeInput.addEventListener('change', async () => {
+      const newAssignee = assigneeInput.value.trim();
+      const incident_id = id;
+      
+      try {
+        const res = await fetch('/update_incident_assignee', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({ incident_id, assignee: newAssignee })
+        });
+        
+        if (!res.ok) {
+          const txt = await res.text().catch(()=>res.statusText);
+          showToast(`Failed to update assignee: ${txt || 'Server error'}`, 6000);
+          // revert input to previous value
+          assigneeInput.value = utils.safeText(inc.assignee);
+        } else {
+          inc.assignee = newAssignee; // update in-memory
+          showToast(`Assignee updated to ${newAssignee}`, 3000);
+        }
+      } catch(err) {
+        showToast(`Failed to update assignee: ${err.message}`, 6000);
+        assigneeInput.value = utils.safeText(inc.assignee);
+      }
+    });
 
     // actions
     const actions = document.createElement('div');
@@ -569,7 +607,8 @@ const ui = (function(){
         return (String(r.agent_id || '').toLowerCase().includes(q))
           || (String(r.message || '').toLowerCase().includes(q))
           || (String(r.id || '').toLowerCase().includes(q))
-          || (String(r.tag || '').toLowerCase().includes(q));
+          || (String(r.tag || '').toLowerCase().includes(q))
+          || (String(r.assignee || '').toLowerCase().includes(q));
       }
       return true;
     });
