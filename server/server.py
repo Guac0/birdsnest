@@ -6,13 +6,14 @@ import time
 import re
 import os
 import random
-import requests
 import atexit, signal, sys
 import threading, time
 import json
 from collections import  deque
 import base64
 from urllib.parse import urlparse, unquote_plus
+import urllib.request
+import urllib.error
 
 # TODO synch
 
@@ -138,21 +139,21 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
     if not url:
         return
     
-    if (incident["message"].split('-')[0].strip().lower().split(' ')[0]  == "firewall"):
+    if (incident["message"].lower().split(' ')[0]  == "firewall"):
         color = "3b9102"
-    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0]  == "interface"):
+    elif (incident["message"].lower().split(' ')[0]  == "interface"):
         color = "01410b"
-    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0]  == "service"):
+    elif (incident["message"].lower().split(' ')[0]  == "service"):
         color = "b87700"
-    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0]  == "servicecustom"):
+    elif (incident["message"].lower().split(' ')[0]  == "servicecustom"):
         color = "5e4902"
-    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0] == "agent"):
+    elif (incident["message"].lower().split(' ')[0] == "agent"):
         color = "04459b"
-    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0] == "ir"):
+    elif (incident["message"].lower().split(' ')[0] == "ir"):
         color = "a81106"
-    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0] == "inject"):
+    elif (incident["message"].lower().split(' ')[0] == "inject"):
         color = "430477"
-    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0] == "uptime"):
+    elif (incident["message"].lower().split(' ')[0] == "uptime"):
         color = "5a0b05"
     else:
         color = "6184542"
@@ -234,13 +235,22 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
         })
 
     headers = {'content-type': 'application/json', 'Accept-Charset': 'UTF-8'}
-    result = requests.post(f"{url}", data=payload, headers=headers, timeout=10)
+    data = payload.encode("utf-8") if isinstance(payload, str) else json.dumps(payload).encode("utf-8")
+
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers=headers,
+        method="POST"
+    )
 
     try:
-        result.raise_for_status()
-    except requests.exceptions.HTTPError as err:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            status_code = resp.getcode()
+            status_text = resp.read().decode("utf-8")
+    except urllib.error.HTTPError as err:
         with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /discord_webhook - failed to send message for incident {incident_id}. Exception: {err}. StatusCode: {result.status_code}. StatusText: {result.text}.\n")
+            f.write(f"[-] {timestamp} /discord_webhook - failed to send message for incident {incident_id}. StatusCode: {err.code}. StatusText: {err.read().decode('utf-8') if err.fp else ''}.\n")
     else:
          with open(LOGFILE, "a") as f:
             f.write(f"[-] {timestamp} /discord_webhook - sent message for incident {incident_id}.\n")

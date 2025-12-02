@@ -172,7 +172,8 @@ Security & production notes:
       <div>
         <h1>Stabvest — Incidents Dashboard</h1>
         <div class="sub">Click <strong>Claim</strong> to tag an incident as <em>Active</em>, <strong>Resolve</strong> to tag as <em>Closed</em>, or <strong>Reopen</strong> to mark as <em>New</em>. You must have <code>Analyst</code> permissions to do this.</div>
-        <div class="sub">Issue Colors: <span class="color-firewall">Red</span> for <strong>Firewall</strong>, <span class="color-interface">Green</span> for <strong>Interface</strong>, <span class="color-service-generic">Blue</span> for <strong>Service Generic</strong>, <span class="color-service-custom">Yellow</span> for <strong>Service Custom</strong>, <span class="color-agent-alert">Purple</span> for <strong>Agent Alert</strong>, <span class="color-unknown">Gray</span> for <strong>Unknown</strong>.</div>
+        <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Interface</span>, <span class="color-service-generic">Service Generic</span>, <span class="color-service-custom">Service Custom</span>, <span class="color-agent-alert">Agent Alert</span>, <span class="color-ir">IR</span>, <span class="color-inject">Inject</span>, <span class="color-uptime">Uptime</span>, <span class="color-unknown">Unknown</span>.</div>
+        <!-- <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Green</span> for <strong>Interface</strong>, <span class="color-service-generic">Blue</span> for <strong>Service Generic</strong>, <span class="color-service-custom">Yellow</span> for <strong>Service Custom</strong>, <span class="color-agent-alert">Purple</span> for <strong>Agent Alert</strong>, <span class="color-unknown">Gray</span> for <strong>Unknown</strong>.</div> -->
       </div>
       <div style="flex:1"></div>
       <div class="topbar-stats" aria-hidden>
@@ -251,11 +252,21 @@ Security & production notes:
     <label>Autofix Status</label>
     <input id="ai_newStatus" type="checkbox">
 
-    <label>Message</label>
+    <label for="ai_message">
+      Incident Description. Begin with one of the these for coloring:
+      <span class="color-firewall">Firewall</span>,
+      <span class="color-interface">Interface</span>,
+      <span class="color-service-generic">Service Generic</span>,
+      <span class="color-service-custom">Service Custom</span>,
+      <span class="color-agent-alert">Agent</span>,
+      <span class="color-ir">IR</span>,
+      <span class="color-inject">Inject</span>,
+      <span class="color-uptime">Uptime</span>.
+    </label>
     <textarea id="ai_message" placeholder="Describe the incident..."></textarea>
 
     <label>Assignee</label>
-    <input id="ai_assignee" type="text" placeholder="analyst username">
+    <input id="ai_assignee" type="text" placeholder="any string">
 
     <label>
       <input id="ai_createAlert" type="checkbox">
@@ -378,7 +389,6 @@ const api = (function(){
       return {};
     }
   }
-
 
   /**
    * Fetch incidents from server.
@@ -838,7 +848,6 @@ const ui = (function(){
     await loadIncidents();
   }
 
-
   return { init, render, loadIncidents, showToast };
 })();
 
@@ -851,7 +860,6 @@ document.getElementById('openAddIncident').onclick = () => {
 document.getElementById('ai_cancel').onclick = () => {
     addIncidentModal.style.display = 'none';
 };
-
 
 // ----- Submit Handler -----
 document.getElementById('ai_submit').onclick = async () => {
@@ -878,7 +886,7 @@ document.getElementById('ai_submit').onclick = async () => {
             return;
         }
 
-        showToast("Incident created successfully!", 3000);
+        ui.showToast("Incident created successfully!", 3000);
 
         // Close popup
         addIncidentModal.style.display = 'none';
@@ -890,7 +898,7 @@ document.getElementById('ai_submit').onclick = async () => {
         document.getElementById('ai_createAlert').checked = false;
 
         // Optionally refresh incident list if this page displays them
-        if (typeof refreshIncidents === "function") refreshIncidents();
+        ui.loadIncidents();
 
     } catch (err) {
         alert(`Network Error: ${err.message}`);
