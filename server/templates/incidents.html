@@ -44,11 +44,14 @@ Security & production notes:
     --success:#16a34a;
     --danger:#ef4444;
     --warning:#f59e0b;
-    --color-firewall:    #6e0700;
-    --color-interface:  #01520e;
-    --color-service-generic:   #012d66;
+    --color-firewall:    #3b9102;
+    --color-interface:  #01410b;
+    --color-service-generic:   #b87700;
     --color-service-custom: #5e4902;
-    --color-agent-alert: #34005e;
+    --color-agent-alert: #04459b;
+    --color-ir:  #a81106;
+    --color-inject:  #430477;
+    --color-uptime:  #5a0b05;
     --color-unknown:   #5e5e5e;
     --glass: rgba(255,255,255,0.03);
     --radius:12px;
@@ -63,6 +66,9 @@ Security & production notes:
   .color-service-generic { color: var(--color-service-generic); }
   .color-service-custom  { color: var(--color-service-custom); }
   .color-agent-alert     { color: var(--color-agent-alert); }
+  .color-ir              { color: var(--color-ir); }
+  .color-inject          { color: var(--color-inject); }
+  .color-uptime          { color: var(--color-uptime); }
   .color-unknown         { color: var(--color-unknown); }
   html,body{height:100%;margin:0;background:linear-gradient(180deg,#061026 0%, #071426 100%);color:#dbe7f0;}
   .container{max-width:var(--max-width);margin:28px auto;padding:20px;}
@@ -110,6 +116,52 @@ Security & production notes:
   .stat{background:var(--card);padding:8px;border-radius:10px;font-size:13px;color:var(--muted)}
   .toast{position:fixed;right:20px;bottom:20px;background:#061426;padding:12px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.03)}
   .muted-note{color:var(--muted);font-size:13px}
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+  }
+
+  .modal-content {
+    background: #1e1e1e;
+    padding: 1rem;
+    border-radius: 10px;
+    width: 350px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.7);
+  }
+
+  .modal-content h2 {
+    margin-top: 0;
+    border-bottom: 1px solid #333;
+    padding-bottom: 0.5rem;
+  }
+
+  .modal-content input,
+  .modal-content textarea {
+    width: 100%;
+    margin: 0.25rem 0 0.75rem 0;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem;
+  }
+
+  .modal-content textarea {
+    resize: vertical;
+    min-height: 70px;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
   /* responsive tweaks */
   @media (max-width:700px){ .controls{flex-direction:column;align-items:stretch} header{flex-direction:column;align-items:flex-start} .topbar-stats{flex-wrap:wrap} }
 </style>
@@ -165,6 +217,8 @@ Security & production notes:
         <option value="agent_desc">Agent ↓</option>
       </select>
 
+      <button id="openAddIncident">Add Incident</button>
+
       <div style="display:flex;gap:8px;margin-left:auto">
         <button id="refreshBtn" class="chip" title="Refresh incidents">Refresh ⟳</button>
         <label class="chip" title="Auto-refresh (20s)">
@@ -189,8 +243,33 @@ Security & production notes:
   <!-- Toast area -->
   <div id="toast" class="toast" style="display:none"></div>
 
-<script>
+<!-- Add Incident Modal -->
+<div id="addIncidentModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>Create New Incident</h2>
 
+    <label>Autofix Status</label>
+    <input id="ai_newStatus" type="checkbox">
+
+    <label>Message</label>
+    <textarea id="ai_message" placeholder="Describe the incident..."></textarea>
+
+    <label>Assignee</label>
+    <input id="ai_assignee" type="text" placeholder="analyst username">
+
+    <label>
+      <input id="ai_createAlert" type="checkbox">
+      Trigger Webhook Alert
+    </label>
+
+    <div class="modal-actions">
+      <button id="ai_submit">Submit</button>
+      <button id="ai_cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
 // first time load - populate search for incident
 // Get search input element
 const searchInput = document.getElementById('search');
@@ -251,11 +330,14 @@ const utils = (function(){
         msg = msg; 
     }
     //if (msg.includes('cannot read') || msg.includes('no logs')) return 'NoLogs';
-    if (msg.trim() === 'firewall issue') return 'firewall';
-    if (msg.trim() === 'interface issue') return 'interface';
-    if (msg.trim() === 'service issue') return 'service';
-    if (msg.trim() === 'custom issue') return 'custom';
-    if (msg.trim() === 'agent issue') return 'agent';
+    if (msg.trim().split(" ")[0] === 'firewall') return 'firewall';
+    if (msg.trim().split(" ")[0] === 'interface') return 'interface';
+    if (msg.trim().split(" ")[0] === 'service') return 'service';
+    if (msg.trim().split(" ")[0] === 'servicecustom') return 'servicecustom';
+    if (msg.trim().split(" ")[0] === 'agent') return 'agent';
+    if (msg.trim().split(" ")[0] === 'ir') return 'ir';
+    if (msg.trim().split(" ")[0] === 'inject') return 'inject';
+    if (msg.trim().split(" ")[0] === 'uptime') return 'uptime';
 
     // Otherwise treat as unknown
     return 'unknown';
@@ -407,8 +489,11 @@ const ui = (function(){
       firewall:  "var(--color-firewall)",
       interface: "var(--color-interface)",
       service:   "var(--color-service-generic)",
-      custom:    "var(--color-service-custom)",
+      servicecustom:    "var(--color-service-custom)",
       agent:     "var(--color-agent-alert)",
+      ir:         "var(--color-ir)",
+      inject:     "var(--color-inject)",
+      uptime:     "var(--color-uptime)",
       unknown:   "var(--color-unknown)"
     };
     wrapper.style.backgroundColor = colors[incidentType];
@@ -756,6 +841,61 @@ const ui = (function(){
 
   return { init, render, loadIncidents, showToast };
 })();
+
+// ----- Show / Hide Modal -----
+const addIncidentModal = document.getElementById('addIncidentModal');
+document.getElementById('openAddIncident').onclick = () => {
+    addIncidentModal.style.display = 'flex';
+};
+
+document.getElementById('ai_cancel').onclick = () => {
+    addIncidentModal.style.display = 'none';
+};
+
+
+// ----- Submit Handler -----
+document.getElementById('ai_submit').onclick = async () => {
+    const newStatus   = document.getElementById('ai_newStatus').checked;
+    const message     = document.getElementById('ai_message').value.trim();
+    const assignee    = document.getElementById('ai_assignee').value.trim();
+    const createAlert = document.getElementById('ai_createAlert').checked;
+
+    if ( !message ) {
+        alert("Message is required.");
+        return;
+    }
+
+    try {
+        const res = await fetch('/add_incident', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify({ newStatus, message, assignee, createAlert })
+        });
+
+        if (!res.ok) {
+            const errText = await res.text();
+            alert(`Error ${res.status}: ${errText}`);
+            return;
+        }
+
+        showToast("Incident created successfully!", 3000);
+
+        // Close popup
+        addIncidentModal.style.display = 'none';
+
+        // Clear fields
+        document.getElementById('ai_newStatus').checked = false;
+        document.getElementById('ai_message').value = "";
+        document.getElementById('ai_assignee').value = "";
+        document.getElementById('ai_createAlert').checked = false;
+
+        // Optionally refresh incident list if this page displays them
+        if (typeof refreshIncidents === "function") refreshIncidents();
+
+    } catch (err) {
+        alert(`Network Error: ${err.message}`);
+    }
+};
 
 /* ------------------------------
    Boot

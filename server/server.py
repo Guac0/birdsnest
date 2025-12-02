@@ -1,19 +1,16 @@
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin, current_user
-from flask import Flask, Response, request, jsonify, render_template, redirect, url_for, flash, abort, send_from_directory, session
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, abort, send_from_directory, session
 from functools import wraps
 from datetime import datetime, timedelta
-import hashlib
 import time
 import re
 import os
 import random
-import string
-import subprocess
 import requests
 import atexit, signal, sys
 import threading, time
 import json
-from collections import Counter, deque
+from collections import  deque
 import base64
 from urllib.parse import urlparse, unquote_plus
 
@@ -37,6 +34,7 @@ LOGFILE         = f"log_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.txt"   # 
 SAVEFILE        = f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"#f"save_testing2.json" # Savefile to save/load data from. Default f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"
 SAVE_INTERVAL   = 60                    # Seconds between autosaves
 STALE_TIME      = 300                   # If agent has not checked in for this time period in seconds, mark them as stale
+TESTHOOKSLEEP = 0.25
 WEBHOOK_URL = ""
 # test
 #WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
@@ -140,70 +138,100 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
     if not url:
         return
     
-    if (incident["message"].split('-')[0].strip().lower() == "firewall issue"):
-    	#green
-        color = "7210752"
-    elif (incident["message"].split('-')[0].strip().lower() == "interface issue"):
-        #yellow
-        color = "86542"
-    elif (incident["message"].split('-')[0].strip().lower() == "service issue"):
-        #yellow
-        color = "77158"
-    elif (incident["message"].split('-')[0].strip().lower() == "custom issue"):
-        #yellow
-        color = "6179074"
-    elif (incident["message"].split('-')[0].strip().lower() == "agent issue"):
-        #yellow
-        color = "3407966"
+    if (incident["message"].split('-')[0].strip().lower().split(' ')[0]  == "firewall"):
+        color = "3b9102"
+    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0]  == "interface"):
+        color = "01410b"
+    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0]  == "service"):
+        color = "b87700"
+    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0]  == "servicecustom"):
+        color = "5e4902"
+    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0] == "agent"):
+        color = "04459b"
+    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0] == "ir"):
+        color = "a81106"
+    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0] == "inject"):
+        color = "430477"
+    elif (incident["message"].split('-')[0].strip().lower().split(' ')[0] == "uptime"):
+        color = "5a0b05"
     else:
-        #red
         color = "6184542"
 
     #data that the webhook will receive and use to display the alert in discord chat
     # TODO: proper agent name
-    payload = json.dumps({
-      "embeds": [
-        {
-          "title": "Stabvest Alert - {} on {} for {}".format(incident["message"].split('-')[0].strip(),agents[incident["agent_id"]]["hostname"],agents[incident["agent_id"]]["agent_name"]),
-          "color": int(color),
-          "description": "{}".format(incident["message"]),
-          #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
-          "url": f"{PUBLIC_URL}/incidents?incident_id={incident_id}",
-          "fields": [
+    try:
+        payload = json.dumps({
+        "embeds": [
             {
-              "name": "Incident #",
-              "value": "{}".format(incident_id),
-              "inline": True
-            },
-            {
-              "name": "Timestamp",
-              "value": "{}".format(datetime.fromtimestamp(incident["timestamp"])),
-              "inline": True
-            },
-            {
-              "name": "Autofix Status",
-              "value": "{}".format(incident["newStatus"]),
-              "inline": True
-            },
-            {
-              "name": "Agent Name",
-              "value": "{}".format(agents[incident["agent_id"]]["agent_name"]),
-              "inline": True
-            },
-            {
-              "name": "Hostname",
-              "value": "{}".format(agents[incident["agent_id"]]["hostname"]),
-              "inline": True
-            },
-            {
-              "name": "IP Address",
-              "value": "{}".format(agents[incident["agent_id"]]["ip"]),
-              "inline": True
+            "title": "Stabvest Alert - {} Incident Created on {} for {}".format(incident["message"].split('-')[0].strip(),agents[incident["agent_id"]]["hostname"],agents[incident["agent_id"]]["agent_name"]),
+            "color": int(color,16),
+            "description": "{}".format(incident["message"]),
+            #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
+            "url": f"{PUBLIC_URL}/incidents?incident_id={incident_id}",
+            "fields": [
+                {
+                "name": "Incident #",
+                "value": "{}".format(incident_id),
+                "inline": True
+                },
+                {
+                "name": "Timestamp",
+                "value": "{}".format(datetime.fromtimestamp(incident["timestamp"])),
+                "inline": True
+                },
+                {
+                "name": "Autofix Status",
+                "value": "{}".format(incident["newStatus"]),
+                "inline": True
+                },
+                {
+                "name": "Agent Name",
+                "value": "{}".format(agents[incident["agent_id"]]["agent_name"]),
+                "inline": True
+                },
+                {
+                "name": "Hostname",
+                "value": "{}".format(agents[incident["agent_id"]]["hostname"]),
+                "inline": True
+                },
+                {
+                "name": "IP Address",
+                "value": "{}".format(agents[incident["agent_id"]]["ip"]),
+                "inline": True
+                }
+            ]
             }
-          ]
-        }
-      ]
-    })
+        ]
+        })
+    except KeyError:
+        payload = json.dumps({
+        "embeds": [
+            {
+            "title": "Stabvest Alert - Custom {} Incident Created".format(incident["message"].split('-')[0].strip()),
+            "color": int(color,16),
+            "description": "{}".format(incident["message"]),
+            #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
+            "url": f"{PUBLIC_URL}/incidents?incident_id={incident_id}",
+            "fields": [
+                {
+                "name": "Incident #",
+                "value": "{}".format(incident_id),
+                "inline": True
+                },
+                {
+                "name": "Timestamp",
+                "value": "{}".format(datetime.fromtimestamp(incident["timestamp"])),
+                "inline": True
+                },
+                {
+                "name": "Autofix Status",
+                "value": "{}".format(incident["newStatus"]),
+                "inline": True
+                }
+            ]
+            }
+        ]
+        })
 
     headers = {'content-type': 'application/json', 'Accept-Charset': 'UTF-8'}
     result = requests.post(f"{url}", data=payload, headers=headers, timeout=10)
@@ -390,7 +418,7 @@ def add_test_data_agents(num=5):
         }
         agents[f"agent_{i}"] = agent
 
-def add_test_data_incidents(num=10):
+def add_test_data_incidents(num=15,createAlert=True):
     for i in range(1,num + 1):
         incident = {
             "timestamp": time.time() - ((num - i) * 100),
@@ -398,28 +426,48 @@ def add_test_data_incidents(num=10):
             "oldStatus": random.choice([False,True]),
             "newStatus": random.choice([False,True]),
             "message": random.choice([
-                "Service Issue - Missing required package {package} for service {service}, DISARMED.",
-                "Service Issue - Service {service_name} not running, RESTORED service to START state.",
-                "Service Issue - Service {service_name} not set to automatic start, FAILED to set to automatic start.",
-                "Firewall Issue - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. SUCCESSFULLY created firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
-                "Firewall Issue - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. DISARMED, but told to create firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
-                "Firewall Issue - SUCCESSFULLY removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.",
-                "Firewall Issue - Could not get firewall rule information due to PowerShell error.",
-                "Interface Issue - Interface {interface} was set to DOWN, RESTORED UP state.",
-                "Interface Issue - Bad system TTL set, DISARMED.",
-                "Interface Issue - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
-                "Agent Issue - No logs from agent in {minutes} minutes.",
-                "Agent Issue - Agent paused for {seconds} seconds.",
-                "Agent Issue - Agent re-registered.",
-                "Custom Issue - MySQL users changed.",
-                "Custom Issue - MySQL data changed.",
-                "Custom Issue - IIS Site Config changed.",
-                "Custom Issue - IIS Application Pool changed.",
-                "Generic Issue - Test Test Test.",
-                "Generic Issue - Test Test Test."
+                "Service - Missing required package {package} for service {service}, DISARMED.",
+                "Service - Service {service_name} not running, RESTORED service to START state.",
+                "Service - Service {service_name} not set to automatic start, FAILED to set to automatic start.",
+                "Firewall - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. SUCCESSFULLY created firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
+                "Firewall - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. DISARMED, but told to create firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
+                "Firewall - SUCCESSFULLY removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.",
+                "Firewall - Could not get firewall rule information due to PowerShell error.",
+                "Interface - Interface {interface} was set to DOWN, RESTORED UP state.",
+                "Interface - Bad system TTL set, DISARMED.",
+                "Interface - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
+                "Agent - No logs from agent in {minutes} minutes.",
+                "Agent - Agent paused for {seconds} seconds.",
+                "Agent - Agent re-registered.",
+                "ServiceCustom - MySQL users changed.",
+                "ServiceCustom - MySQL data changed.",
+                "ServiceCustom - IIS Site Config changed.",
+                "ServiceCustom - IIS Application Pool changed.",
+                "Generic - Test Test Test.",
+                "Generic - Test Test Test."
             ])
         }
-        create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),True)
+        if createAlert:
+            time.sleep(TESTHOOKSLEEP)
+        create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),createAlert)
+
+def add_test_data_incidents_custom(num=5,createAlert=True):
+    for i in range(1,num + 1):
+        incident = {
+            "timestamp": time.time() - ((num - i) * 100),
+            "agent_id":f"custom",
+            "oldStatus": random.choice([False,True]),
+            "newStatus": random.choice([False,True]),
+            "message": random.choice([
+                "IR - Investigate suspicious sign-in activity on {hostname} / {ipaddress}.",
+                "IR - Write report on Doubletap scheduled task.",
+                "Inject - Implement HTTPS for {check} scorecheck on {hostname} / {ipaddress} by {time}.",
+                "Uptime - Fix failed {check} scorecheck on {hostname} / {ipaddress}."
+            ])
+        }
+        if createAlert:
+            time.sleep(TESTHOOKSLEEP)
+        create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),createAlert)
 
 # =================================
 # ========= API ENDPOINTS =========
@@ -547,9 +595,9 @@ def handle_beacon():
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Auth check
-    if auth != AUTH_TOKEN:
+    if not auth in agent_auth_tokens:
         with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[hostname, ip, os_name, auth, output]}\n")
+            f.write(f"[-] {timestamp} /beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[hostname, ip, os_name, auth]}\n")
         return "Unauthorized", 403
     
     if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
@@ -778,6 +826,39 @@ def save_export(filepath=SAVEFILE):
 
 # === FRONTEND INTERACTION ===
 
+@app.route("/add_incident", methods=["POST"])
+@login_required
+@analyst_required
+def add_incident():
+    data = request.json
+    newStatus = data.get("newStatus")
+    message = data.get("message")
+    assignee = data.get("assignee","")
+    createAlert = data.get("createAlert")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    if not all([message]): # just the required string
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /add_incident - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[newStatus,message,assignee,createAlert]}\n")
+        return "Missing data", 400
+    
+    # not verifying data as I don't want to. TODO
+    
+    messageDict = {
+        "timestamp": time.time(),
+        "agent_id": "custom",
+        "oldStatus": True,
+        "newStatus": newStatus,
+        "message": message
+    }
+
+    create_incident(messageDict,tag="New",assignee=assignee,createAlert=createAlert)
+
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /add_incident - Successful connection from {current_user.id} at {request.remote_addr}. Creating incident with details [newStatus,message,assignee,createAlert].\n")
+    return jsonify({"status": "ok"})
+
 @app.route("/add_user", methods=["POST"])
 @login_required
 @admin_required
@@ -977,6 +1058,7 @@ if __name__ == "__main__":
     # Test data
     add_test_data_agents()
     add_test_data_incidents()
+    add_test_data_incidents_custom()
     #add_test_data_comp(0)
     #add_test_data_cmds()
 
