@@ -13,7 +13,7 @@ import requests
 import atexit, signal, sys
 import threading, time
 import json
-from collections import Counter
+from collections import Counter, deque
 import base64
 from urllib.parse import urlparse, unquote_plus
 
@@ -37,12 +37,18 @@ LOGFILE         = f"log_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.txt"   # 
 SAVEFILE        = f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"#f"save_testing2.json" # Savefile to save/load data from. Default f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"
 SAVE_INTERVAL   = 60                    # Seconds between autosaves
 STALE_TIME      = 300                   # If agent has not checked in for this time period in seconds, mark them as stale
+WEBHOOK_URL = ""
 # test
-WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
+#WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
 # ccdc
 #WEBHOOK_URL     = "https://discord.com/api/webhooks/1445154855214780459/N1mBMKjo2mvzCdGuRa6sH92UG394rFVr8PR9ZXuapcvLWDsGCYji47LN-GRQ5L2NTRzY"
 # === BEACON CONFIG ===
-AUTH_TOKEN              = "testtoken" # Change this per engagement. Allows beacons to authenticate to the server
+agent_auth_tokens   = {
+    "testtoken": { # Change this per engagement. Allows beacons to authenticate to the server
+        "timestamp": time.time(),
+        "added_by": "default"
+    }
+}
 
 # =================================
 # ======== END USER CONFIG ========
@@ -253,6 +259,7 @@ def save_state(filepath=SAVEFILE):
 
     state = {
         "webgui_users": webgui_users,
+        "agent_auth_tokens": agent_auth_tokens,
         "agents": agents,
         "messages": messages,
         "incidents": incidents
@@ -276,7 +283,7 @@ def periodic_autosave(interval=SAVE_INTERVAL):
         save_state()
 
 def load_state(filepath=SAVEFILE):
-    global webgui_users, agents, messages, incidents
+    global webgui_users, agents, messages, incidents, agent_auth_tokens
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
@@ -291,6 +298,7 @@ def load_state(filepath=SAVEFILE):
                 return [restore(item) for item in data]
             return data
 
+        agent_auth_tokens = state["agent_auth_tokens"]
         webgui_users = state["webgui_users"]
         agents = state["agents"]
         messages = state["messages"]
@@ -434,6 +442,15 @@ def page_incidents():
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /dashboard - Successful connection from {current_user.id} at {request.remote_addr}\n")
     return render_template("incidents.html")
+
+@app.route("/management")
+@login_required
+@admin_required
+def page_management():
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /management - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    return render_template("management.html")
 
 @app.route('/favicon.ico')
 def favicon():
@@ -583,10 +600,47 @@ def handle_beacon():
 
 # === FRONTEND DISPLAY ===
 
+@app.route("/list_users", methods=["POST"])
+@login_required
+@admin_required
+def list_users():
+    data = request.json
+    #auth = data.get("auth")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    #if auth != OPERATOR_TOKEN:
+    #    with open(LOGFILE, "a") as f:
+    #        f.write(f"[-] {timestamp} /list_agents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
+    #    return "Unauthorized", 403
+    
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /list_users - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    
+    return jsonify(webgui_users)
+
+@app.route("/list_tokens", methods=["POST"])
+@login_required
+@admin_required
+def list_tokens():
+    data = request.json
+    #auth = data.get("auth")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    #if auth != OPERATOR_TOKEN:
+    #    with open(LOGFILE, "a") as f:
+    #        f.write(f"[-] {timestamp} /list_agents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
+    #    return "Unauthorized", 403
+    
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /list_tokens - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    
+    return jsonify(agent_auth_tokens)
+
 @app.route("/list_agents", methods=["POST"])
 @login_required
 def list_agents():
-    # TODO add filtering
 
     data = request.json
     #auth = data.get("auth")
@@ -606,7 +660,6 @@ def list_agents():
 @app.route("/list_messages", methods=["POST"])
 @login_required
 def list_messages():
-    # TODO add filtering
 
     data = request.json
     #auth = data.get("auth")
@@ -626,7 +679,6 @@ def list_messages():
 @app.route("/list_incidents", methods=["POST"])
 @login_required
 def list_incidents():
-    # TODO add filtering for only active incidents
     
     data = request.json
     #auth = data.get("auth")
@@ -642,6 +694,63 @@ def list_incidents():
         f.write(f"[+] {timestamp} /list_incidents - Successful connection from {current_user.id} at {request.remote_addr}\n")
     
     return jsonify(incidents)
+
+@app.route("/list_logfile", methods=["POST"])
+@login_required
+@admin_required
+def list_logfile(filepath=LOGFILE,lines=50):
+
+    data = request.json
+    #auth = data.get("auth")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    #if auth != OPERATOR_TOKEN:
+    #    with open(LOGFILE, "a") as f:
+    #        f.write(f"[-] {timestamp} /list_incidents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
+    #    return "Unauthorized", 403
+    
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /list_logfile - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            # Use deque to keep only the last 50 lines in memory
+            last_lines = deque(f, maxlen=lines)
+        return list(last_lines)
+
+    except FileNotFoundError:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[+] /list_logfile - Successful connection from {current_user.id} at {request.remote_addr}\n")
+            return f"FileNotFound {filepath}", 400
+
+@app.route("/save_export", methods=["POST"])
+@login_required
+@admin_required
+def save_export(filepath=SAVEFILE):
+
+    data = request.json
+    #auth = data.get("auth")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    #if auth != OPERATOR_TOKEN:
+    #    with open(LOGFILE, "a") as f:
+    #        f.write(f"[-] {timestamp} /list_incidents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
+    #    return "Unauthorized", 403
+    
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /save_export - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    
+    try:
+        with open(filepath, "r") as f:
+            state = json.load(f)
+
+        return state
+    except FileNotFoundError:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[+] /save_export - Successful connection from {current_user.id} at {request.remote_addr}\n")
+            return f"FileNotFound {filepath}", 400
 
 # === FRONTEND INTERACTION ===
 
@@ -666,12 +775,97 @@ def add_user():
             f.write(f"[-] {timestamp} /add_user - Failed connection from {current_user.id} at {request.remote_addr} - bad role value. Full details: {[username, password, role]}\n")
         return "Bad role value", 400
 
-    epoch_time = time.time()
+    if username in webgui_users:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /add_user - Failed connection from {current_user.id} at {request.remote_addr} - bad username value, conflicts with existing user. Full details: {[username, password, role]}\n")
+        return "New user overlaps with existing user", 400
 
     webgui_users[username] = {"password": password, "role": role} # TODO hash
 
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /add_user - Successful connection from {current_user.id} at {request.remote_addr}. Adding user {username} with role {role}\n")
+    return jsonify({"status": "ok"})
+
+@app.route("/delete_user", methods=["POST"])
+@login_required
+@admin_required
+def delete_user():
+    data = request.json
+    username = data.get("username")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    if not all([username]):
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /delete_user - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[username]}\n")
+        return "Missing data", 400
+    
+    if not webgui_users[username]:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /delete_user - Failed connection from {current_user.id} at {request.remote_addr} - username not found. Full details: {[username]}\n")
+        return "Bad role value", 400
+    
+    if username == current_user.id:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /delete_user - Failed connection from {current_user.id} at {request.remote_addr} - cannot delete own user. Full details: {[username]}\n")
+        return "Target username cannot be the same as current username", 400
+
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /delete_user - Successful connection from {current_user.id} at {request.remote_addr}. Deleting user {username} with role {webgui_users[username]["role"]}\n")
+    
+    webgui_users.pop(username)
+
+    return jsonify({"status": "ok"})
+
+@app.route("/add_token", methods=["POST"])
+@login_required
+@admin_required
+def add_token():
+    data = request.json
+    token = data.get("token")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    if not all([token]):
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /add_token - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[token]}\n")
+        return "Missing data", 400
+    
+    if token in agent_auth_tokens:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /add_token - Failed connection from {current_user.id} at {request.remote_addr} - bad token value, conflicts with existing token. Full details: {[token]}\n")
+        return "New user overlaps with existing user", 400
+
+    agent_auth_tokens[token] = {"timestamp": time.time(), "added_by": current_user.id}
+
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /add_token - Successful connection from {current_user.id} at {request.remote_addr}. Adding token {token}\n")
+    return jsonify({"status": "ok"})
+
+@app.route("/delete_token", methods=["POST"])
+@login_required
+@admin_required
+def delete_token():
+    data = request.json
+    token = data.get("token")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    if not all([token]):
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /delete_token - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[token]}\n")
+        return "Missing data", 400
+    
+    if not agent_auth_tokens[token]:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /delete_token - Failed connection from {current_user.id} at {request.remote_addr} - username not found. Full details: {[token]}\n")
+        return "Bad role value", 400
+
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /delete_token - Successful connection from {current_user.id} at {request.remote_addr}. Deleting token {token} that was added by {agent_auth_tokens[token]["added_by"]} at {datetime.fromtimestamp(agent_auth_tokens[token]["timestamp"])}\n")
+    
+    agent_auth_tokens.pop(token)
+
     return jsonify({"status": "ok"})
 
 @app.route("/update_incident_tag", methods=["POST"])
