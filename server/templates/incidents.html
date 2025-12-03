@@ -172,7 +172,7 @@ Security & production notes:
       <div>
         <h1>Stabvest — Incidents Dashboard</h1>
         <div class="sub">Click <strong>Claim</strong> to tag an incident as <em>Active</em>, <strong>Resolve</strong> to tag as <em>Closed</em>, or <strong>Reopen</strong> to mark as <em>New</em>. You must have <code>Analyst</code> permissions to do this.</div>
-        <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Interface</span>, <span class="color-service-generic">Service Generic</span>, <span class="color-service-custom">Service Custom</span>, <span class="color-agent-alert">Agent Alert</span>, <span class="color-ir">IR</span>, <span class="color-inject">Inject</span>, <span class="color-uptime">Uptime</span>, <span class="color-unknown">Unknown</span>.</div>
+        <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Interface</span>, <span class="color-service-generic">Service Generic</span>, <span class="color-service-custom">Service Custom</span>, <span class="color-agent-alert">Agent Alert</span>, <span class="color-ir">IR</span>, <span class="color-inject">Inject</span>, <span class="color-uptime">Uptime</span>, <span class="color-unknown">Other</span>.</div>
         <!-- <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Green</span> for <strong>Interface</strong>, <span class="color-service-generic">Blue</span> for <strong>Service Generic</strong>, <span class="color-service-custom">Yellow</span> for <strong>Service Custom</strong>, <span class="color-agent-alert">Purple</span> for <strong>Agent Alert</strong>, <span class="color-unknown">Gray</span> for <strong>Unknown</strong>.</div> -->
       </div>
       <div style="flex:1"></div>
@@ -207,8 +207,12 @@ Security & production notes:
         <option value="firewall">Firewall</option>
         <option value="interface">Interface</option>
         <option value="service">Service</option>
-        <option value="custom">Custom Service</option>
+        <option value="servicecustom">Custom Service</option>
         <option value="agent">Agent Alerts</option>
+        <option value="ir">IR</option>
+        <option value="inject">Injects</option>
+        <option value="uptime">Uptime</option>
+        <option value="unknown">Other</option>
       </select>
 
       <select id="sortSelect" aria-label="Sort incidents">
