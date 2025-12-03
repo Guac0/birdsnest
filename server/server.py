@@ -37,7 +37,7 @@ SAVEFILE        = f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"#f"
 SAVE_INTERVAL   = 60                    # Seconds between autosaves
 STALE_TIME      = 300                   # If agent has not checked in for this time period in seconds, mark them as stale
 DEFAULT_WEBHOOK_SLEEP_TIME = 0.25       # Seconds between webhook uploads. Mostly just used as a fallback value in case auto rate limiting fails
-MAX_WEBHOOK_MSG_PER_MINUTE = 30         # max 30 as of december 2025 for discord. this is shared between all webhooks in a single channel
+MAX_WEBHOOK_MSG_PER_MINUTE = 50         # max 30 as of december 2025 for discord. this is shared between all webhooks in a single channel
 #WEBHOOK_URL = ""
 # test
 WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
@@ -89,7 +89,7 @@ login_manager.login_view = 'login'  # redirect to login page if not authenticate
 # === DATA STRUCTURES ===
 # Note: all timestamps are logged in unix time
 # Note: all ids are created via joining the stated fields with "|" characters and base64ing the resulting string
-agents              = {}    # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int),lastStatus(bool),stale(bool)}
+agents              = {}    # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int, epoch time),lastStatus(bool),stale(bool),pausedUntil(int, epoch time)}
 messages            = {}    # message_id (timestamp,agent_id): {timestamp(int),agent_id(str),oldStatus(bool),newStatus(bool),message(str)}
 incidents           = {}    # incident_id (increments with each incident): {timestamp(int),agent_id(str),tag(str),oldStatus(bool),newStatus(bool),message(str),assignee(str)}. TAG can be "New", "Active", or "Closed". TODO: consider refactoring this using a reference to messages
 
@@ -114,7 +114,7 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
     """
     Creates an incident and sends alerts
     """
-    global incidents
+    global incidents, agents
 
     incident_id = len(incidents) + 1
     incidentDict = {
@@ -132,6 +132,16 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
             f.write(f"[-] {timestamp} /create_incident - incidents hash collision. Old incident: {incidents[incident_id]}. New incident: {incidentDict}\n")
     incidents[incident_id] = incidentDict
 
+    if incidentDict["message"].lower().split(" - ")[1].split(" ")[0] == "paused":
+        pattern = r'(\d+)\s*(?=seconds\b)'
+        match = re.search(pattern, incidentDict["message"])
+        if match:
+            seconds = int(match.group(1))
+            agents[incidentDict["agent_id"]]["pausedUntil"] = time.time() + seconds
+        else:
+            with open(LOGFILE, "a") as f:
+                f.write(f"[-] {timestamp} /create_incident - cannot parse seconds attribute in pause incident. Full message: {incidentDict["message"]}.\n")
+        
     if createAlert:
         #discord_webhook(incident_id,incidentDict)
         with webhook_queue_cond: # Might lead to minor sleep but nothing major
@@ -382,6 +392,45 @@ def check_stale(agents,incidents):
 
     return agents
 
+def find_incident(incidents, criteria, newest=False):
+    """
+    incidents: dict of incident_id -> incident_data
+    criteria: dict of field -> expected_value
+              (value may be tuple/list for OR-match)
+    newest: False = return oldest match (default)
+            True  = return newest match
+    
+    returns single matching incident id
+    """
+    def matches(incident):
+        for key, required in criteria.items():
+            value = incident.get(key)
+
+            # allow tuple/list for (A OR B)
+            if isinstance(required, (tuple, list)):
+                if value not in required:
+                    return False
+            else:
+                if value != required:
+                    return False
+
+        return True
+
+    candidates = [
+        (iid, data)
+        for iid, data in incidents.items()
+        if matches(data)
+    ]
+
+    if not candidates:
+        return None
+
+    # pick oldest or newest based on timestamp
+    key_fn = (lambda x: -x[1]["timestamp"]) if newest else (lambda x: x[1]["timestamp"])
+
+    selected_iid, _ = min(candidates, key=key_fn)
+    return selected_iid
+
 # === SAVE AND LOAD ===
 def save_state(filepath=SAVEFILE):
     global last_save_time
@@ -525,7 +574,8 @@ def add_test_data_agents(num=5):
             "executionAdmin": random.choice([True,False]),
             "lastSeenTime": time.time() - ((num - i) * 100),
             "lastStatus": random.choice([True,False]),
-            "stale": False
+            "stale": False,
+            "pausedUntil": 0
         }
         agents[f"agent_{i}"] = agent
 
@@ -548,7 +598,13 @@ def add_test_data_incidents(num=15,createAlert=True):
                 "Interface - Bad system TTL set, DISARMED.",
                 "Interface - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
                 "Agent - No logs from agent in {minutes} minutes.",
-                "Agent - Agent paused for {seconds} seconds.",
+                "Agent - Paused for 60 seconds.",
+                "Agent - Paused for 60 seconds.",
+                "Agent - Paused for 60 seconds.",
+                "Agent - Paused for 60 seconds.",
+                "Agent - Paused for 60 seconds.",
+                "Agent - Resumed after sleeping for 60 seconds.",
+                "Agent - Resumed after sleeping for 60 seconds, EARLY EXIT.",
                 "Agent - Agent re-registered.",
                 "ServiceCustom - MySQL users changed.",
                 "ServiceCustom - MySQL data changed.",
@@ -715,6 +771,13 @@ def handle_beacon():
     # Register client if new, or update agent fields if not
     agent_id = hash_id(agent_name, hostname, ip, os_name)
 
+    if message.split(" ")[0].lower() == "reregister":
+        if agent_id in agents:
+            del agents[agent_id]
+        else:
+            with open(LOGFILE, "a") as f:
+                f.write(f"[-] {timestamp} /beacon - Agent claims it is reregistering but we have no prior record of it. Agent_id: {agent_id}. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}\n")
+
     if agent_id not in agents:
         agents[agent_id] = {
             "agent_name": agent_name,
@@ -725,7 +788,8 @@ def handle_beacon():
             "executionAdmin": executionAdmin,
             "lastSeenTime": time.time(),
             "lastStatus": newStatus,
-            "stale": False
+            "stale": False,
+            "pausedUntil": 0
         }
     else:
         # TODO re-register agents might need a refresh on hostname and etc
@@ -747,6 +811,20 @@ def handle_beacon():
             f.write(f"[-] {timestamp} /beacon - messages hash collision. Old message: {messages[message_id]}. New message: {messageDict}\n")
     messages[message_id] = messageDict
 
+    # Handle RESUME
+    if messageDict["message"].lower().split(" - ")[1].split(" ")[0] == "resumed":
+        agents[messageDict["agent_id"]]["pausedUntil"] = 0
+        pattern = r'(\d+)\s*(?=seconds\b)'
+        match = re.search(pattern, messageDict["message"])
+        if match:
+            seconds = int(match.group(1))
+            criteria = {"agent_id": messageDict["agent_id"], "tag": ("New", "Active"), "message": (f"Agent - Resumed after sleeping for {seconds} seconds.",f"Agent - Resumed after sleeping for {seconds} seconds, EARLY EXIT.")}
+            incident_id = find_incident(incidents,criteria,False)
+            incidents[incident_id]["tag"] = "Closed"
+        else:
+            with open(LOGFILE, "a") as f:
+                f.write(f"[-] {timestamp} /beacon - cannot parse seconds attribute in resume incident. Full message: {messageDict["message"]}.\n")
+
     # Trigger incident if needed. Incident means that oldStatus is FALSE (malicious action or critical error detected)
     if oldStatus == False:
         create_incident(messageDict)
@@ -761,14 +839,8 @@ def handle_beacon():
 @admin_required
 def list_users():
     data = request.json
-    #auth = data.get("auth")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    #if auth != OPERATOR_TOKEN:
-    #    with open(LOGFILE, "a") as f:
-    #        f.write(f"[-] {timestamp} /list_agents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
-    #    return "Unauthorized", 403
     
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /list_users - Successful connection from {current_user.id} at {request.remote_addr}\n")
@@ -777,17 +849,10 @@ def list_users():
 
 @app.route("/list_users_simple", methods=["POST"])
 @login_required
-@analyst_required
 def list_users_simple():
     data = request.json
-    #auth = data.get("auth")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    #if auth != OPERATOR_TOKEN:
-    #    with open(LOGFILE, "a") as f:
-    #        f.write(f"[-] {timestamp} /list_agents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
-    #    return "Unauthorized", 403
     
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /list_users_simple - Successful connection from {current_user.id} at {request.remote_addr}\n")
@@ -803,14 +868,8 @@ def list_users_simple():
 @admin_required
 def list_tokens():
     data = request.json
-    #auth = data.get("auth")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    #if auth != OPERATOR_TOKEN:
-    #    with open(LOGFILE, "a") as f:
-    #        f.write(f"[-] {timestamp} /list_agents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
-    #    return "Unauthorized", 403
     
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /list_tokens - Successful connection from {current_user.id} at {request.remote_addr}\n")
@@ -820,16 +879,9 @@ def list_tokens():
 @app.route("/list_agents", methods=["POST"])
 @login_required
 def list_agents():
-
     data = request.json
-    #auth = data.get("auth")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    #if auth != OPERATOR_TOKEN:
-    #    with open(LOGFILE, "a") as f:
-    #        f.write(f"[-] {timestamp} /list_agents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
-    #    return "Unauthorized", 403
     
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /list_agents - Successful connection from {current_user.id} at {request.remote_addr}\n")
@@ -839,16 +891,9 @@ def list_agents():
 @app.route("/list_messages", methods=["POST"])
 @login_required
 def list_messages():
-
     data = request.json
-    #auth = data.get("auth")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    #if auth != OPERATOR_TOKEN:
-    #    with open(LOGFILE, "a") as f:
-    #        f.write(f"[-] {timestamp} /list_messages - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
-    #    return "Unauthorized", 403
     
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /list_messages - Successful connection from {current_user.id} at {request.remote_addr}\n")
@@ -858,16 +903,9 @@ def list_messages():
 @app.route("/list_incidents", methods=["POST"])
 @login_required
 def list_incidents():
-    
     data = request.json
-    #auth = data.get("auth")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    #if auth != OPERATOR_TOKEN:
-    #    with open(LOGFILE, "a") as f:
-    #        f.write(f"[-] {timestamp} /list_incidents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
-    #    return "Unauthorized", 403
     
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /list_incidents - Successful connection from {current_user.id} at {request.remote_addr}\n")
@@ -878,16 +916,9 @@ def list_incidents():
 @login_required
 @admin_required
 def list_logfile(filepath=LOGFILE,lines=50):
-
     data = request.json
-    #auth = data.get("auth")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    #if auth != OPERATOR_TOKEN:
-    #    with open(LOGFILE, "a") as f:
-    #        f.write(f"[-] {timestamp} /list_incidents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
-    #    return "Unauthorized", 403
     
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /list_logfile - Successful connection from {current_user.id} at {request.remote_addr}\n")
@@ -907,16 +938,9 @@ def list_logfile(filepath=LOGFILE,lines=50):
 @login_required
 @admin_required
 def save_export(filepath=SAVEFILE):
-
     data = request.json
-    #auth = data.get("auth")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    #if auth != OPERATOR_TOKEN:
-    #    with open(LOGFILE, "a") as f:
-    #        f.write(f"[-] {timestamp} /list_incidents - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[auth]}\n")
-    #    return "Unauthorized", 403
     
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /save_export - Successful connection from {current_user.id} at {request.remote_addr}\n")
@@ -1149,6 +1173,21 @@ def update_incident_assignee():
             f.write(f"[+] {timestamp} /update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}\n")
         return "Invalid incident ID", 400
 
+@app.route("/save_manual", methods=["POST"])
+@login_required
+@admin_required
+def save_manual():
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /save_manual - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    
+    try:
+        save_state()
+        return f"Successfully saved state to {SAVEFILE}", 200
+    except Exception as e:
+        return f"Failed to save state: {e}", 500
+
 # =================================
 # ============= MAIN ==============
 # =================================
@@ -1174,8 +1213,8 @@ if __name__ == "__main__":
 
     # Test data
     add_test_data_agents()
-    add_test_data_incidents_custom(30)
-    add_test_data_incidents(70)
+    add_test_data_incidents_custom(10)
+    add_test_data_incidents(30)
     #add_test_data_comp(0)
     #add_test_data_cmds()
 

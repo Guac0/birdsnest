@@ -25,6 +25,8 @@
 
 <header>
   <h1>Management Dashboard</h1>
+  <button id="manualSaveBtn">Trigger Manual Save</button>
+  <button id="exportSaveBtn">Export Save</button>
 </header>
 
 <main>
@@ -75,6 +77,16 @@
 </main>
 
 <script>
+
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    console.log('Text copied to clipboard successfully. Text: ',text);
+  } catch (err) {
+    console.error('Failed to copy text: ', err);
+  }
+}
+
 async function apiCall(url, payload) {
   try {
     const res = await fetch(url, {
@@ -89,7 +101,12 @@ async function apiCall(url, payload) {
       throw new Error(`HTTP ${res.status}: ${text}`);
     }
 
-    return res.json();
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      return await res.json();
+    } else {
+      return await res.text();
+    }
   } catch (err) {
     console.error(err);
     throw err;
@@ -193,6 +210,32 @@ async function refreshLogs() {
 }
 
 document.getElementById('refreshLogsBtn').onclick = refreshLogs;
+
+// Manual Save
+async function manualSave() {
+  try {
+    const logs = await apiCall('/save_manual', {});
+    alert(`Manual Save Completed`);
+  } catch (err) {
+    console.log('Manual Save Error:', err);
+  }
+}
+
+document.getElementById('manualSaveBtn').onclick = manualSave;
+
+// Export Save
+async function exportSave() {
+  try {
+    const logs = await apiCall('/save_export', {});
+    copyTextToClipboard(JSON.stringify(logs, null, 2));
+    alert(`Save data copied to clipboard and to console`);
+    console.log('Export Save Success:', logs);
+  } catch (err) {
+    console.log('Export Save Error:', err);
+  }
+}
+
+document.getElementById('exportSaveBtn').onclick = exportSave;
 
 // Initial load
 refreshUsers();
