@@ -13,6 +13,7 @@ from datetime import datetime
 import time
 import urllib.request
 import urllib.error
+import winreg
 
 #endregion###############
 # Configuration Options #
@@ -30,6 +31,8 @@ SERVER_URL="http://127.0.0.1:8080/agent"
 AUTH_TOKEN="testtoken"
 AGENT_TYPE="stabvest_test1"
 SERVER_TIMEOUT=5
+REGISTRY_HIVE = winreg.HKEY_LOCAL_MACHINE
+SERVICE_PATH = r"SYSTEM\\CurrentControlSet\\Services\\service_name" #replace with actual service name
 
 #endregion###############
 # Generic Helper Funcs ##
@@ -44,6 +47,21 @@ def print_debug(msg):
             with open(LOGFILE, "a") as f:
                 f.write(f"{timestamp} {msg}\n")
     return
+
+def get_reg_val(key, service_path=SERVICE_PATH, reg_hive=REGISTRY_HIVE):
+    '''
+    Given a registry key name (variable), returns its value from the specified service path and hive.
+    Args: key(String), service_path(String), reg_hive(winreg.HKEY_*)
+    Returns: result(deepnds on the type of the registry key)
+    '''
+    result = None
+    try:
+        oKey = winreg.OpenKeyEx(reg_hive, service_path)
+        result = winreg.QueryValueEx(oKey, key)[0] 
+        winreg.CloseKey(oKey)
+    except Exception as e:
+        print(f"get_reg_val(): {e}")
+    return result
 
 def get_os(simple=False):
     """
