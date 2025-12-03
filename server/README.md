@@ -17,12 +17,15 @@ The Stabvest Server provides a single node from which to view and manage Stabves
 ### Agents Dashboard
 * This dashboard lists details on each agent, including their name, host (hostname, IP address, OS), executable location (in case an operator needs to manually modify the config or delete the agent), and last call back time. Only the most recent callback time is recorded and historic logs are discarded unless they are involved in an Incident (which are not displayed here)
 * Agents are sorted by firstly their host's hostname, then the agent name, and are color coded according to the OS type.
+* For agent interactions, the operator fills in a single field with a command to be used with the agent helper program present on the machine.
 
-### Interaction Dashboard
+### Messages Dashboard
+* Shows all logged messages from agents for troubleshooting and record keeping purposes.
+
+### Deployment Dashboard
 * The interaction dashboard provides an all-in-one menu for deploying new agents or interacting with remote agents.
 * For all interactions, the remote host's IP address, connection type (ssh or winrm, and port), and valid username:password pair are required.
 * For agent deployments, the operator can fill in fields corresponding to the configuration options of the new agent. When the operator hits "submit" the server initiates a remote shell connection to the host, installs the agent using the provided config values, and reports back with the status.
-* For agent interactions, the operator fills in a single field with a command to be used with the agent helper program present on the machine.
 * To minimize exposure if the server is compromised, at no point does this menu provide for raw shell access. Agent deployments consist of a preset list of commands with the user input just modifying name values, and agent interaction commands are directly inputed to the agent helper program. TODO: make sure to sanitize the input to avoid silly string escapes
 
 ### Management Dashboard

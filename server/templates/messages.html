@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Messages Dashboard</title>
+<style>
+:root{
+  --bg:#0b1220;
+  --card:#0f1a2b;
+  --muted:#a0b0c0; /* brighter text */
+  --text:#ffffff;  /* brighter main text */
+  --accent:#4aa3ff;
+  --accent-2:#2e6fb6;
+  --row-hover:#0e2a45;
+  --border: rgba(255,255,255,0.04);
+  --bool-dark:#888888; /* darker color for booleans that are true */
+  --danger:#ff6b6b;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg), #071020);color:var(--text)}
+.container{max-width:100%;margin:28px auto;padding:20px}
+
+header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+h1{margin:0;font-size:20px}
+p.lead{margin:0;color:var(--muted);font-size:13px}
+
+.card{background:var(--card);border-radius:12px;padding:14px;border:1px solid var(--border);box-shadow:0 6px 20px rgba(10,15,25,0.6)}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{position:sticky;top:0;background:linear-gradient(180deg, rgba(12,20,30,0.95), rgba(12,20,30,0.9));backdrop-filter:blur(4px);z-index:2;padding:8px 10px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)}
+thead th .col-head{display:flex;align-items:center;gap:8px}
+tbody td{padding:10px;border-bottom:1px solid rgba(255,255,255,0.02);vertical-align:middle;color:var(--text)}
+tbody tr:hover{background:var(--row-hover)}
+
+.col-filter input{width:100%;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);background:rgba(255,255,255,0.02);color:var(--text)}
+
+th.sortable{cursor:pointer}
+th.sortable .sort-ind{font-size:11px;color:var(--muted)}
+
+.false-red{color:var(--danger);font-weight:bold;}
+.bool-dark{color:var(--bool-dark);}
+
+.toast{position:fixed;bottom:20px;right:20px;background:var(--accent);color:#042033;padding:12px 18px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;transition:opacity 0.3s ease;z-index:100}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div style="display:flex;flex-direction:column">
+      <h1>Messages Dashboard</h1>
+      <p class="lead">All messages recorded by the server. Times shown in your local timezone. Auto-refreshes every 60 seconds.</p>
+      <p class="lead">Click column headers to sort. Type in the filters under headers to refine results per-column.</p>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <button id="refreshBtn" class="btn ghost" title="Refresh list">Refresh</button>
+    </div>
+  </header>
+
+  <section class="card" id="mainCard">
+    <div id="tableWrap" style="overflow:auto;max-height:90vh">
+      <table id="messagesTable"></table>
+    </div>
+  </section>
+</div>
+
+<div id="toast" class="toast">Messages data refreshed successfully</div>
+
+<script>
+const ENDPOINTS = { listMessages:'/list_messages' };
+let messagesData = {}, columns = [], filters = {}, sortState = {key:null, dir:1}, searchTimer;
+
+const refreshBtn = document.getElementById('refreshBtn');
+const tableEl = document.getElementById('messagesTable');
+const toastEl = document.getElementById('toast');
+
+async function postJSON(url,payload){
+  try{
+    const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    if(!res.ok){const txt=await res.text();throw new Error(`HTTP ${res.status}: ${txt}`);}
+    const ct = res.headers.get('content-type') || '';
+    if(ct.includes('application/json')) return res.json();
+    return res.text();
+  }catch(err){alert('Failed request: '+err.message); throw err;}
+}
+
+function formatTime(epoch){
+  if(!epoch) return '0';
+  const e = Number(epoch);
+  const date = (e>1e12)?new Date(e):new Date(e*1000);
+  return date.toLocaleString();
+}
+
+function deriveColumns(data){
+  const keys = new Set();
+  for(const [id,rec] of Object.entries(data)){
+    keys.add('message_id');
+    for(const k of Object.keys(rec)) keys.add(k);
+    break;
+  }
+  return Array.from(keys);
+}
+
+async function fetchMessages(){
+  try{
+    const res = await postJSON(ENDPOINTS.listMessages,{});
+    messagesData = (typeof res==='object')?res:JSON.parse(res);
+    columns = deriveColumns(messagesData);
+    renderTable();
+    showToast();
+  }catch(err){console.error(err);}
+}
+
+function showToast(){toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),3000);}
+
+function renderTable(){
+  let thead = '<thead><tr>';
+  for(const k of columns){
+    const display = escapeHtml(k);
+    const sortable = 'sortable';
+    const sortMark = (sortState.key===k)?(sortState.dir===1?'▲':'▼'):'';
+    thead += `<th class="${sortable}" data-key="${display}"><div class="col-head"><span>${display}</span><span class="sort-ind">${sortMark}</span></div></th>`;
+  }
+  thead += '</tr><tr>';
+  for(const k of columns){
+    const val = filters[k] || '';
+    thead += `<th class="col-filter"><input data-col="${escapeHtml(k)}" placeholder="Filter..." value="${escapeHtml(val)}" /></th>`;
+  }
+  thead += '</tr></thead>';
+
+  const tbodyRows = buildFilteredSortedRows();
+  const tbody = '<tbody>' + tbodyRows.map(r => r.html).join('') + '</tbody>';
+
+  tableEl.innerHTML = thead + tbody;
+
+  tableEl.querySelectorAll('th.sortable').forEach(th=>{
+    th.addEventListener('click',()=>toggleSort(th.getAttribute('data-key')));
+  });
+  tableEl.querySelectorAll('.col-filter input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(()=>{
+        filters[e.target.getAttribute('data-col')] = e.target.value;
+        renderTable();
+      }, 700);
+    });
+  });
+}
+
+function buildFilteredSortedRows(){
+  const rows = [];
+  for(const [msgId, rec] of Object.entries(messagesData)){
+    const record = Object.assign({message_id: msgId}, rec);
+    if(!recordMatchesFilters(record)) continue;
+    rows.push({msgId, record, html: buildRowHtml(record)});
+  }
+  if(sortState.key){
+    rows.sort((a,b)=>{
+      const A=a.record[sortState.key], B=b.record[sortState.key];
+      if(A==null && B==null) return 0;
+      if(A==null) return -1*sortState.dir;
+      if(B==null) return 1*sortState.dir;
+      const aNum=Number(A), bNum=Number(B);
+      if(!Number.isNaN(aNum)&&!Number.isNaN(bNum)) return (aNum-bNum)*sortState.dir;
+      const aStr=String(A).toLowerCase(), bStr=String(B).toLowerCase();
+      return aStr<bStr?-1*sortState.dir:(aStr>bStr?1*sortState.dir:0);
+    });
+  }
+  return rows;
+}
+
+function buildRowHtml(rec){
+  const values = columns.map(k=>{
+    let v = rec[k];
+    if(/time|timestamp/i.test(k) && v) v = formatTime(v);
+
+    if(typeof v === 'boolean'){
+      return v ? `<span class="bool-dark">True</span>` : `<span class="false-red">False</span>`;
+    }
+
+    return escapeHtml(String(v ?? ''));
+  });
+  return `<tr>` + values.map(v=>`<td>${v}</td>`).join('') + `</tr>`;
+}
+
+function toggleSort(key){
+  if(sortState.key===key) sortState.dir = -sortState.dir;
+  else{sortState.key=key; sortState.dir=1;}
+  renderTable();
+}
+
+function recordMatchesFilters(record){
+  for(const [k,v] of Object.entries(filters)){
+    if(!v) continue;
+    const val = String(record[k]??'').toLowerCase();
+    if(!val.includes(String(v).toLowerCase())) return false;
+  }
+  return true;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
+}
+
+refreshBtn.addEventListener('click', fetchMessages);
+
+fetchMessages();
+setInterval(fetchMessages, 60000);  // Auto-refresh every 60 seconds
+</script>
+</body>
+</html>

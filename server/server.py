@@ -569,7 +569,7 @@ def add_test_data_agents(num=5):
             "agent_name": random.choice(["apache2","iis","smb","mysql","vsftpd"]),
             "hostname": random.choice(["webserver1","webserver2","fileshare1","fileshare2","dc01"]),
             "ip": random.choice(["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5"]),
-            "os": random.choice(["Windows 10","Windows 2016Server","Ubuntu 16.03 Name","RHEL 9.3","Rocky 8"]),
+            "os": random.choice(["Windows 10","Windows 2016Server","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8"]),
             "executionUser": random.choice(["root","admin",".\\administrator","domain\\dadmin","user"]),
             "executionAdmin": random.choice([True,False]),
             "lastSeenTime": time.time() - ((num - i) * 100),
@@ -578,6 +578,46 @@ def add_test_data_agents(num=5):
             "pausedUntil": 0
         }
         agents[f"agent_{i}"] = agent
+
+def add_test_data_messages(num=15):
+    for i in range(1,num + 1):
+        timestamp = time.time() - ((num - i) * 100)
+        agent_id = f"agent_{random.randint(1,5)}"
+        message_id = hash_id(timestamp, agent_id)
+        message = {
+            "timestamp": timestamp,
+            "agent_id": agent_id,
+            "oldStatus": random.choice([False,True]),
+            "newStatus": random.choice([False,True]),
+            "message": random.choice([
+                "Service - Missing required package {package} for service {service}, DISARMED.",
+                "Service - Service {service_name} not running, RESTORED service to START state.",
+                "Service - Service {service_name} not set to automatic start, FAILED to set to automatic start.",
+                "Firewall - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. SUCCESSFULLY created firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
+                "Firewall - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. DISARMED, but told to create firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
+                "Firewall - SUCCESSFULLY removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.",
+                "Firewall - Could not get firewall rule information due to PowerShell error.",
+                "Interface - Interface {interface} was set to DOWN, RESTORED UP state.",
+                "Interface - Bad system TTL set, DISARMED.",
+                "Interface - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
+                "Agent - No logs from agent in {minutes} minutes.",
+                "Agent - Paused for 60 seconds.",
+                "Agent - Paused for 60 seconds.",
+                "Agent - Paused for 60 seconds.",
+                "Agent - Paused for 60 seconds.",
+                "Agent - Paused for 60 seconds.",
+                "Agent - Resumed after sleeping for 60 seconds.",
+                "Agent - Resumed after sleeping for 60 seconds, EARLY EXIT.",
+                "Agent - Agent re-registered.",
+                "ServiceCustom - MySQL users changed.",
+                "ServiceCustom - MySQL data changed.",
+                "ServiceCustom - IIS Site Config changed.",
+                "ServiceCustom - IIS Application Pool changed."#,
+                #"Generic - Test Test Test.",
+                #"Generic - Test Test Test."
+            ])
+        }
+        messages[message_id] = message
 
 def add_test_data_incidents(num=15,createAlert=True):
     for i in range(1,num + 1):
@@ -647,12 +687,37 @@ def page_dashboard():
         f.write(f"[+] {timestamp} /dashboard - Successful connection from {current_user.id} at {request.remote_addr}\n")
     return render_template("dashboard.html")
 
+@app.route("/agents")
+@login_required
+def page_agents():
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /agents - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    return render_template("agents.html")
+
+@app.route("/messages")
+@login_required
+def page_messages():
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /messages - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    return render_template("messages.html")
+
+@app.route("/deployment")
+@login_required
+@analyst_required
+def page_deployment():
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /deployment - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    return render_template("deployment.html")
+
 @app.route("/incidents")
 @login_required
 def page_incidents():
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /dashboard - Successful connection from {current_user.id} at {request.remote_addr}\n")
+        f.write(f"[+] {timestamp} /incidents - Successful connection from {current_user.id} at {request.remote_addr}\n")
     return render_template("incidents.html")
 
 @app.route("/management")
@@ -857,9 +922,9 @@ def list_users_simple():
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /list_users_simple - Successful connection from {current_user.id} at {request.remote_addr}\n")
     
-    users = []
-    for user in webgui_users:
-        users.append(user)
+    users = {} # username: role, where role is "guest","analyst", or "admin"
+    for username in webgui_users:
+        users[username] = webgui_users[username]["role"]
 
     return users
 
@@ -875,6 +940,19 @@ def list_tokens():
         f.write(f"[+] {timestamp} /list_tokens - Successful connection from {current_user.id} at {request.remote_addr}\n")
     
     return jsonify(agent_auth_tokens)
+
+@app.route("/list_tokens_number", methods=["POST"])
+@login_required
+@admin_required
+def list_tokens_number():
+    data = request.json
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    with open(LOGFILE, "a") as f:
+        f.write(f"[+] {timestamp} /list_tokens - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    
+    return jsonify({"number": len(agent_auth_tokens)})
 
 @app.route("/list_agents", methods=["POST"])
 @login_required
@@ -1175,7 +1253,7 @@ def update_incident_assignee():
 
 @app.route("/save_manual", methods=["POST"])
 @login_required
-@admin_required
+@analyst_required
 def save_manual():
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
@@ -1212,7 +1290,8 @@ if __name__ == "__main__":
     threading.Thread(target=webhook_main, daemon=True).start()
 
     # Test data
-    add_test_data_agents()
+    add_test_data_agents(30)
+    add_test_data_messages(50)
     add_test_data_incidents_custom(10)
     add_test_data_incidents(30)
     #add_test_data_comp(0)

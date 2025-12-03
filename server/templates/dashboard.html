@@ -1,4 +1,189 @@
-test
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Stabvest Homepage</title>
+<style>
+:root{
+  --bg:#0b1220;
+  --card:#0f1a2b;
+  --muted:#a0b0c0;
+  --text:#ffffff;
+  --accent:#4aa3ff;
+  --accent-2:#2e6fb6;
+  --row-hover:#0e2a45;
+  --border: rgba(255,255,255,0.04);
+  --bool-dark:#888888;
+  --danger:#ff6b6b;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
 
-<a href="incidents">Incidents Dashboard</a>
-<a href="management">Management Dashboard</a>
+html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg), #071020);color:var(--text);}
+.container{max-width:1200px;margin:28px auto;padding:20px;}
+
+header{display:flex;align-items:center;gap:16px;margin-bottom:28px;flex-wrap:wrap;}
+header h1{margin:0;font-size:28px;}
+header p.lead{margin:0;color:var(--muted);font-size:14px;}
+
+.dashboard-links{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:32px;}
+.dashboard-links a{
+  flex:1 1 180px;
+  text-align:center;
+  padding:14px 18px;
+  border-radius:10px;
+  text-decoration:none;
+  background:linear-gradient(180deg,var(--accent),var(--accent-2));
+  color:#042033;
+  font-weight:600;
+  transition:transform 0.2s;
+}
+.dashboard-links a:hover{transform:scale(1.05);}
+
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px;}
+.stat-card{background:var(--card);padding:20px;border-radius:12px;border:1px solid var(--border);box-shadow:0 6px 20px rgba(10,15,25,0.6);}
+.stat-card h3{margin-top:0;margin-bottom:8px;font-size:20px;color:var(--accent);}
+.stat-card p.desc{margin:0 0 12px 0;color:var(--muted);font-size:13px;}
+.stat-card p.value{margin:0;font-size:24px;font-weight:600;}
+
+.bool-dark{color:var(--bool-dark);}
+.false-red{color:var(--danger);font-weight:bold;}
+
+.toast{position:fixed;bottom:20px;right:20px;background:var(--accent);color:#042033;padding:12px 18px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;transition:opacity 0.3s ease;z-index:100}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>Stabvest Homepage</h1>
+      <p class="lead">This homepage is your central hub. Use the links below to access the various dashboards.</p>
+    </div>
+  </header>
+
+  <section class="dashboard-links">
+    <a href="incidents">Incidents Dashboard</a>
+    <a href="agents">Agents Dashboard</a>
+    <a href="messages">Messages Dashboard</a>
+    <a href="deployment">Deployment Dashboard</a>
+    <a href="management">Management Dashboard</a>
+  </section>
+
+  <section class="stats-grid">
+    <div class="stat-card">
+      <h3>Agents</h3>
+      <p class="desc">Total number of agents registered on the server. Displays how many are active and how many are considered stale (not reporting recently).</p>
+      <p class="value" id="agentsCount">Loading...</p>
+      <p class="desc">Active agents: <span id="agentsActive">Loading...</span></p>
+      <p class="desc">Stale agents: <span id="agentsStale">Loading...</span></p>
+    </div>
+
+    <div class="stat-card">
+      <h3>Incidents</h3>
+      <p class="desc">Total number of incidents recorded. Incidents are categorized as New, Active, or Closed.</p>
+      <p class="value" id="incidentsTotal">Loading...</p>
+      <p class="desc">New: <span id="incidentsNew">Loading...</span></p>
+      <p class="desc">Active: <span id="incidentsActive">Loading...</span></p>
+      <p class="desc">Closed: <span id="incidentsClosed">Loading...</span></p>
+    </div>
+
+    <div class="stat-card">
+      <h3>Messages</h3>
+      <p class="desc">Total messages received from agents and their status updates. Shows recent activity within the last 5 minutes.</p>
+      <p class="value" id="messagesTotal">Loading...</p>
+      <p class="desc">Received in last 5 minutes: <span id="messagesLast5">Loading...</span></p>
+    </div>
+
+    <div class="stat-card">
+      <h3>Users</h3>
+      <p class="desc">Number of users registered in the system, including counts per role (guest, analyst, admin).</p>
+      <p class="value" id="usersTotal">Loading...</p>
+      <p class="desc">Roles: <span id="usersRoles">Loading...</span></p>
+    </div>
+
+    <div class="stat-card">
+      <h3>Tokens</h3>
+      <p class="desc">Total number of authentication tokens issued for agents.</p>
+      <p class="value" id="tokensTotal">Loading...</p>
+    </div>
+  </section>
+</div>
+
+<div id="toast" class="toast">Server statistics updated successfully</div>
+
+<script>
+const ENDPOINTS = {
+  listAgents: '/list_agents',
+  listIncidents: '/list_incidents',
+  listMessages: '/list_messages',
+  listUsers: '/list_users_simple',
+  listTokens: '/list_tokens_number'
+};
+
+const toastEl = document.getElementById('toast');
+
+async function postJSON(url,payload){
+  try{
+    const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    if(!res.ok){const txt=await res.text();throw new Error(`HTTP ${res.status}: ${txt}`);}
+    const ct = res.headers.get('content-type')||'';
+    if(ct.includes('application/json')) return res.json();
+    return res.text();
+  }catch(err){alert('Failed request: '+err.message); throw err;}
+}
+
+function showToast(){toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),3000);}
+function updateStatsElement(id,value){document.getElementById(id).innerHTML=value;}
+
+async function fetchStats(){
+  try{
+    // Agents
+    const agents = await postJSON(ENDPOINTS.listAgents,{});
+    const totalAgents = Object.keys(agents).length;
+    const active = Object.values(agents).filter(a=>a.lastStatus).length;
+    const stale = Object.values(agents).filter(a=>a.stale).length;
+    updateStatsElement('agentsCount', totalAgents);
+    updateStatsElement('agentsActive', active);
+    updateStatsElement('agentsStale', stale);
+
+    // Incidents
+    const incidents = await postJSON(ENDPOINTS.listIncidents,{});
+    const totalInc = Object.keys(incidents).length;
+    const newInc = Object.values(incidents).filter(i=>i.tag==='New').length;
+    const activeInc = Object.values(incidents).filter(i=>i.tag==='Active').length;
+    const closedInc = Object.values(incidents).filter(i=>i.tag==='Closed').length;
+    updateStatsElement('incidentsTotal', totalInc);
+    updateStatsElement('incidentsNew', newInc);
+    updateStatsElement('incidentsActive', activeInc);
+    updateStatsElement('incidentsClosed', closedInc);
+
+    // Messages
+    const messages = await postJSON(ENDPOINTS.listMessages,{});
+    const totalMsgs = Object.keys(messages).length;
+    const last5Min = Object.values(messages).filter(m=>Date.now()/1000 - m.timestamp <= 300).length;
+    updateStatsElement('messagesTotal', totalMsgs);
+    updateStatsElement('messagesLast5', last5Min);
+
+    // Users
+    const users = await postJSON(ENDPOINTS.listUsers,{});
+    const totalUsers = Object.keys(users).length;
+    const roles = {};
+    for(const r of Object.values(users)) roles[r] = (roles[r]||0)+1;
+    updateStatsElement('usersTotal', totalUsers);
+    updateStatsElement('usersRoles', Object.entries(roles).map(([k,v])=>`${k}: ${v}`).join(', '));
+
+    // Tokens
+    const tokens = await postJSON(ENDPOINTS.listTokens,{});
+    updateStatsElement('tokensTotal', tokens.number);
+
+    showToast();
+  }catch(err){console.error(err);}
+}
+
+// Initial fetch and auto-refresh every 60 seconds
+fetchStats();
+setInterval(fetchStats, 60000);
+</script>
+</body>
+</html>
