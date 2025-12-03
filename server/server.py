@@ -132,16 +132,20 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
             f.write(f"[-] {timestamp} /create_incident - incidents hash collision. Old incident: {incidents[incident_id]}. New incident: {incidentDict}\n")
     incidents[incident_id] = incidentDict
 
-    if incidentDict["message"].lower().split(" - ")[1].split(" ")[0] == "paused":
-        pattern = r'(\d+)\s*(?=seconds\b)'
-        match = re.search(pattern, incidentDict["message"])
-        if match:
-            seconds = int(match.group(1))
-            agents[incidentDict["agent_id"]]["pausedUntil"] = time.time() + seconds
-        else:
-            with open(LOGFILE, "a") as f:
-                f.write(f"[-] {timestamp} /create_incident - cannot parse seconds attribute in pause incident. Full message: {incidentDict["message"]}.\n")
-        
+    try:
+        # Handle paused
+        if incidentDict["message"].lower().split(" - ")[1].split(" ")[0] == "paused":
+            pattern = r'(\d+)\s*(?=seconds\b)'
+            match = re.search(pattern, incidentDict["message"])
+            if match:
+                seconds = int(match.group(1))
+                agents[incidentDict["agent_id"]]["pausedUntil"] = time.time() + seconds
+            else:
+                with open(LOGFILE, "a") as f:
+                    f.write(f"[-] {timestamp} /create_incident - cannot parse seconds attribute in pause incident. Full message: {incidentDict["message"]}.\n")
+    except Exception as E:
+        # Custom incident that doesnt follow the format
+        pass
     if createAlert:
         #discord_webhook(incident_id,incidentDict)
         with webhook_queue_cond: # Might lead to minor sleep but nothing major
@@ -236,27 +240,30 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
     if not url:
         return
     
-    if (incident["message"].lower().split(' ')[0]  == "firewall"):
-        color = "3b9102"
-    elif (incident["message"].lower().split(' ')[0]  == "interface"):
-        color = "01410b"
-    elif (incident["message"].lower().split(' ')[0]  == "service"):
-        color = "b87700"
-    elif (incident["message"].lower().split(' ')[0]  == "servicecustom"):
-        color = "5e4902"
-    elif (incident["message"].lower().split(' ')[0] == "agent"):
-        color = "04459b"
-    elif (incident["message"].lower().split(' ')[0] == "ir"):
-        color = "a81106"
-    elif (incident["message"].lower().split(' ')[0] == "inject"):
-        color = "430477"
-    elif (incident["message"].lower().split(' ')[0] == "uptime"):
-        color = "5a0b05"
-    else:
-        color = "6184542" # unknown
+    color = "5e5e5e" # unknown
+    
+    try:
+        if (incident["message"].lower().split(' ')[0]  == "firewall"):
+            color = "3b9102"
+        elif (incident["message"].lower().split(' ')[0]  == "interface"):
+            color = "01410b"
+        elif (incident["message"].lower().split(' ')[0]  == "service"):
+            color = "b87700"
+        elif (incident["message"].lower().split(' ')[0]  == "servicecustom"):
+            color = "5e4902"
+        elif (incident["message"].lower().split(' ')[0] == "agent"):
+            color = "04459b"
+        elif (incident["message"].lower().split(' ')[0] == "ir"):
+            color = "a81106"
+        elif (incident["message"].lower().split(' ')[0] == "inject"):
+            color = "430477"
+        elif (incident["message"].lower().split(' ')[0] == "uptime"):
+            color = "5a0b05"
+    except Exception as E:
+        # weird format, fallback to generic color
+        pass
 
     #data that the webhook will receive and use to display the alert in discord chat
-    # TODO: proper agent name
     try:
         payload = json.dumps({
         "embeds": [
@@ -301,11 +308,42 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
             }
         ]
         })
-    except KeyError:
+    except KeyError as E:
         payload = json.dumps({
         "embeds": [
             {
             "title": "Stabvest Alert - Custom {} Incident Created".format(incident["message"].split('-')[0].strip()),
+            "color": int(color,16),
+            "description": "{}".format(incident["message"]),
+            #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
+            "url": f"{PUBLIC_URL}/incidents?incident_id={incident_id}",
+            "fields": [
+                {
+                "name": "Incident #",
+                "value": "{}".format(incident_id),
+                "inline": True
+                },
+                {
+                "name": "Timestamp",
+                "value": "{}".format(datetime.fromtimestamp(incident["timestamp"])),
+                "inline": True
+                },
+                {
+                "name": "Autofix Status",
+                "value": "{}".format(incident["newStatus"]),
+                "inline": True
+                }
+            ]
+            }
+        ]
+        })
+    except IndexError as E:
+        # weird data type with very short msg. should only happen with custom incidents, if any
+        # Actually this probably will never get hit lol as split()[0] should always work
+        payload = json.dumps({
+        "embeds": [
+            {
+            "title": "Stabvest Alert - Custom Generic Incident Created",
             "color": int(color,16),
             "description": "{}".format(incident["message"]),
             #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
@@ -639,19 +677,17 @@ def add_test_data_incidents(num=15,createAlert=True):
                 "Interface - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
                 "Agent - No logs from agent in {minutes} minutes.",
                 "Agent - Paused for 60 seconds.",
-                "Agent - Paused for 60 seconds.",
-                "Agent - Paused for 60 seconds.",
-                "Agent - Paused for 60 seconds.",
-                "Agent - Paused for 60 seconds.",
                 "Agent - Resumed after sleeping for 60 seconds.",
                 "Agent - Resumed after sleeping for 60 seconds, EARLY EXIT.",
                 "Agent - Agent re-registered.",
                 "ServiceCustom - MySQL users changed.",
                 "ServiceCustom - MySQL data changed.",
                 "ServiceCustom - IIS Site Config changed.",
-                "ServiceCustom - IIS Application Pool changed."#,
-                #"Generic - Test Test Test.",
-                #"Generic - Test Test Test."
+                "ServiceCustom - IIS Application Pool changed.",
+                "Generic - Test Test Test.",
+                "Generic - Test Test Test.",
+                "Genericshort",
+                "Genericshort"
             ])
         }
         create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),createAlert)
@@ -836,12 +872,16 @@ def handle_beacon():
     # Register client if new, or update agent fields if not
     agent_id = hash_id(agent_name, hostname, ip, os_name)
 
-    if message.split(" ")[0].lower() == "reregister":
-        if agent_id in agents:
-            del agents[agent_id]
-        else:
-            with open(LOGFILE, "a") as f:
-                f.write(f"[-] {timestamp} /beacon - Agent claims it is reregistering but we have no prior record of it. Agent_id: {agent_id}. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}\n")
+    try:
+        if message.split(" ")[0].lower() == "reregister":
+            if agent_id in agents:
+                del agents[agent_id]
+            else:
+                with open(LOGFILE, "a") as f:
+                    f.write(f"[-] {timestamp} /beacon - Agent claims it is reregistering but we have no prior record of it. Agent_id: {agent_id}. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}\n")
+    except Exception as E:
+        # Weird format
+        pass
 
     if agent_id not in agents:
         agents[agent_id] = {
@@ -877,18 +917,22 @@ def handle_beacon():
     messages[message_id] = messageDict
 
     # Handle RESUME
-    if messageDict["message"].lower().split(" - ")[1].split(" ")[0] == "resumed":
-        agents[messageDict["agent_id"]]["pausedUntil"] = 0
-        pattern = r'(\d+)\s*(?=seconds\b)'
-        match = re.search(pattern, messageDict["message"])
-        if match:
-            seconds = int(match.group(1))
-            criteria = {"agent_id": messageDict["agent_id"], "tag": ("New", "Active"), "message": (f"Agent - Resumed after sleeping for {seconds} seconds.",f"Agent - Resumed after sleeping for {seconds} seconds, EARLY EXIT.")}
-            incident_id = find_incident(incidents,criteria,False)
-            incidents[incident_id]["tag"] = "Closed"
-        else:
-            with open(LOGFILE, "a") as f:
-                f.write(f"[-] {timestamp} /beacon - cannot parse seconds attribute in resume incident. Full message: {messageDict["message"]}.\n")
+    try:
+        if messageDict["message"].lower().split(" - ")[1].split(" ")[0] == "resumed":
+            agents[messageDict["agent_id"]]["pausedUntil"] = 0
+            pattern = r'(\d+)\s*(?=seconds\b)'
+            match = re.search(pattern, messageDict["message"])
+            if match:
+                seconds = int(match.group(1))
+                criteria = {"agent_id": messageDict["agent_id"], "tag": ("New", "Active"), "message": (f"Agent - Resumed after sleeping for {seconds} seconds.",f"Agent - Resumed after sleeping for {seconds} seconds, EARLY EXIT.")}
+                incident_id = find_incident(incidents,criteria,False)
+                incidents[incident_id]["tag"] = "Closed"
+            else:
+                with open(LOGFILE, "a") as f:
+                    f.write(f"[-] {timestamp} /beacon - cannot parse seconds attribute in resume incident. Full message: {messageDict["message"]}.\n")
+    except Exception as E:
+        # Doesnt match format
+        pass
 
     # Trigger incident if needed. Incident means that oldStatus is FALSE (malicious action or critical error detected)
     if oldStatus == False:
@@ -1065,7 +1109,7 @@ def add_incident():
     create_incident(messageDict,tag="New",assignee=assignee,createAlert=createAlert)
 
     with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /add_incident - Successful connection from {current_user.id} at {request.remote_addr}. Creating incident with details [newStatus,message,assignee,createAlert].\n")
+        f.write(f"[+] {timestamp} /add_incident - Successful connection from {current_user.id} at {request.remote_addr}. Creating incident with details {[newStatus,message,assignee,createAlert]}.\n")
     return jsonify({"status": "ok"})
 
 @app.route("/add_user", methods=["POST"])
@@ -1290,10 +1334,10 @@ if __name__ == "__main__":
     threading.Thread(target=webhook_main, daemon=True).start()
 
     # Test data
-    add_test_data_agents(30)
-    add_test_data_messages(50)
-    add_test_data_incidents_custom(10)
-    add_test_data_incidents(30)
+    #add_test_data_agents(30)
+    #add_test_data_messages(50)
+    #add_test_data_incidents_custom(10)
+    #add_test_data_incidents(30)
     #add_test_data_comp(0)
     #add_test_data_cmds()
 
