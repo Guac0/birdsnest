@@ -9,11 +9,12 @@ import random
 import atexit, signal, sys
 import threading, time
 import json
-from collections import  deque
+from collections import deque
 import base64
 from urllib.parse import urlparse, unquote_plus
 import urllib.request
 import urllib.error
+import math
 
 # TODO synch
 
@@ -35,10 +36,11 @@ LOGFILE         = f"log_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.txt"   # 
 SAVEFILE        = f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"#f"save_testing2.json" # Savefile to save/load data from. Default f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"
 SAVE_INTERVAL   = 60                    # Seconds between autosaves
 STALE_TIME      = 300                   # If agent has not checked in for this time period in seconds, mark them as stale
-TESTHOOKSLEEP = 0.25
-WEBHOOK_URL = ""
+DEFAULT_WEBHOOK_SLEEP_TIME = 0.25       # Seconds between webhook uploads. Mostly just used as a fallback value in case auto rate limiting fails
+MAX_WEBHOOK_MSG_PER_MINUTE = 30         # max 30 as of december 2025 for discord. this is shared between all webhooks in a single channel
+#WEBHOOK_URL = ""
 # test
-#WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
+WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
 # ccdc
 #WEBHOOK_URL     = "https://discord.com/api/webhooks/1445154855214780459/N1mBMKjo2mvzCdGuRa6sH92UG394rFVr8PR9ZXuapcvLWDsGCYji47LN-GRQ5L2NTRzY"
 # === BEACON CONFIG ===
@@ -71,6 +73,8 @@ app.config.update(
 # === Initialize Misc Vars ===
 start_time = time.time()
 last_save_time=0
+webhook_queue = deque()
+webhook_queue_cond = threading.Condition()
 TTYD_PROCESS = None
 class User(UserMixin):
     def __init__(self, id, role):
@@ -129,10 +133,93 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
     incidents[incident_id] = incidentDict
 
     if createAlert:
-        discord_webhook(incident_id,incidentDict)
-        # TODO trigger web alert
+        #discord_webhook(incident_id,incidentDict)
+        with webhook_queue_cond: # Might lead to minor sleep but nothing major
+            webhook_queue.append({"incident_id": incident_id, "incident":incidentDict})
+            webhook_queue_cond.notify() 
+        # TODO trigger web alert?
     
     return
+
+def webhook_main():
+    """Dedicated rate-limited sender thread with dynamic rate limiting."""
+
+    last_60_seconds = [] # list of sent times as epoch time
+    
+    while True:
+        # -----------------------------
+        # BLOCKING dequeue (popleft)
+        # -----------------------------
+        with webhook_queue_cond:
+            while not webhook_queue:
+                webhook_queue_cond.wait()
+            payload = webhook_queue.popleft()
+
+        # Send the webhook and get the response/body
+        resp, body = discord_webhook(payload["incident_id"], payload["incident"])
+
+        sleep_time = 0  # default unless rate limited
+
+        try:
+            if resp.code == 429:
+                # Rate limited by Discord
+                bodyDict = json.loads(body)
+                sleep_time = float(bodyDict["retry_after"])
+
+                # Requeue at TOP
+                with webhook_queue_cond:
+                    webhook_queue.appendleft(payload)
+                    webhook_queue_cond.notify()
+
+                with open(LOGFILE, "a") as f:
+                    f.write(f"[-] {timestamp} /webhook_main - Retry_After succeeded, re-queued incident and sleeping for {sleep_time}.\n")
+
+            else:
+                # Maybe rate-limit headers present
+                remaining = resp.getheader("X-RateLimit-Remaining")
+                reset_after = resp.getheader("X-RateLimit-Reset-After")
+
+                if remaining is not None and reset_after is not None:
+                    try:
+                        remaining_int = int(remaining)
+                        reset_after_float = float(reset_after)
+
+                        if remaining_int == 0:
+                            sleep_time = reset_after_float
+                            with open(LOGFILE, "a") as f:
+                                f.write(f"[-] {timestamp} /webhook_main - incident {payload['incident_id']}: 0 responses remaining, sleeping for {sleep_time}.\n")
+                    except ValueError:
+                        sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
+                        with open(LOGFILE, "a") as f:
+                            f.write(f"[-] {timestamp} /webhook_main - incident {payload['incident_id']}: failed to parse headers, sleeping {sleep_time}.\n")
+                else:
+                    sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
+                    with open(LOGFILE, "a") as f:
+                        f.write(f"[-] {timestamp} /webhook_main - Missing rate limit headers, sleeping {sleep_time}.\n")
+
+        except Exception as e:
+            sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
+            with open(LOGFILE, "a") as f:
+                f.write(f"[-] {timestamp} /webhook_main - caught unknown error from discord_webhook - {e}.\n")
+
+        last_60_seconds.append(time.time())
+
+        for incTime in last_60_seconds:
+            if (time.time() - incTime) > 60:
+                last_60_seconds.remove(incTime)
+        
+        if len(last_60_seconds) >= MAX_WEBHOOK_MSG_PER_MINUTE - 1:
+            new_sleep_time = 60 - (time.time() - last_60_seconds[0]) # how long until first message is out of the 60 second window
+            if new_sleep_time < sleep_time: # dont go below existing ratelimit if any
+                new_sleep_time = sleep_time
+            new_sleep_time = math.ceil(new_sleep_time * 100) / 100 # round to 2 decimals
+            if new_sleep_time > (60 / MAX_WEBHOOK_MSG_PER_MINUTE): # reduce noise in normal operation
+                with open(LOGFILE, "a") as f:
+                    f.write(f"[-] {timestamp} /webhook_main - client side ratelimiting enabled: sleeping for {new_sleep_time} seconds. Old sleep_time: {sleep_time}. len(last_60_seconds): {len(last_60_seconds)}. MAX_WEBHOOK_MSG_PER_MINUTE: {MAX_WEBHOOK_MSG_PER_MINUTE}.\n") 
+            sleep_time = new_sleep_time # If we are client side ratelimited, set extra time to compensate for discord channel ratelimiting (wait until oldest message drops off)
+
+        # Rate limit enforcement
+        time.sleep(sleep_time)
 
 def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
     #compare rules level to set colors of the alert
@@ -156,7 +243,7 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
     elif (incident["message"].lower().split(' ')[0] == "uptime"):
         color = "5a0b05"
     else:
-        color = "6184542"
+        color = "6184542" # unknown
 
     #data that the webhook will receive and use to display the alert in discord chat
     # TODO: proper agent name
@@ -234,9 +321,12 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
         ]
         })
 
-    headers = {'content-type': 'application/json', 'Accept-Charset': 'UTF-8'}
+    headers = {
+        'content-type': 'application/json',
+        'Accept-Charset': 'UTF-8',
+        'User-Agent': 'python-urllib/3' # Required for urllib, automatic with requests
+    }
     data = payload.encode("utf-8") if isinstance(payload, str) else json.dumps(payload).encode("utf-8")
-
     req = urllib.request.Request(
         url,
         data=data,
@@ -245,17 +335,28 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            status_code = resp.getcode()
-            status_text = resp.read().decode("utf-8")
-    except urllib.error.HTTPError as err:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /discord_webhook - failed to send message for incident {incident_id}. StatusCode: {err.code}. StatusText: {err.read().decode('utf-8') if err.fp else ''}.\n")
-    else:
-         with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /discord_webhook - sent message for incident {incident_id}.\n")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            with open(LOGFILE, "a") as f:
+                f.write(f"[-] {timestamp} /discord_webhook - sent message for incident {incident_id}.\n")
 
-    return
+            #status_code = resp.getcode()
+            #status_text = resp.read().decode("utf-8")
+            #response_headers = resp.getheaders()   # <-- tuple list of headers
+
+            #print("Status Code:", status_code)
+            #print("Headers:")
+            #for k, v in response_headers:
+            #    print(f"  {k}: {v}")
+            #print("Body:")
+            #print(status_text)
+
+            body = resp.read().decode('utf-8') if resp.fp else ''  # consume body
+            return resp, body  # return the response for headers inspection
+    except urllib.error.HTTPError as err: #error is actually the full comm object
+        body = err.read().decode('utf-8') if err.fp else ''
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /discord_webhook - failed to send message for incident {incident_id}. StatusCode: {err.code}. Body: {body}.\n") # Headers: {err.headers}. 
+        return err,body
 
 def check_stale(agents,incidents):
     """
@@ -452,13 +553,11 @@ def add_test_data_incidents(num=15,createAlert=True):
                 "ServiceCustom - MySQL users changed.",
                 "ServiceCustom - MySQL data changed.",
                 "ServiceCustom - IIS Site Config changed.",
-                "ServiceCustom - IIS Application Pool changed.",
-                "Generic - Test Test Test.",
-                "Generic - Test Test Test."
+                "ServiceCustom - IIS Application Pool changed."#,
+                #"Generic - Test Test Test.",
+                #"Generic - Test Test Test."
             ])
         }
-        if createAlert:
-            time.sleep(TESTHOOKSLEEP)
         create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),createAlert)
 
 def add_test_data_incidents_custom(num=5,createAlert=True):
@@ -475,8 +574,6 @@ def add_test_data_incidents_custom(num=5,createAlert=True):
                 "Uptime - Fix failed {check} scorecheck on {hostname} / {ipaddress}."
             ])
         }
-        if createAlert:
-            time.sleep(TESTHOOKSLEEP)
         create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),createAlert)
 
 # =================================
@@ -1065,19 +1162,22 @@ if __name__ == "__main__":
     # Load previous state if available
     load_state()
 
-    # Test data
-    add_test_data_agents()
-    add_test_data_incidents()
-    add_test_data_incidents_custom()
-    #add_test_data_comp(0)
-    #add_test_data_cmds()
-
     # Save on exit setup - see signal_handler() and save_state()
-        # Registering both signal and atexit may cause saves to happen twice, but oh well. Not like it's a ton of work anyways.
+    # Registering both signal and atexit may cause saves to happen twice, but oh well. Not like it's a ton of work anyways.
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     atexit.register(save_state)
 
-    # Start
+    # Start threads before test data to avoid delays
     threading.Thread(target=periodic_autosave, daemon=True).start()
+    threading.Thread(target=webhook_main, daemon=True).start()
+
+    # Test data
+    add_test_data_agents()
+    add_test_data_incidents_custom(30)
+    add_test_data_incidents(70)
+    #add_test_data_comp(0)
+    #add_test_data_cmds()
+
+    # Start main app. Do not put any code below this line
     app.run(host=HOST, port=PORT)
