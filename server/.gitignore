@@ -1,0 +1,5 @@
+./server*
+./test
+./templates_compile
+./static_compile
+./build_assets
