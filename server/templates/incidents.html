@@ -79,7 +79,14 @@ Security & production notes:
   .sla-blood      { color: #ff4500; }   /* blood orange */
   .sla-none       { color: #cccccc; }
   html,body{height:100%;margin:0;background:linear-gradient(180deg,#061026 0%, #071426 100%);color:#dbe7f0;}
-  .container{max-width:var(--max-width);margin:28px auto;padding:20px;}
+  .container{
+    /*max-width:var(--max-width);*/
+    width: 100%;
+    max-width: 100vw;   /* full viewport width */
+    margin:14px auto;
+    padding:20px;
+    box-sizing: border-box; /* ensures padding doesn’t overflow */
+  }
   header{display:flex;gap:16px;align-items:center;margin-bottom:18px;}
   h1{margin:0;font-size:22px;letter-spacing:0.2px;}
   .sub{color:var(--muted);font-size:13px;margin-top:4px;}
@@ -97,7 +104,14 @@ Security & production notes:
   input[type="search"]{min-width:260px}
   .chip{padding:6px 10px;border-radius:999px;font-weight:600;background:var(--glass);border:1px solid rgba(255,255,255,0.03);cursor:pointer}
   .chip.active{box-shadow:0 6px 18px rgba(0,0,0,0.6);transform:translateY(-1px);}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--card-gap);}
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, 400px);
+    justify-content: center;   /* center the grid in the container */
+    /*grid-template-columns:repeat(auto-fill,minmax(500px,1fr));*/
+    /*grid-template-columns: repeat(5, 1fr);*/
+    gap:var(--card-gap);
+  }
   .card{
     background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
     padding:14px;border-radius:var(--radius);box-shadow:0 6px 20px rgba(2,6,23,0.75);border:1px solid rgba(255,255,255,0.02);
@@ -172,6 +186,42 @@ Security & production notes:
     gap: 0.5rem;
   }
 
+    
+  .site-footer {
+      background-color: #042033; /* light gray */
+      text-align: center;
+      padding: 15px 0;
+      font-size: 0.9rem;
+      color: #555;
+      /*border-top: 1px solid #e0e0e0;*/
+  }
+
+  .site-footer a {
+      color: #007bff; /* blue link */
+      text-decoration: none;
+      font-weight: 500;
+  }
+
+  .site-footer a:hover {
+      text-decoration: underline;
+  }
+
+  .header-container {
+      display: flex;
+      align-items: center;      /* vertically align image and text */
+      gap: 10px;                /* space between image and text */
+      flex-wrap: wrap;          /* wrap text to next line if needed */
+  }
+
+  .header-container h1 {
+      margin: 0;
+  }
+
+  .header-icon {
+      width: 40px;              /* adjust size as needed */
+      height: 40px;
+  }
+
   /* responsive tweaks */
   @media (max-width:700px){ .controls{flex-direction:column;align-items:stretch} header{flex-direction:column;align-items:flex-start} .topbar-stats{flex-wrap:wrap} }
 </style>
@@ -179,13 +229,15 @@ Security & production notes:
 <body>
   <div class="container" id="app">
     <header>
-      <div>
+      <div class="header-container">
+        <img src="../static/favicon.ico" alt="RIT Tiger" class="header-icon">
         <h1>Incidents Dashboard</h1>
-        <a href="/">Back to Home</a>
-        <div class="sub">Click <strong>Claim</strong> to tag an incident as <em>Active</em>, <strong>Resolve</strong> to tag as <em>Closed</em>, or <strong>Reopen</strong> to mark as <em>New</em>. You must have <code>Analyst</code> permissions to do this.</div>
-        <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Interface</span>, <span class="color-service-generic">Service Generic</span>, <span class="color-service-custom">Service Custom</span>, <span class="color-agent-alert">Agent Alert</span>, <span class="color-ir">IR</span>, <span class="color-inject">Inject</span>, <span class="color-uptime">Uptime</span>, <span class="color-uptime">Server</span>, <span class="color-unknown">Other</span>.</div>
-        <div class="sub">Tip: use "<strong>incident</strong> <code>(number)</code>" as a search term to limit results to only incidents.</div>
-        <!-- <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Green</span> for <strong>Interface</strong>, <span class="color-service-generic">Blue</span> for <strong>Service Generic</strong>, <span class="color-service-custom">Yellow</span> for <strong>Service Custom</strong>, <span class="color-agent-alert">Purple</span> for <strong>Agent Alert</strong>, <span class="color-unknown">Gray</span> for <strong>Unknown</strong>.</div> -->
+        <a href="/" style="padding-left: 20px;">Back to Home</a>
+        <div style="padding-left: 20px;">
+          <div class="sub">Click <strong>Claim</strong> to tag an incident as <em>Active</em>, <strong>Resolve</strong> to tag as <em>Closed</em>, or <strong>Reopen</strong> to mark as <em>New</em>. You must have <code>Analyst</code> permissions to do this.</div>
+          <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Interface</span>, <span class="color-service-generic">Service Generic</span>, <span class="color-service-custom">Service Custom</span>, <span class="color-agent-alert">Agent Alert</span>, <span class="color-ir">IR</span>, <span class="color-inject">Inject</span>, <span class="color-uptime">Uptime</span>, <span class="color-uptime">Server</span>, <span class="color-unknown">Other</span>.</div>
+          <div class="sub">Tip: use "<strong>incident</strong> <code>(number)</code>" as a search term to limit results to only incidents.</div>
+        </div>
       </div>
       <div style="flex:1"></div>
       <div class="topbar-stats" aria-hidden>
@@ -319,6 +371,15 @@ Security & production notes:
     </div>
   </div>
 </div>
+
+<footer class="site-footer">
+  <p>
+    Made by the 
+    <a href="https://github.com/CCDC-RIT" target="_blank" rel="noopener noreferrer">
+      Rochester Institute of Technology Collegiate Cyber Defense Team
+    </a>
+  </p>
+</footer>
 
 <script>
 // first time load - populate search for incident

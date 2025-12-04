@@ -20,9 +20,9 @@
 }
 
 html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg), #071020);color:var(--text);}
-.container{max-width:1200px;margin:28px auto;padding:20px;}
+.container{max-width:1200px;margin:14px auto;padding:20px;}
 
-header{display:flex;align-items:center;gap:16px;margin-bottom:28px;flex-wrap:wrap;}
+header{display:flex;align-items:center;gap:16px;margin-bottom:0px;flex-wrap:wrap;}
 header h1{margin:0;font-size:28px;}
 header p.lead{margin:0;color:var(--muted);font-size:14px;}
 
@@ -51,12 +51,48 @@ header p.lead{margin:0;color:var(--muted);font-size:14px;}
 
 .toast{position:fixed;bottom:20px;right:20px;background:var(--accent);color:#042033;padding:12px 18px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;transition:opacity 0.3s ease;z-index:100}
 .toast.show{opacity:1;}
+
+.site-footer {
+    background-color: #042033; /* light gray */
+    text-align: center;
+    padding: 15px 0;
+    font-size: 0.9rem;
+    color: #555;
+    /*border-top: 1px solid #e0e0e0;*/
+}
+
+.site-footer a {
+    color: #007bff; /* blue link */
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.site-footer a:hover {
+    text-decoration: underline;
+}
+
+.header-container {
+    display: flex;
+    align-items: center;      /* vertically align image and text */
+    gap: 10px;                /* space between image and text */
+    flex-wrap: wrap;          /* wrap text to next line if needed */
+}
+
+.header-container h1 {
+    margin: 0;
+}
+
+.header-icon {
+    width: 40px;              /* adjust size as needed */
+    height: 40px;
+}
 </style>
 </head>
 <body>
 <div class="container">
   <header>
-    <div>
+    <div class="header-container">
+      <img src="../static/favicon.ico" alt="RIT Tiger" class="header-icon">
       <h1>Stabvest Homepage</h1>
       <p class="lead">This homepage is your central hub. Use the links below to access the various dashboards.</p>
     </div>
@@ -111,6 +147,15 @@ header p.lead{margin:0;color:var(--muted);font-size:14px;}
 </div>
 
 <div id="toast" class="toast">Server statistics updated successfully</div>
+
+<footer class="site-footer">
+  <p>
+    Made by the 
+    <a href="https://github.com/CCDC-RIT" target="_blank" rel="noopener noreferrer">
+      Rochester Institute of Technology Collegiate Cyber Defense Team
+    </a>
+  </p>
+</footer>
 
 <script>
 const ENDPOINTS = {
