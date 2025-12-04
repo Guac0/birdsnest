@@ -16,6 +16,8 @@ import urllib.request
 import urllib.error
 import math
 from pathlib import Path
+import logging
+from logging.handlers import RotatingFileHandler
 
 CONFIG_DEFAULTS = {
     "HOST": "127.0.0.1",
@@ -53,8 +55,8 @@ def load_config(path):
 
     if badPath:
         print(f"[-] {timestamp} load_config(): config file path not found: {path}")
-        with open(config.get("LOGFILE"), "a") as f:
-            f.write(f"[-] {timestamp} load_config(): config file path not found: {path}\n")
+        with open(config.get("LOGFILE"), "a") as f: # intentionally not the correct logfile format
+            f.write(f"[{timestamp}] CRITICAL - load_config(): config file path not found: {path}")
 
     #config["PUBLIC_URL"] = f"http://{config['HOST']}:{config['PORT']}"
     #config["LOGFILE"] = f"log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
@@ -155,16 +157,37 @@ incidents           = {}    # incident_id (increments with each incident): {time
 
 # === BEACON SUPPORT ===
 
-def load_config():
-    with CONFIG_PATH.open("r") as f:
-        data = json.load(f)
+def setup_logging():
+    # 1. Create a logger instance
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO) # Set the minimum logging level
 
-    # Runtime-generated fields
-    data["PUBLIC_URL"] = f"http://{data['HOST']}:{data['PORT']}"
-    data["LOGFILE"] = f"log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
-    data["SAVEFILE"] = f"save_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
-
-    return data
+    # 2. Create a file handler
+    # Use RotatingFileHandler to automatically manage file size and rotation
+    # maxBytes: 10MB, backupCount: keep 10 old log files
+    handler = RotatingFileHandler(
+        LOGFILE,
+        maxBytes=10 * 1024 * 1024,
+        backupCount=10,
+        encoding='utf-8'
+    )
+    
+    # 3. Define the log format
+    formatter = logging.Formatter(
+        '[%(asctime)s] %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    
+    # 4. Add the handler to the logger
+    logger.addHandler(handler)
+    
+    # 5. Disable default handlers (often necessary in Flask/Werkzeug)
+    if logger.hasHandlers():
+        logger.handlers.clear()
+    logger.addHandler(handler)
+    
+    return logger
 
 def hash_id(*args):
     # hash any number of args so that we have a single value to use as the id that remains unique if multiple items have similar fields
@@ -196,8 +219,7 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
     }
 
     if incident_id in incidents:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /create_incident - incidents hash collision. Old incident: {incidents[incident_id]}. New incident: {incidentDict}\n")
+        logger.warning(f"/create_incident - incidents hash collision. Old incident: {incidents[incident_id]}. New incident: {incidentDict}")
     incidents[incident_id] = incidentDict
 
     try:
@@ -209,8 +231,7 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
                 seconds = int(match.group(1))
                 agents[incidentDict["agent_id"]]["pausedUntil"] = time.time() + seconds
             else:
-                with open(LOGFILE, "a") as f:
-                    f.write(f"[-] {timestamp} /create_incident - cannot parse seconds attribute in pause incident. Full message: {incidentDict["message"]}.\n")
+                logger.error(f"/create_incident - cannot parse seconds attribute in pause incident. Full message: {incidentDict["message"]}.")
     except Exception as E:
         # Custom incident that doesnt follow the format
         pass
@@ -255,8 +276,7 @@ def webhook_main():
                     webhook_queue.appendleft(payload)
                     webhook_queue_cond.notify()
 
-                with open(LOGFILE, "a") as f:
-                    f.write(f"[-] {timestamp} /webhook_main - Retry_After succeeded, re-queued incident and sleeping for {sleep_time}.\n")
+                logger.warning(f"/webhook_main - Retry_After succeeded, re-queued incident and sleeping for {sleep_time}.")
 
             else:
                 # Maybe rate-limit headers present
@@ -270,21 +290,17 @@ def webhook_main():
 
                         if remaining_int == 0:
                             sleep_time = reset_after_float
-                            with open(LOGFILE, "a") as f:
-                                f.write(f"[-] {timestamp} /webhook_main - incident {payload['incident_id']}: 0 responses remaining, sleeping for {sleep_time}.\n")
+                            logger.info(f"/webhook_main - incident {payload['incident_id']}: 0 responses remaining, sleeping for {sleep_time}.")
                     except ValueError:
                         sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
-                        with open(LOGFILE, "a") as f:
-                            f.write(f"[-] {timestamp} /webhook_main - incident {payload['incident_id']}: failed to parse headers, sleeping {sleep_time}.\n")
+                        logger.warning(f"/webhook_main - incident {payload['incident_id']}: failed to parse headers, sleeping {sleep_time}.")
                 else:
                     sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
-                    with open(LOGFILE, "a") as f:
-                        f.write(f"[-] {timestamp} /webhook_main - Missing rate limit headers, sleeping {sleep_time}.\n")
+                    logger.warning(f"/webhook_main - Missing rate limit headers, sleeping {sleep_time}.")
 
         except Exception as e:
             sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
-            with open(LOGFILE, "a") as f:
-                f.write(f"[-] {timestamp} /webhook_main - caught unknown error from discord_webhook - {e}.\n")
+            logger.error(f"/webhook_main - caught unknown error from discord_webhook - {e}.")
 
         last_60_seconds.append(time.time())
 
@@ -298,8 +314,7 @@ def webhook_main():
                 new_sleep_time = sleep_time
             new_sleep_time = math.ceil(new_sleep_time * 100) / 100 # round to 2 decimals
             if new_sleep_time > (60 / MAX_WEBHOOK_MSG_PER_MINUTE): # reduce noise in normal operation
-                with open(LOGFILE, "a") as f:
-                    f.write(f"[-] {timestamp} /webhook_main - client side ratelimiting enabled: sleeping for {new_sleep_time} seconds. Old sleep_time: {sleep_time}. len(last_60_seconds): {len(last_60_seconds)}. MAX_WEBHOOK_MSG_PER_MINUTE: {MAX_WEBHOOK_MSG_PER_MINUTE}.\n") 
+                logger.info(f"/webhook_main - client side ratelimiting enabled: sleeping for {new_sleep_time} seconds. Old sleep_time: {sleep_time}. len(last_60_seconds): {len(last_60_seconds)}. MAX_WEBHOOK_MSG_PER_MINUTE: {MAX_WEBHOOK_MSG_PER_MINUTE}.") 
             sleep_time = new_sleep_time # If we are client side ratelimited, set extra time to compensate for discord channel ratelimiting (wait until oldest message drops off)
 
         # Rate limit enforcement
@@ -456,8 +471,7 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
 
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
-            with open(LOGFILE, "a") as f:
-                f.write(f"[-] {timestamp} /discord_webhook - sent message for incident {incident_id}.\n")
+            logger.info(f"/discord_webhook - sent message for incident {incident_id}.")
 
             #status_code = resp.getcode()
             #status_text = resp.read().decode("utf-8")
@@ -474,8 +488,7 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
             return resp, body  # return the response for headers inspection
     except urllib.error.HTTPError as err: #error is actually the full comm object
         body = err.read().decode('utf-8') if err.fp else ''
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /discord_webhook - failed to send message for incident {incident_id}. StatusCode: {err.code}. Body: {body}.\n") # Headers: {err.headers}. 
+        logger.error(f"/discord_webhook - failed to send message for incident {incident_id}. StatusCode: {err.code}. Body: {body}.") # Headers: {err.headers}. 
         return err,body
 
 def check_stale(agents,incidents):
@@ -544,7 +557,6 @@ def find_incident(incidents, criteria, newest=False):
 # === SAVE AND LOAD ===
 def save_state(filepath=SAVEFILE):
     global last_save_time
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def prepare(data):
         if isinstance(data, set):
@@ -569,8 +581,7 @@ def save_state(filepath=SAVEFILE):
 
     last_save_time=time.time()
 
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} save_state - saved current database to {LOGFILE}\n")
+    logger.info(f"save_state - saved current database to {SAVEFILE}")
 
 def signal_handler(signum, frame):
     save_state()
@@ -583,7 +594,6 @@ def periodic_autosave(interval=SAVE_INTERVAL):
 
 def load_state(filepath=SAVEFILE):
     global webgui_users, agents, messages, incidents, agent_auth_tokens
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
         with open(filepath, "r") as f:
@@ -603,12 +613,10 @@ def load_state(filepath=SAVEFILE):
         messages = state["messages"]
         incidents = state["incidents"]
 
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} load_state - {filepath} loaded!\n")
+        logger.info(f"load_state - {filepath} loaded!")
 
     except FileNotFoundError:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} load_state - {filepath} not found, starting fresh\n")
+        logger.error(f"load_state - {filepath} not found, starting fresh!")
 
 # === LOGIN AND MISC ===
 
@@ -794,76 +802,57 @@ def add_test_data_incidents_custom(num=5,createAlert=True):
 @app.route("/dashboard")
 @login_required
 def page_dashboard():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /dashboard - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/dashboard - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("dashboard.html")
 
 @app.route("/agents")
 @login_required
 def page_agents():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /agents - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/agents - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("agents.html")
 
 @app.route("/messages")
 @login_required
 def page_messages():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /messages - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/messages - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("messages.html")
 
 @app.route("/deployment")
 @login_required
 @analyst_required
 def page_deployment():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /deployment - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"deployment - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("deployment.html")
 
 @app.route("/incidents")
 @login_required
 def page_incidents():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /incidents - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/incidents - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("incidents.html")
 
 @app.route("/management")
 @login_required
 @admin_required
 def page_management():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /management - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"management - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("management.html")
 
 @app.route('/favicon.ico')
 def favicon():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /favicon.ico - Successful connection at {request.remote_addr}\n")
+    logger.info(f"favicon.ico - Successful connection at {request.remote_addr}")
     return send_from_directory(os.path.join(app.root_path, 'static'),'favicon.ico',mimetype='image/vnd.microsoft.icon')
 
 @app.route('/background.jpg')
 def background():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /background.jpg - Successful connection at {request.remote_addr}\n")
+    logger.info(f"/background.jpg - Successful connection at {request.remote_addr}")
     return send_from_directory(os.path.join(app.root_path, 'static'),'background.jpg',mimetype='image/vnd.microsoft.icon')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     # For GET render pass the next param to template so the form includes it
     if request.method == 'GET':
         next_param = request.args.get('next', '')
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /login - Successful connection at {request.remote_addr}\n")
+        logger.info(f"/login - Successful connection at {request.remote_addr}")
         return render_template('login.html', next=next_param)
 
     # POST
@@ -876,8 +865,7 @@ def login():
         user_obj = User(username, user['role'])
         login_user(user_obj)
         session.permanent = True
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /login - Successful authentication for {username} from {request.remote_addr}\n")
+        logger.info(f"/login - Successful authentication for {username} from {request.remote_addr}")
 
         # Validate next and redirect safely
         if is_safe_path(next_param):
@@ -885,16 +873,13 @@ def login():
         return redirect(url_for('page_dashboard'))
 
     flash('Invalid username or password', 'danger')
-    with open(LOGFILE, "a") as f:
-        f.write(f"[-] {timestamp} /login - Unsuccessful connection for {username} with password {password} from {request.remote_addr}\n")
+    logger.error(f"/login - Unsuccessful connection for {username} with password {password} from {request.remote_addr}")
     return render_template('login.html', next=next_param)
 
 @app.route('/logout')
 @login_required
 def logout():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /logout - Logging out user {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/logout - Logging out user {current_user.id} at {request.remote_addr}")
 
     logout_user()
     return redirect(url_for('login'))
@@ -902,9 +887,7 @@ def logout():
 @app.route('/whoami')
 @login_required
 def whoami():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /whoami - Successful connection for {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/whoami - Successful connection for {current_user.id} at {request.remote_addr}")
     return jsonify({"username": current_user.id, "role": current_user.role})
 
 # === BEACONS ===
@@ -912,8 +895,7 @@ def whoami():
 @app.route("/ping", methods=["POST"])
 def ping():
     # Provides an endpoint for the client to check that they can reach the server fine. Does not check auth.
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} /ping - Successful connection from {request.remote_addr}\n")
+    logger.info(f"/ping - Successful connection from {request.remote_addr}")
     return "ok", 200
 
 @app.route("/beacon", methods=["POST"])
@@ -932,17 +914,13 @@ def handle_beacon():
     newStatus = data.get("newStatus")
     message = data.get("message")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     # Auth check
     if not auth in agent_auth_tokens:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[hostname, ip, os_name, auth]}\n")
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[hostname, ip, os_name, auth]}")
         return "Unauthorized", 403
     
     if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}\n")
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
         return "Missing data", 400
 
     # Register client if new, or update agent fields if not
@@ -953,8 +931,7 @@ def handle_beacon():
             if agent_id in agents:
                 del agents[agent_id]
             else:
-                with open(LOGFILE, "a") as f:
-                    f.write(f"[-] {timestamp} /beacon - Agent claims it is reregistering but we have no prior record of it. Agent_id: {agent_id}. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}\n")
+                logger.warning(f"/beacon - Agent claims it is reregistering but we have no prior record of it. Agent_id: {agent_id}. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
     except Exception as E:
         # Weird format
         pass
@@ -978,9 +955,9 @@ def handle_beacon():
         agents[agent_id]["lastStatus"] = newStatus
     
     # Update messages{}
-    message_id = hash_id(timestamp, agent_id)
+    message_id = hash_id(time.time(), agent_id)
     messageDict = {
-        "timestamp": timestamp,
+        "timestamp": time.time(),
         "agent_id": agent_id,
         "oldStatus": oldStatus,
         "newStatus": newStatus,
@@ -988,8 +965,7 @@ def handle_beacon():
     }
 
     if message_id in messages:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /beacon - messages hash collision. Old message: {messages[message_id]}. New message: {messageDict}\n")
+        logger.warning(f"/beacon - messages hash collision. Old message: {messages[message_id]}. New message: {messageDict}")
     messages[message_id] = messageDict
 
     # Handle RESUME
@@ -1004,8 +980,7 @@ def handle_beacon():
                 incident_id = find_incident(incidents,criteria,False)
                 incidents[incident_id]["tag"] = "Closed"
             else:
-                with open(LOGFILE, "a") as f:
-                    f.write(f"[-] {timestamp} /beacon - cannot parse seconds attribute in resume incident. Full message: {messageDict["message"]}.\n")
+                logger.error(f"/beacon - cannot parse seconds attribute in resume incident. Full message: {messageDict["message"]}.")
     except Exception as E:
         # Doesnt match format
         pass
@@ -1013,6 +988,8 @@ def handle_beacon():
     # Trigger incident if needed. Incident means that oldStatus is FALSE (malicious action or critical error detected)
     if oldStatus == False:
         create_incident(messageDict)
+
+    # dont log successful connection as thats in messages
 
     # Return
     return "ok", 200
@@ -1023,24 +1000,13 @@ def handle_beacon():
 @login_required
 @admin_required
 def list_users():
-    data = request.json
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /list_users - Successful connection from {current_user.id} at {request.remote_addr}\n")
-    
+    logger.info(f"/list_users - Successful connection from {current_user.id} at {request.remote_addr}")
     return jsonify(webgui_users)
 
 @app.route("/list_users_simple", methods=["POST"])
 @login_required
 def list_users_simple():
-    data = request.json
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /list_users_simple - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/list_users_simple - Successful connection from {current_user.id} at {request.remote_addr}")
     
     users = {} # username: role, where role is "guest","analyst", or "admin"
     for username in webgui_users:
@@ -1052,12 +1018,7 @@ def list_users_simple():
 @login_required
 @admin_required
 def list_tokens():
-    data = request.json
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /list_tokens - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/list_tokens - Successful connection from {current_user.id} at {request.remote_addr}")
     
     return jsonify(agent_auth_tokens)
 
@@ -1065,83 +1026,48 @@ def list_tokens():
 @login_required
 @admin_required
 def list_tokens_number():
-    data = request.json
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /list_tokens - Successful connection from {current_user.id} at {request.remote_addr}\n")
-    
+    logger.info(f"/list_tokens - Successful connection from {current_user.id} at {request.remote_addr}")
     return jsonify({"number": len(agent_auth_tokens)})
 
 @app.route("/list_agents", methods=["POST"])
 @login_required
 def list_agents():
-    data = request.json
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /list_agents - Successful connection from {current_user.id} at {request.remote_addr}\n")
-    
+    logger.info(f"/list_agents - Successful connection from {current_user.id} at {request.remote_addr}")
     return jsonify(agents)
 
 @app.route("/list_messages", methods=["POST"])
 @login_required
 def list_messages():
-    data = request.json
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /list_messages - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/list_messages - Successful connection from {current_user.id} at {request.remote_addr}")
     
     return jsonify(messages)
 
 @app.route("/list_incidents", methods=["POST"])
 @login_required
 def list_incidents():
-    data = request.json
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /list_incidents - Successful connection from {current_user.id} at {request.remote_addr}\n")
-    
+    logger.info(f"/list_incidents - Successful connection from {current_user.id} at {request.remote_addr}")
     return jsonify(incidents)
 
 @app.route("/list_logfile", methods=["POST"])
 @login_required
 @admin_required
 def list_logfile(filepath=LOGFILE,lines=50):
-    data = request.json
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /list_logfile - Successful connection from {current_user.id} at {request.remote_addr}\n")
-    
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             # Use deque to keep only the last 50 lines in memory
             last_lines = deque(f, maxlen=lines)
+        logger.info(f"/list_logfile - Successful connection from {current_user.id} at {request.remote_addr}")
         return list(last_lines)
 
     except FileNotFoundError:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] /list_logfile - Successful connection from {current_user.id} at {request.remote_addr}\n")
-            return f"FileNotFound {filepath}", 400
+        logger.error(f"/list_logfile - Successful connection from {current_user.id} at {request.remote_addr}")
+        return f"FileNotFound {filepath}", 400
 
 @app.route("/save_export", methods=["POST"])
 @login_required
 @admin_required
 def save_export(filepath=SAVEFILE):
-    data = request.json
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /save_export - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/save_export - Successful connection from {current_user.id} at {request.remote_addr}")
     
     try:
         with open(filepath, "r") as f:
@@ -1159,9 +1085,8 @@ def save_export(filepath=SAVEFILE):
 
         return state
     except FileNotFoundError:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] /save_export - Successful connection from {current_user.id} at {request.remote_addr}\n")
-            return f"FileNotFound {filepath}", 400
+        logger.error(f"/save_export - Successful connection from {current_user.id} at {request.remote_addr}")
+        return f"FileNotFound {filepath}", 400
 
 # === FRONTEND INTERACTION ===
 
@@ -1178,19 +1103,15 @@ def add_incident():
     if not sla:
         sla = 0
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
     if not all([message]): # just the required string
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /add_incident - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[newStatus,message,assignee,createAlert,sla]}\n")
+        logger.warning(f"/add_incident - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[newStatus,message,assignee,createAlert,sla]}")
         return "Missing data", 400
     
     try:
         # epoch
         sla = float(sla)
     except:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /add_incident - Failed connection from {current_user.id} at {request.remote_addr} - bad sla value. Full details: {[newStatus,message,assignee,createAlert,sla]}\n")
+        logger.warning(f"/add_incident - Failed connection from {current_user.id} at {request.remote_addr} - bad sla value. Full details: {[newStatus,message,assignee,createAlert,sla]}")
         return "Bad SLA value", 400
     
     # not verifying data as I don't want to. TODO
@@ -1206,8 +1127,7 @@ def add_incident():
 
     create_incident(messageDict,tag="New",assignee=assignee,createAlert=createAlert)
 
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /add_incident - Successful connection from {current_user.id} at {request.remote_addr}. Creating incident with details {[newStatus,message,assignee,createAlert,sla]}.\n")
+    logger.info(f"/add_incident - Successful connection from {current_user.id} at {request.remote_addr}. Creating incident with details {[newStatus,message,assignee,createAlert,sla]}.")
     return jsonify({"status": "ok"})
 
 @app.route("/add_user", methods=["POST"])
@@ -1219,21 +1139,16 @@ def add_user():
     password = data.get("password")
     role = data.get("role")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
     if not all([username, password, role]):
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /add_user - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[username, password, role]}\n")
+        logger.warning(f"/add_user - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[username, password, role]}")
         return "Missing data", 400
     
     if role != "guest" and role != "analyst":
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /add_user - Failed connection from {current_user.id} at {request.remote_addr} - bad role value. Full details: {[username, password, role]}\n")
+        logger.warning(f"/add_user - Failed connection from {current_user.id} at {request.remote_addr} - bad role value. Full details: {[username, password, role]}")
         return "Bad role value", 400
 
     if username in webgui_users:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /add_user - Failed connection from {current_user.id} at {request.remote_addr} - bad username value, conflicts with existing user. Full details: {[username, password, role]}\n")
+        logger.warning(f"/add_user - Failed connection from {current_user.id} at {request.remote_addr} - bad username value, conflicts with existing user. Full details: {[username, password, role]}")
         return "New user overlaps with existing user", 400
 
     webgui_users[username] = {"password": password, "role": role} # TODO hash
@@ -1248,8 +1163,7 @@ def add_user():
     }
     create_incident(incident)
 
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /add_user - Successful connection from {current_user.id} at {request.remote_addr}. Adding user {username} with role {role}\n")
+    logger.info(f"/add_user - Successful connection from {current_user.id} at {request.remote_addr}. Adding user {username} with role {role}")
     return jsonify({"status": "ok"})
 
 @app.route("/delete_user", methods=["POST"])
@@ -1259,25 +1173,19 @@ def delete_user():
     data = request.json
     username = data.get("username")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
     if not all([username]):
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /delete_user - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[username]}\n")
+        logger.warning(f"/delete_user - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[username]}")
         return "Missing data", 400
     
     if not webgui_users[username]:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /delete_user - Failed connection from {current_user.id} at {request.remote_addr} - username not found. Full details: {[username]}\n")
+        logger.warning(f"/delete_user - Failed connection from {current_user.id} at {request.remote_addr} - username not found. Full details: {[username]}")
         return "Bad role value", 400
     
     if username == current_user.id:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /delete_user - Failed connection from {current_user.id} at {request.remote_addr} - cannot delete own user. Full details: {[username]}\n")
+        logger.warning(f"/delete_user - Failed connection from {current_user.id} at {request.remote_addr} - cannot delete own user. Full details: {[username]}")
         return "Target username cannot be the same as current username", 400
 
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /delete_user - Successful connection from {current_user.id} at {request.remote_addr}. Deleting user {username} with role {webgui_users[username]["role"]}\n")
+    logger.info(f"/delete_user - Successful connection from {current_user.id} at {request.remote_addr}. Deleting user {username} with role {webgui_users[username]["role"]}")
     
     incident = {
         "timestamp": time.time(),
@@ -1300,16 +1208,12 @@ def add_token():
     data = request.json
     token = data.get("token")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
     if not all([token]):
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /add_token - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[token]}\n")
+        logger.warning(f"/add_token - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[token]}")
         return "Missing data", 400
     
     if token in agent_auth_tokens:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /add_token - Failed connection from {current_user.id} at {request.remote_addr} - bad token value, conflicts with existing token. Full details: {[token]}\n")
+        logger.warning(f"/add_token - Failed connection from {current_user.id} at {request.remote_addr} - bad token value, conflicts with existing token. Full details: {[token]}")
         return "New user overlaps with existing user", 400
     
     incident = {
@@ -1324,8 +1228,7 @@ def add_token():
 
     agent_auth_tokens[token] = {"timestamp": time.time(), "added_by": current_user.id}
 
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /add_token - Successful connection from {current_user.id} at {request.remote_addr}. Adding token {token}\n")
+    logger.info(f"/add_token - Successful connection from {current_user.id} at {request.remote_addr}. Adding token {token}")
     return jsonify({"status": "ok"})
 
 @app.route("/delete_token", methods=["POST"])
@@ -1335,20 +1238,15 @@ def delete_token():
     data = request.json
     token = data.get("token")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
     if not all([token]):
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /delete_token - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[token]}\n")
+        logger.warning(f"/delete_token - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[token]}")
         return "Missing data", 400
     
     if not agent_auth_tokens[token]:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /delete_token - Failed connection from {current_user.id} at {request.remote_addr} - username not found. Full details: {[token]}\n")
+        logger.warning(f"/delete_token - Failed connection from {current_user.id} at {request.remote_addr} - username not found. Full details: {[token]}")
         return "Bad role value", 400
 
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /delete_token - Successful connection from {current_user.id} at {request.remote_addr}. Deleting token {token} that was added by {agent_auth_tokens[token]["added_by"]} at {datetime.fromtimestamp(agent_auth_tokens[token]["timestamp"])}\n")
+    logger.info(f"/delete_token - Successful connection from {current_user.id} at {request.remote_addr}. Deleting token {token} that was added by {agent_auth_tokens[token]["added_by"]} at {datetime.fromtimestamp(agent_auth_tokens[token]["timestamp"])}")
     
     incident = {
         "timestamp": time.time(),
@@ -1372,33 +1270,26 @@ def update_incident_tag():
     incident_id = data.get("incident_id")
     tag = data.get("tag")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
     if not all([incident_id, tag]):
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /update_incident_tag - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[incident_id, tag]}\n")
+        logger.warning(f"/update_incident_tag - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[incident_id, tag]}")
         return "Missing data", 400
     
     try:
         incident_id = int(incident_id)
     except:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /update_incident_tag - Failed connection from {current_user.id} at {request.remote_addr} - Invalid incident ID {incident_id} (failed to parse to int). Full details: {[incident_id, tag]}\n")
+        logger.warning(f"/update_incident_tag - Failed connection from {current_user.id} at {request.remote_addr} - Invalid incident ID {incident_id} (failed to parse to int). Full details: {[incident_id, tag]}")
         return "Bad incident value", 400
     
     if tag not in ["New","Active","Closed"]:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. Invalid tag {tag}\n")
+        logger.info(f"/update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. Invalid tag {tag}")
         return "Bad tag value", 400
     
     if incident_id in incidents:
         incidents[incident_id]["tag"] = tag
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. Updating tag for incident {incident_id} to {tag}\n")
+        logger.info(f"update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. Updating tag for incident {incident_id} to {tag}")
         return "ok", 200
     else:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}\n")
+        logger.warning(f"/update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}")
         return "Invalid incident ID", 400
 
 @app.route("/update_incident_assignee", methods=["POST"])
@@ -1409,28 +1300,22 @@ def update_incident_assignee():
     incident_id = data.get("incident_id")
     assignee = data.get("assignee")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
     if not all([incident_id, assignee]):
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /update_incident_assignee - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[incident_id, assignee]}\n")
+        logger.warning(f"/update_incident_assignee - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[incident_id, assignee]}")
         return "Missing data", 400
     
     try:
         incident_id = int(incident_id)
     except:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /update_incident_assignee - Failed connection from {current_user.id} at {request.remote_addr} - Invalid incident ID {incident_id} (failed to parse to int). Full details: {[incident_id, assignee]}\n")
+        logger.warning(f"/update_incident_assignee - Failed connection from {current_user.id} at {request.remote_addr} - Invalid incident ID {incident_id} (failed to parse to int). Full details: {[incident_id, assignee]}")
         return "Bad incident value", 400
     
     if incident_id in incidents:
         incidents[incident_id]["assignee"] = assignee
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. Updating assignee for incident {incident_id} to {assignee}\n")
+        logger.info(f"/update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. Updating assignee for incident {incident_id} to {assignee}")
         return "ok", 200
     else:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}\n")
+        logger.warning(f"/update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}")
         return "Invalid incident ID", 400
 
 @app.route("/update_incident_sla", methods=["POST"])
@@ -1441,45 +1326,35 @@ def update_incident_sla():
     incident_id = data.get("incident_id")
     sla = data.get("sla")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
     if not all([incident_id, sla]):
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /update_incident_sla - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[incident_id, sla]}\n")
+        logger.warning(f"/update_incident_sla - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[incident_id, sla]}")
         return "Missing data", 400
     
     try:
         incident_id = int(incident_id)
     except:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /update_incident_sla - Failed connection from {current_user.id} at {request.remote_addr} - Invalid incident ID {incident_id} (failed to parse to int). Full details: {[incident_id, sla]}\n")
+        logger.warning(f"/update_incident_sla - Failed connection from {current_user.id} at {request.remote_addr} - Invalid incident ID {incident_id} (failed to parse to int). Full details: {[incident_id, sla]}")
         return "Bad incident value", 400
     
     try:
         sla = int(sla)
     except Exception as E:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. Cannot cast SLA of {sla} to int.\n")
+        logger.warning(f"/update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. Cannot cast SLA of {sla} to int.")
         return "Bad sla value", 400
     
     if incident_id in incidents:
         incidents[incident_id]["sla"] = sla
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. Updating sla for incident {incident_id} to {sla}\n")
+        logger.info(f"/update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. Updating sla for incident {incident_id} to {sla}")
         return "ok", 200
     else:
-        with open(LOGFILE, "a") as f:
-            f.write(f"[+] {timestamp} /update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}\n")
+        logger.warning(f"/update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}")
         return "Invalid incident ID", 400
 
 @app.route("/save_manual", methods=["POST"])
 @login_required
 @analyst_required
 def save_manual():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /save_manual - Successful connection from {current_user.id} at {request.remote_addr}\n")
+    logger.info(f"/save_manual - Successful connection from {current_user.id} at {request.remote_addr}")
     
     try:
         save_state()
@@ -1492,10 +1367,10 @@ def save_manual():
 # =================================
 
 if __name__ == "__main__":
-    
-    with open(LOGFILE, "a") as f:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(f"[+] {timestamp} Starting server on {HOST}:{PORT}\n")
+
+    logger = setup_logging()
+
+    logger.info(f"Starting server on {HOST}:{PORT}")
 
     # Load previous state if available
     load_state()
