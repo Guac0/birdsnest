@@ -52,6 +52,7 @@ Security & production notes:
     --color-ir:  #a81106;
     --color-inject:  #430477;
     --color-uptime:  #5a0b05;
+    --color-server:  #9306a0;
     --color-unknown:   #5e5e5e;
     --glass: rgba(255,255,255,0.03);
     --radius:12px;
@@ -69,6 +70,7 @@ Security & production notes:
   .color-ir              { color: var(--color-ir); }
   .color-inject          { color: var(--color-inject); }
   .color-uptime          { color: var(--color-uptime); }
+  .color-server          { color: var(--color-server); }
   .color-unknown         { color: var(--color-unknown); }
   .sla-red        { color: #8b0000; }   /* dark red */
   .sla-green      { color: #00ff66; }
@@ -180,7 +182,7 @@ Security & production notes:
       <div>
         <h1>Incidents Dashboard</h1>
         <div class="sub">Click <strong>Claim</strong> to tag an incident as <em>Active</em>, <strong>Resolve</strong> to tag as <em>Closed</em>, or <strong>Reopen</strong> to mark as <em>New</em>. You must have <code>Analyst</code> permissions to do this.</div>
-        <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Interface</span>, <span class="color-service-generic">Service Generic</span>, <span class="color-service-custom">Service Custom</span>, <span class="color-agent-alert">Agent Alert</span>, <span class="color-ir">IR</span>, <span class="color-inject">Inject</span>, <span class="color-uptime">Uptime</span>, <span class="color-unknown">Other</span>.</div>
+        <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Interface</span>, <span class="color-service-generic">Service Generic</span>, <span class="color-service-custom">Service Custom</span>, <span class="color-agent-alert">Agent Alert</span>, <span class="color-ir">IR</span>, <span class="color-inject">Inject</span>, <span class="color-uptime">Uptime</span>, <span class="color-uptime">Server</span>, <span class="color-unknown">Other</span>.</div>
         <div class="sub">Tip: use "<strong>incident</strong> <code>(number)</code>" as a search term to limit results to only incidents.</div>
         <!-- <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Green</span> for <strong>Interface</strong>, <span class="color-service-generic">Blue</span> for <strong>Service Generic</strong>, <span class="color-service-custom">Yellow</span> for <strong>Service Custom</strong>, <span class="color-agent-alert">Purple</span> for <strong>Agent Alert</strong>, <span class="color-unknown">Gray</span> for <strong>Unknown</strong>.</div> -->
       </div>
@@ -221,6 +223,7 @@ Security & production notes:
         <option value="ir">IR</option>
         <option value="inject">Injects</option>
         <option value="uptime">Uptime</option>
+        <option value="server">Server</option>
         <option value="unknown">Other</option>
       </select>
 
@@ -276,7 +279,8 @@ Security & production notes:
       <span class="color-agent-alert">Agent</span>,
       <span class="color-ir">IR</span>,
       <span class="color-inject">Inject</span>,
-      <span class="color-uptime">Uptime</span>.
+      <span class="color-uptime">Uptime</span>,
+      <span class="color-server">Server</span>.
     </label>
     <textarea id="ai_message" placeholder="Describe the incident..."></textarea>
 
@@ -384,6 +388,7 @@ const utils = (function(){
     if (msg.trim().split(" ")[0] === 'ir') return 'ir';
     if (msg.trim().split(" ")[0] === 'inject') return 'inject';
     if (msg.trim().split(" ")[0] === 'uptime') return 'uptime';
+    if (msg.trim().split(" ")[0] === 'server') return 'server';
 
     // Otherwise treat as unknown
     return 'unknown';
@@ -556,6 +561,7 @@ const ui = (function(){
       ir:         "var(--color-ir)",
       inject:     "var(--color-inject)",
       uptime:     "var(--color-uptime)",
+      server:     "var(--color-server)",
       unknown:   "var(--color-unknown)"
     };
     wrapper.style.backgroundColor = colors[incidentType];

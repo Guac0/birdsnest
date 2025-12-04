@@ -262,6 +262,8 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
             color = "430477"
         elif (incident["message"].lower().split(' ')[0] == "uptime"):
             color = "5a0b05"
+        elif (incident["message"].lower().split(' ')[0] == "server"):
+            color = "9306a0"
     except Exception as E:
         # weird format, fallback to generic color
         pass
@@ -707,7 +709,9 @@ def add_test_data_incidents_custom(num=5,createAlert=True):
                 "IR - Investigate suspicious sign-in activity on {hostname} / {ipaddress}.",
                 "IR - Write report on Doubletap scheduled task.",
                 "Inject - Implement HTTPS for {check} scorecheck on {hostname} / {ipaddress} by {time}.",
-                "Uptime - Fix failed {check} scorecheck on {hostname} / {ipaddress}."
+                "Uptime - Fix failed {check} scorecheck on {hostname} / {ipaddress}.",
+                "Server - Save Exported by User {user}",
+                "Server - User Added With Username {username} and Role {role} by User {current_user.id}"
             ]),
             "sla": random.choice([0,get_random_time_offset_epoch(90)])
         }
@@ -1076,6 +1080,16 @@ def save_export(filepath=SAVEFILE):
         with open(filepath, "r") as f:
             state = json.load(f)
 
+        incident = {
+            "timestamp": time.time(),
+            "agent_id":f"custom",
+            "oldStatus": False,
+            "newStatus": False,
+            "message": f"Server - Save Exported by User {current_user.id}",
+            "sla": 0
+        }
+        create_incident(incident)
+
         return state
     except FileNotFoundError:
         with open(LOGFILE, "a") as f:
@@ -1155,6 +1169,16 @@ def add_user():
 
     webgui_users[username] = {"password": password, "role": role} # TODO hash
 
+    incident = {
+        "timestamp": time.time(),
+        "agent_id":f"custom",
+        "oldStatus": False,
+        "newStatus": False,
+        "message": f"Server - User Added With Username {username} and Role {role} by User {current_user.id}",
+        "sla": 0
+    }
+    create_incident(incident)
+
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /add_user - Successful connection from {current_user.id} at {request.remote_addr}. Adding user {username} with role {role}\n")
     return jsonify({"status": "ok"})
@@ -1186,6 +1210,16 @@ def delete_user():
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /delete_user - Successful connection from {current_user.id} at {request.remote_addr}. Deleting user {username} with role {webgui_users[username]["role"]}\n")
     
+    incident = {
+        "timestamp": time.time(),
+        "agent_id":f"custom",
+        "oldStatus": False,
+        "newStatus": False,
+        "message": f"Server - User Deleted With Username {username} and Role {webgui_users[username]["role"]} by User {current_user.id}",
+        "sla": 0
+    }
+    create_incident(incident)
+
     webgui_users.pop(username)
 
     return jsonify({"status": "ok"})
@@ -1208,6 +1242,16 @@ def add_token():
         with open(LOGFILE, "a") as f:
             f.write(f"[-] {timestamp} /add_token - Failed connection from {current_user.id} at {request.remote_addr} - bad token value, conflicts with existing token. Full details: {[token]}\n")
         return "New user overlaps with existing user", 400
+    
+    incident = {
+        "timestamp": time.time(),
+        "agent_id":f"custom",
+        "oldStatus": False,
+        "newStatus": False,
+        "message": f"Server - Token Added by User {current_user.id}",
+        "sla": 0
+    }
+    create_incident(incident)
 
     agent_auth_tokens[token] = {"timestamp": time.time(), "added_by": current_user.id}
 
@@ -1237,6 +1281,16 @@ def delete_token():
     with open(LOGFILE, "a") as f:
         f.write(f"[+] {timestamp} /delete_token - Successful connection from {current_user.id} at {request.remote_addr}. Deleting token {token} that was added by {agent_auth_tokens[token]["added_by"]} at {datetime.fromtimestamp(agent_auth_tokens[token]["timestamp"])}\n")
     
+    incident = {
+        "timestamp": time.time(),
+        "agent_id":f"custom",
+        "oldStatus": False,
+        "newStatus": False,
+        "message": f"Server - Token Deleted by User {current_user.id}",
+        "sla": 0
+    }
+    create_incident(incident)
+
     agent_auth_tokens.pop(token)
 
     return jsonify({"status": "ok"})
@@ -1390,8 +1444,8 @@ if __name__ == "__main__":
     # Test data
     add_test_data_agents(30)
     add_test_data_messages(50)
-    add_test_data_incidents_custom(15)
-    add_test_data_incidents(50)
+    add_test_data_incidents_custom(30)
+    add_test_data_incidents(70)
     #add_test_data_comp(0)
     #add_test_data_cmds()
 
