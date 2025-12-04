@@ -70,6 +70,12 @@ Security & production notes:
   .color-inject          { color: var(--color-inject); }
   .color-uptime          { color: var(--color-uptime); }
   .color-unknown         { color: var(--color-unknown); }
+  .sla-red        { color: #8b0000; }   /* dark red */
+  .sla-green      { color: #00ff66; }
+  .sla-yellow     { color: #ffd700; }
+  .sla-orange     { color: #ffa500; }
+  .sla-blood      { color: #ff4500; }   /* blood orange */
+  .sla-none       { color: #cccccc; }
   html,body{height:100%;margin:0;background:linear-gradient(180deg,#061026 0%, #071426 100%);color:#dbe7f0;}
   .container{max-width:var(--max-width);margin:28px auto;padding:20px;}
   header{display:flex;gap:16px;align-items:center;margin-bottom:18px;}
@@ -111,6 +117,8 @@ Security & production notes:
   .btn.claim{background:linear-gradient(90deg,#f97316,#ef4444);color:white}
   .btn.resolve{background:linear-gradient(90deg,#10b981,#059669);color:white}
   .btn.reopen{background:linear-gradient(90deg,#60a5fa,#3b82f6);color:white;}
+  .btn.details{background:linear-gradient(90deg,#00e2d7,#02c5abce);color:white;}
+  .btn.sla{background:linear-gradient(90deg,#a700f5,#a009dbce);color:white;}
   .footer{margin-top:18px;color:var(--muted);font-size:13px}
   .topbar-stats{display:flex;gap:12px;align-items:center}
   .stat{background:var(--card);padding:8px;border-radius:10px;font-size:13px;color:var(--muted)}
@@ -217,8 +225,10 @@ Security & production notes:
       </select>
 
       <select id="sortSelect" aria-label="Sort incidents">
-        <option value="date_desc">Newest first</option>
-        <option value="date_asc">Oldest first</option>
+        <option value="date_desc">Newest INC</option>
+        <option value="date_asc">Oldest INC</option>
+        <option value="sla_desc">Newest SLA</option>
+        <option value="sla_asc">Oldest SLA</option>
         <option value="agent_asc">Agent ↑</option>
         <option value="agent_desc">Agent ↓</option>
       </select>
@@ -273,6 +283,9 @@ Security & production notes:
     <label>Assignee</label>
     <input id="ai_assignee" type="text" placeholder="any string">
 
+    <label>SLA</label>
+    <input id="ai_sla" type="datetime-local">
+
     <label>
       <input id="ai_createAlert" type="checkbox">
       Trigger Webhook Alert
@@ -281,6 +294,23 @@ Security & production notes:
     <div class="modal-actions">
       <button id="ai_submit">Submit</button>
       <button id="ai_cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit SLA Modal -->
+<div id="editSLAModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>Edit Incident SLA</h2>
+    <label>Incident ID</label>
+    <input id="edit_sla_id" type="text" placeholder="">
+
+    <label>New SLA (local datetime)</label>
+    <input id="edit_sla_input" type="datetime-local">
+
+    <div class="modal-actions">
+      <button id="edit_sla_submit">Submit</button>
+      <button id="edit_sla_cancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -374,6 +404,23 @@ const api = (function(){
   const LIST_AGENTS_PATH = '/list_agents';
   const UPDATE_TAG_PATH = '/update_incident_tag';
 
+  const UPDATE_SLA_PATH = '/update_incident_sla';
+
+  async function updateIncidentSLA(incident_id, new_epoch) {
+    try {
+      const res = await fetch(UPDATE_SLA_PATH, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ incident_id, sla: new_epoch })
+      });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      return { ok: true, message: "ok" };
+    } catch (err) {
+      return { ok: false, message: err.message };
+    }
+  }
+
+
   function getHeaders(){
     // Add auth header or CSRF token here if needed
     return {'Content-Type':'application/json'};
@@ -436,7 +483,7 @@ const api = (function(){
     }
   }
 
-  return { listAgents, listIncidents, updateIncidentTag };
+  return { listAgents, listIncidents, updateIncidentTag, updateIncidentSLA };
 })();
 
 /* ------------------------------
@@ -518,8 +565,38 @@ const ui = (function(){
     //const type = utils.inferStatus(inc);
     metaRow.className = 'meta';
     // <div class="small">Incident <strong>${utils.safeText(id)}</strong> • ${utils.formatTimestamp(inc.timestamp)} • <span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Good autofix' : 'Failed autofix'}</span></div>
+    const now = Date.now() / 1000;
+    let slaText = "No SLA set";
+    let slaClass = "sla-none";
+    const type = utils.inferStatus(inc);
+
+    if (inc.sla && inc.sla !== 0) {
+      const diff = inc.sla - now;
+      const local = new Date(inc.sla * 1000).toLocaleString();
+
+      slaText = local;
+
+      if (diff < 0) {
+        slaClass = "sla-red";           // overdue
+      } else if (diff > 3600) {
+        slaClass = "sla-green";         // > 60 min
+      } else if (diff > 1800) {
+        slaClass = "sla-yellow";        // 30–60 min
+      } else if (diff > 600) {
+        slaClass = "sla-orange";        // 10–30 min
+      } else {
+        slaClass = "sla-blood";         // 0–10 min
+      }
+    }
+    const paddedId = String(id).padEnd(8, " ");
+    const dueStr = "Due:".padStart(10," ")
     metaRow.innerHTML = `
-      <div class="small">Incident <strong>${utils.safeText(id)}</strong> • ${utils.formatTimestamp(inc.timestamp)}</div>
+      <div class="small">
+        Incident <strong><span style="white-space:pre">${utils.safeText(paddedId)}</span></strong> • 
+        Created: <strong>${utils.formatTimestamp(inc.timestamp)}</strong><br>
+        <strong><span style="white-space:pre" class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Good autofix  ' : 'Failed autofix '}</span></strong> • 
+        <span style="white-space:pre">${dueStr} </span><strong><span class="${slaClass}">${slaText}</span></strong>
+      </div>
       <div><span class="badge tag-${inc.tag}" title="Incident tag">${inc.tag}</span></div>
     `;
     wrapper.appendChild(metaRow);
@@ -548,11 +625,10 @@ const ui = (function(){
     // Assignee row (editable)
     const assigneeRow = document.createElement('div');
     assigneeRow.className = 'small';
-    const type = utils.inferStatus(inc);
+    // <span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Good autofix' : 'Failed autofix'}</span> • 
     assigneeRow.innerHTML = `
-      <span class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Good autofix' : 'Failed autofix'}</span> • 
       <strong>Assignee:</strong> 
-      <input type="text" value="${utils.safeText(inc.assignee)}" style="background:var(--card);color:inherit;border:1px solid rgba(255,255,255,0.03);padding:2px 6px;border-radius:6px;width:120px">
+      <input type="text" value="${utils.safeText(inc.assignee)}" style="background:var(--card);color:inherit;border:1px solid rgba(255,255,255,0.03);padding:2px 6px;border-radius:6px;width:90px">
     `;
     wrapper.appendChild(assigneeRow);
 
@@ -605,15 +681,21 @@ const ui = (function(){
 
     // Secondary details button - placeholder for future expansion
     const btnDetails = document.createElement('button');
-    btnDetails.className = 'btn secondary';
+    btnDetails.className = 'btn details';
     btnDetails.textContent = 'Details';
     btnDetails.title = 'View details (expand)';
+
+    const btnSLA = document.createElement('button');
+    btnSLA.className = 'btn sla';
+    btnSLA.textContent = 'SLA';
+    btnSLA.title = 'Edit SLA (expand)';
 
     // wire up button actions with optimistic UI update
     btnClaim.addEventListener('click', () => handleTagChange(id, 'Active', wrapper, inc));
     btnResolve.addEventListener('click', () => handleTagChange(id, 'Closed', wrapper, inc));
     btnReopen.addEventListener('click', () => handleTagChange(id, 'New', wrapper, inc));
     btnDetails.addEventListener('click', () => showDetailsModal(id, inc));
+    btnSLA.addEventListener('click', () => showSLAModal(id, inc));
 
     // disable a button if already in that state (visual affordance)
     function refreshButtonStates(){
@@ -625,16 +707,38 @@ const ui = (function(){
     }
     refreshButtonStates();
 
-    actions.append(btnClaim, btnResolve, btnReopen, btnDetails);
+    actions.append(btnClaim, btnResolve, btnReopen, btnDetails, btnSLA);
     wrapper.appendChild(actions);
 
     // attach a method to update the card if the underlying inc changes
     wrapper.update = function(newInc){
       inc = newInc;
       // badge
-      const badge = wrapper.querySelector('.badge');
-      badge.textContent = inc.tag;
-      badge.className = `badge tag-${inc.tag}`;
+      {
+        const now = Date.now() / 1000;
+        let slaText = "No SLA set";
+        let slaClass = "sla-none";
+
+        if (inc.sla && inc.sla !== 0) {
+          const diff = inc.sla - now;
+          const local = new Date(inc.sla * 1000).toLocaleString();
+          slaText = local;
+
+          if (diff < 0)        slaClass = "sla-red";
+          else if (diff > 3600) slaClass = "sla-green";
+          else if (diff > 1800) slaClass = "sla-yellow";
+          else if (diff > 600)  slaClass = "sla-orange";
+          else                  slaClass = "sla-blood";
+        }
+
+        // update the existing SLA span
+        const slaSpan = wrapper.querySelector('.small span[class*=sla]');
+        if (slaSpan) {
+          slaSpan.className = slaClass;
+          slaSpan.textContent = slaText;
+        }
+      }
+
 
       // message
       msg.textContent = inc.message || '—';
@@ -691,6 +795,8 @@ const ui = (function(){
       // Optionally remove closed incidents from view (spec: "completed removes them from dashboard")
       // We'll keep them but filter them visually; if you prefer auto-removal, uncomment the next line:
       // if (newTag === 'Closed') delete incidents[id], render();
+
+      loadIncidents(); // refresh data
     }
   }
 
@@ -750,6 +856,8 @@ const ui = (function(){
     filtered.sort((a,b) => {
       if (sort === 'date_desc') return (b.timestamp || 0) - (a.timestamp || 0);
       if (sort === 'date_asc') return (a.timestamp || 0) - (b.timestamp || 0);
+      if (sort === 'sla_desc') return (b.sla || 0) - (a.sla || 0);
+      if (sort === 'sla_asc') return (a.sla || 9999999999) - (b.sla || 9999999999);
       if (sort === 'agent_asc') return String(a.agent_id).localeCompare(String(b.agent_id));
       if (sort === 'agent_desc') return String(b.agent_id).localeCompare(String(a.agent_id));
       return 0;
@@ -856,10 +964,22 @@ const ui = (function(){
   return { init, render, loadIncidents, showToast };
 })();
 
+function localDatetimeToEpoch(datetimeString) {
+    // datetimeString must be like "2025-01-13T14:32"
+    const date = new Date(datetimeString);
+
+    // Convert to epoch seconds
+    return Math.floor(date.getTime() / 1000);
+}
+
 // ----- Show / Hide Modal -----
 const addIncidentModal = document.getElementById('addIncidentModal');
 document.getElementById('openAddIncident').onclick = () => {
     addIncidentModal.style.display = 'flex';
+};
+
+document.getElementById('ai_cancel').onclick = () => {
+    addIncidentModal.style.display = 'none';
 };
 
 document.getElementById('ai_cancel').onclick = () => {
@@ -871,7 +991,12 @@ document.getElementById('ai_submit').onclick = async () => {
     const newStatus   = document.getElementById('ai_newStatus').checked;
     const message     = document.getElementById('ai_message').value.trim();
     const assignee    = document.getElementById('ai_assignee').value.trim();
+    let sla    = document.getElementById('ai_sla').value;
     const createAlert = document.getElementById('ai_createAlert').checked;
+
+    console.log(sla)
+    sla = localDatetimeToEpoch(sla);
+    console.log(sla)
 
     if ( !message ) {
         alert("Message is required.");
@@ -882,7 +1007,7 @@ document.getElementById('ai_submit').onclick = async () => {
         const res = await fetch('/add_incident', {
             method: 'POST',
             headers: { 'Content-Type':'application/json' },
-            body: JSON.stringify({ newStatus, message, assignee, createAlert })
+            body: JSON.stringify({ newStatus, message, assignee, createAlert, sla })
         });
 
         if (!res.ok) {
@@ -900,6 +1025,7 @@ document.getElementById('ai_submit').onclick = async () => {
         document.getElementById('ai_newStatus').checked = false;
         document.getElementById('ai_message').value = "";
         document.getElementById('ai_assignee').value = "";
+        document.getElementById('ai_sla').value = "";
         document.getElementById('ai_createAlert').checked = false;
 
         // Optionally refresh incident list if this page displays them
@@ -909,6 +1035,65 @@ document.getElementById('ai_submit').onclick = async () => {
         alert(`Network Error: ${err.message}`);
     }
 };
+
+function showDetailsModal(id, inc){
+    // showToast(`Details for incident ${id}: Agent ${inc.agent_id} — ${inc.message}`, 4500);
+    let fullDetails = "";
+    Object.entries(inc).forEach(([key, value]) => {
+        fullDetails += `${key}: ${value}, `;
+    });
+    showToast(`Details for incident ${id}:   ${fullDetails}`, 20000);
+    // In a future iteration we can show a proper modal with raw JSON and remediation history.
+  }
+
+// ----- SLA Editing -----
+const editSLAModal = document.getElementById("editSLAModal");
+const editSLAId  = document.getElementById("edit_sla_id");
+const editSLAInput  = document.getElementById("edit_sla_input");
+const editSLASubmit = document.getElementById("edit_sla_submit");
+const editSLACancel = document.getElementById("edit_sla_cancel");
+
+function showSLAModal(id,inc){
+  const editSLAId  = document.getElementById("edit_sla_id");
+  const editSLAInput  = document.getElementById("edit_sla_input");
+  editSLAInput.value = "";
+  editSLAId.value = id;
+  editSLAModal.style.display = "flex";
+}
+
+// cancel modal
+editSLACancel.addEventListener("click", () => {
+  editSLAModal.style.display = "none";
+});
+
+// submit SLA
+editSLASubmit.addEventListener("click", async () => {
+  const dt = editSLAInput.value;
+  if (!dt) {
+    alert("Please choose a datetime.");
+    return;
+  }
+
+  const id = editSLAId.value;
+  if (!id) {
+    alert("Please select an ID.");
+    return;
+  }
+
+  // convert to epoch seconds
+  const newEpoch = Math.floor(new Date(dt).getTime() / 1000);
+
+  const result = await api.updateIncidentSLA(id, newEpoch);
+
+  if (result.ok) {
+    ui.showToast("SLA updated!");
+    await ui.loadIncidents();
+  } else {
+    alert("Failed to update SLA:\n" + result.message);
+  }
+
+  editSLAModal.style.display = "none";
+});
 
 /* ------------------------------
    Boot

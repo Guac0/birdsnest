@@ -38,9 +38,9 @@ SAVE_INTERVAL   = 60                    # Seconds between autosaves
 STALE_TIME      = 300                   # If agent has not checked in for this time period in seconds, mark them as stale
 DEFAULT_WEBHOOK_SLEEP_TIME = 0.25       # Seconds between webhook uploads. Mostly just used as a fallback value in case auto rate limiting fails
 MAX_WEBHOOK_MSG_PER_MINUTE = 50         # max 30 as of december 2025 for discord. this is shared between all webhooks in a single channel
-#WEBHOOK_URL = ""
+WEBHOOK_URL = ""
 # test
-WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
+#WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
 # ccdc
 #WEBHOOK_URL     = "https://discord.com/api/webhooks/1445154855214780459/N1mBMKjo2mvzCdGuRa6sH92UG394rFVr8PR9ZXuapcvLWDsGCYji47LN-GRQ5L2NTRzY"
 # === BEACON CONFIG ===
@@ -91,7 +91,7 @@ login_manager.login_view = 'login'  # redirect to login page if not authenticate
 # Note: all ids are created via joining the stated fields with "|" characters and base64ing the resulting string
 agents              = {}    # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int, epoch time),lastStatus(bool),stale(bool),pausedUntil(int, epoch time)}
 messages            = {}    # message_id (timestamp,agent_id): {timestamp(int),agent_id(str),oldStatus(bool),newStatus(bool),message(str)}
-incidents           = {}    # incident_id (increments with each incident): {timestamp(int),agent_id(str),tag(str),oldStatus(bool),newStatus(bool),message(str),assignee(str)}. TAG can be "New", "Active", or "Closed". TODO: consider refactoring this using a reference to messages
+incidents           = {}    # incident_id (increments with each incident): {timestamp(int),agent_id(str),tag(str),oldStatus(bool),newStatus(bool),message(str),assignee(str),sla(int, epoch time)}. TAG can be "New", "Active", or "Closed". TODO: consider refactoring this using a reference to messages
 
 # =================================
 # ======= UTILITY FUNCTIONS =======
@@ -124,7 +124,8 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
         "tag": tag,
         "newStatus": messageDict["newStatus"],
         "message": messageDict["message"],
-        "assignee": assignee
+        "assignee": assignee,
+        "sla": messageDict["sla"]
     }
 
     if incident_id in incidents:
@@ -157,6 +158,8 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
 
 def webhook_main():
     """Dedicated rate-limited sender thread with dynamic rate limiting."""
+    if not WEBHOOK_URL:
+        return
 
     last_60_seconds = [] # list of sent times as epoch time
     
@@ -688,7 +691,8 @@ def add_test_data_incidents(num=15,createAlert=True):
                 "Generic - Test Test Test.",
                 "Genericshort",
                 "Genericshort"
-            ])
+            ]),
+            "sla": random.choice([0,get_random_time_offset_epoch(90)])
         }
         create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),createAlert)
 
@@ -704,7 +708,8 @@ def add_test_data_incidents_custom(num=5,createAlert=True):
                 "IR - Write report on Doubletap scheduled task.",
                 "Inject - Implement HTTPS for {check} scorecheck on {hostname} / {ipaddress} by {time}.",
                 "Uptime - Fix failed {check} scorecheck on {hostname} / {ipaddress}."
-            ])
+            ]),
+            "sla": random.choice([0,get_random_time_offset_epoch(90)])
         }
         create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),createAlert)
 
@@ -1088,13 +1093,22 @@ def add_incident():
     message = data.get("message")
     assignee = data.get("assignee","")
     createAlert = data.get("createAlert")
+    sla = data.get("sla",0)
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     if not all([message]): # just the required string
         with open(LOGFILE, "a") as f:
-            f.write(f"[-] {timestamp} /add_incident - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[newStatus,message,assignee,createAlert]}\n")
+            f.write(f"[-] {timestamp} /add_incident - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[newStatus,message,assignee,createAlert,sla]}\n")
         return "Missing data", 400
+    
+    try:
+        # epoch
+        sla = float(sla)
+    except:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /add_incident - Failed connection from {current_user.id} at {request.remote_addr} - bad sla value. Full details: {[newStatus,message,assignee,createAlert,sla]}\n")
+        return "Bad SLA value", 400
     
     # not verifying data as I don't want to. TODO
     
@@ -1103,13 +1117,14 @@ def add_incident():
         "agent_id": "custom",
         "oldStatus": True,
         "newStatus": newStatus,
-        "message": message
+        "message": message,
+        "sla": sla
     }
 
     create_incident(messageDict,tag="New",assignee=assignee,createAlert=createAlert)
 
     with open(LOGFILE, "a") as f:
-        f.write(f"[+] {timestamp} /add_incident - Successful connection from {current_user.id} at {request.remote_addr}. Creating incident with details {[newStatus,message,assignee,createAlert]}.\n")
+        f.write(f"[+] {timestamp} /add_incident - Successful connection from {current_user.id} at {request.remote_addr}. Creating incident with details {[newStatus,message,assignee,createAlert,sla]}.\n")
     return jsonify({"status": "ok"})
 
 @app.route("/add_user", methods=["POST"])
@@ -1295,6 +1310,45 @@ def update_incident_assignee():
             f.write(f"[+] {timestamp} /update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}\n")
         return "Invalid incident ID", 400
 
+@app.route("/update_incident_sla", methods=["POST"])
+@login_required
+@analyst_required
+def update_incident_sla():
+    data = request.json
+    incident_id = data.get("incident_id")
+    sla = data.get("sla")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    if not all([incident_id, sla]):
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /update_incident_sla - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[incident_id, sla]}\n")
+        return "Missing data", 400
+    
+    try:
+        incident_id = int(incident_id)
+    except:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[-] {timestamp} /update_incident_sla - Failed connection from {current_user.id} at {request.remote_addr} - Invalid incident ID {incident_id} (failed to parse to int). Full details: {[incident_id, sla]}\n")
+        return "Bad incident value", 400
+    
+    try:
+        sla = int(sla)
+    except Exception as E:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[+] {timestamp} /update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. Cannot cast SLA of {sla} to int.\n")
+        return "Bad sla value", 400
+    
+    if incident_id in incidents:
+        incidents[incident_id]["sla"] = sla
+        with open(LOGFILE, "a") as f:
+            f.write(f"[+] {timestamp} /update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. Updating sla for incident {incident_id} to {sla}\n")
+        return "ok", 200
+    else:
+        with open(LOGFILE, "a") as f:
+            f.write(f"[+] {timestamp} /update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}\n")
+        return "Invalid incident ID", 400
+
 @app.route("/save_manual", methods=["POST"])
 @login_required
 @analyst_required
@@ -1334,10 +1388,10 @@ if __name__ == "__main__":
     threading.Thread(target=webhook_main, daemon=True).start()
 
     # Test data
-    #add_test_data_agents(30)
-    #add_test_data_messages(50)
-    #add_test_data_incidents_custom(10)
-    #add_test_data_incidents(30)
+    add_test_data_agents(30)
+    add_test_data_messages(50)
+    add_test_data_incidents_custom(15)
+    add_test_data_incidents(50)
     #add_test_data_comp(0)
     #add_test_data_cmds()
 
