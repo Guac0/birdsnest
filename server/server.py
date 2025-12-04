@@ -15,8 +15,64 @@ from urllib.parse import urlparse, unquote_plus
 import urllib.request
 import urllib.error
 import math
+from pathlib import Path
 
-# TODO synch
+CONFIG_DEFAULTS = {
+    "HOST": "127.0.0.1",
+    "PORT": 8080,
+    "PUBLIC_URL": "http://{HOST}:{PORT}",
+    "LOGFILE": "log_{timestamp}.txt",
+    "SAVEFILE": "save_{timestamp}.json",
+    "SAVE_INTERVAL": 60,
+    "STALE_TIME": 300,
+    "DEFAULT_WEBHOOK_SLEEP_TIME": 0.25,
+    "MAX_WEBHOOK_MSG_PER_MINUTE": 50,
+    "WEBHOOK_URL": ""
+}
+
+def load_config(path):
+    config = CONFIG_DEFAULTS.copy()
+    badPath = False
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            config.update(json.load(f))
+    else:
+        badPath = True
+
+    # Generate timestamp once
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    # Replace placeholders in strings
+    for key, value in config.items():
+        if isinstance(value, str):
+            config[key] = value.format(
+                HOST=config.get("HOST"),
+                PORT=config.get("PORT"),
+                timestamp=timestamp
+            )
+
+    if badPath:
+        print(f"[-] {timestamp} load_config(): config file path not found: {path}")
+        with open(config.get("LOGFILE"), "a") as f:
+            f.write(f"[-] {timestamp} load_config(): config file path not found: {path}\n")
+
+    #config["PUBLIC_URL"] = f"http://{config['HOST']}:{config['PORT']}"
+    #config["LOGFILE"] = f"log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+    #config["SAVEFILE"] = f"save_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+
+    return config
+
+CONFIG = load_config("config.json") # relative to cwd!
+HOST = CONFIG["HOST"]
+PORT = CONFIG["PORT"]
+PUBLIC_URL = CONFIG["PUBLIC_URL"]
+LOGFILE = CONFIG["LOGFILE"]
+SAVEFILE = CONFIG["SAVEFILE"]
+SAVE_INTERVAL = CONFIG["SAVE_INTERVAL"]
+STALE_TIME = CONFIG["STALE_TIME"]
+DEFAULT_WEBHOOK_SLEEP_TIME = CONFIG["DEFAULT_WEBHOOK_SLEEP_TIME"]
+MAX_WEBHOOK_MSG_PER_MINUTE = CONFIG["MAX_WEBHOOK_MSG_PER_MINUTE"]
+WEBHOOK_URL = CONFIG["WEBHOOK_URL"]
 
 # =================================
 # ======= START USER CONFIG =======
@@ -29,16 +85,16 @@ webgui_users    = {                     # Valid roles: admin or analyst or guest
     "guest": {"password": "guest", "role": "guest"}
 }
 # === SERVER CONFIG ===
-HOST            = "127.0.0.1"           # Listen IP
-PORT            = 8080                  # Listen Port
-PUBLIC_URL      = f"http://{HOST}:{PORT}"
-LOGFILE         = f"log_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.txt"   # File to write logs to
-SAVEFILE        = f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"#f"save_testing2.json" # Savefile to save/load data from. Default f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"
-SAVE_INTERVAL   = 60                    # Seconds between autosaves
-STALE_TIME      = 300                   # If agent has not checked in for this time period in seconds, mark them as stale
-DEFAULT_WEBHOOK_SLEEP_TIME = 0.25       # Seconds between webhook uploads. Mostly just used as a fallback value in case auto rate limiting fails
-MAX_WEBHOOK_MSG_PER_MINUTE = 50         # max 30 as of december 2025 for discord. this is shared between all webhooks in a single channel
-WEBHOOK_URL = ""
+#HOST            = "127.0.0.1"           # Listen IP
+#PORT            = 8080                  # Listen Port
+#PUBLIC_URL      = f"http://{HOST}:{PORT}"
+#LOGFILE         = f"log_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.txt"   # File to write logs to
+#SAVEFILE        = f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"#f"save_testing2.json" # Savefile to save/load data from. Default f"save_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json"
+#SAVE_INTERVAL   = 60                    # Seconds between autosaves
+#STALE_TIME      = 300                   # If agent has not checked in for this time period in seconds, mark them as stale
+#DEFAULT_WEBHOOK_SLEEP_TIME = 0.25       # Seconds between webhook uploads. Mostly just used as a fallback value in case auto rate limiting fails
+#MAX_WEBHOOK_MSG_PER_MINUTE = 50         # max 30 as of december 2025 for discord. this is shared between all webhooks in a single channel
+#WEBHOOK_URL = ""
 # test
 #WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
 # ccdc
@@ -98,6 +154,17 @@ incidents           = {}    # incident_id (increments with each incident): {time
 # =================================
 
 # === BEACON SUPPORT ===
+
+def load_config():
+    with CONFIG_PATH.open("r") as f:
+        data = json.load(f)
+
+    # Runtime-generated fields
+    data["PUBLIC_URL"] = f"http://{data['HOST']}:{data['PORT']}"
+    data["LOGFILE"] = f"log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+    data["SAVEFILE"] = f"save_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+
+    return data
 
 def hash_id(*args):
     # hash any number of args so that we have a single value to use as the id that remains unique if multiple items have similar fields
