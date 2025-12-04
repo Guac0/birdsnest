@@ -1108,6 +1108,8 @@ def add_incident():
     assignee = data.get("assignee","")
     createAlert = data.get("createAlert")
     sla = data.get("sla",0)
+    if not sla:
+        sla = 0
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     

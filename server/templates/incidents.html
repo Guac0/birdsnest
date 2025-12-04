@@ -595,13 +595,13 @@ const ui = (function(){
         slaClass = "sla-blood";         // 0–10 min
       }
     }
-    const paddedId = String(id).padEnd(8, " ");
+    const paddedId = String(id.trim()).padEnd(8, " ");
     const dueStr = "Due:".padStart(10," ")
     metaRow.innerHTML = `
       <div class="small">
         Incident <strong><span style="white-space:pre">${utils.safeText(paddedId)}</span></strong> • 
         Created: <strong>${utils.formatTimestamp(inc.timestamp)}</strong><br>
-        <strong><span style="white-space:pre" class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Good autofix  ' : 'Failed autofix '}</span></strong> • 
+        <strong><span style="white-space:pre" class="type-${type === 'Success' ? 'Success' : 'Failed'}">${type === 'Success' ? 'Good autofix'.padEnd(14) : 'Failed autofix'.padEnd(15)}</span></strong> • 
         <span style="white-space:pre">${dueStr} </span><strong><span class="${slaClass}">${slaText}</span></strong>
       </div>
       <div><span class="badge tag-${inc.tag}" title="Incident tag">${inc.tag}</span></div>
@@ -1001,9 +1001,7 @@ document.getElementById('ai_submit').onclick = async () => {
     let sla    = document.getElementById('ai_sla').value;
     const createAlert = document.getElementById('ai_createAlert').checked;
 
-    console.log(sla)
     sla = localDatetimeToEpoch(sla);
-    console.log(sla)
 
     if ( !message ) {
         alert("Message is required.");
