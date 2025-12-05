@@ -140,7 +140,7 @@ app.config.update(
     SESSION_COOKIE_SECURE=True, # Forces the session cookie to be sent only over HTTPS.
     SESSION_COOKIE_HTTPONLY=True, # Prevents JavaScript from accessing the session cookie
     SESSION_COOKIE_SAMESITE="Strict", # "Strict": the cookie is only sent for requests from the same site (no subdomains)
-    PERMANENT_SESSION_LIFETIME=timedelta(minutes=1),
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=2),
     SESSION_REFRESH_EACH_REQUEST=True # Automatic refreshes mean that lifetime is effectively infinite! This means that users actively on the site won't get signed out, but people who close the site but not the browser and keep it closed for 1 min will have to sign in again
 )
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
@@ -1128,12 +1128,12 @@ def add_test_data_messages(num=15):
                     "ServiceCustom - MySQL data changed.",
                     "ServiceCustom - IIS Site Config changed.",
                     "ServiceCustom - IIS Application Pool changed.",
-                    "checkin",
-                    "checkin",
-                    "checkin",
-                    "checkin",
-                    "checkin",
-                    "checkin"#,
+                    "all good",
+                    "all good",
+                    "all good",
+                    "all good",
+                    "all good",
+                    "all good"#,
                     #"Generic - Test Test Test.",
                     #"Generic - Test Test Test."
                 ])
@@ -1339,7 +1339,8 @@ def handle_beacon():
     newStatus = data.get("newStatus","")
     message = data.get("message","")
     
-    if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
+    #if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
+    if not all([agent_name, hostname, ip, os_name, auth, beacon_type, message]): # required data only
         logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
         return "Missing data", 400
     
@@ -2022,11 +2023,11 @@ if __name__ == "__main__":
     threading.Thread(target=periodic_stale, daemon=True).start()
 
     # Test data
-    with app.app_context():
-        add_test_data_agents(5)
-        add_test_data_messages(30)
-        add_test_data_incidents_custom(5)
-        add_test_data_incidents(10)
+    #with app.app_context():
+        #add_test_data_agents(5)
+        #add_test_data_messages(10)
+        #add_test_data_incidents_custom(5)
+        #add_test_data_incidents(10)
         #add_test_data_comp(0)
         #add_test_data_cmds()
 
