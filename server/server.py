@@ -441,8 +441,10 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
     # --- 2. Handle Paused Status (Agent State Update) ---
     agent_id = new_incident.agent_id
     
+    """
     try:
         # Check if the incident message indicates a pause
+        
         if new_incident.message.lower().split(" - ")[1].split(" ")[0] == "paused":
             
             # Retrieve the Agent record using the primary key
@@ -467,6 +469,7 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
         db.session.rollback() 
         # logger.debug(f"Non-standard incident message. Skipping pause update: {E}")
         pass 
+    """
 
     # --- 3. Handle Alerts ---
     if createAlert:
@@ -1425,6 +1428,7 @@ def handle_beacon():
         # Not returning an error, as this is secondary to agent update/auth
         pass
 
+    """
     # 5. Handle RESUME Logic (DB Read/Write)
     try:
         # Check for RESUME message pattern
@@ -1466,6 +1470,7 @@ def handle_beacon():
         # Catches exceptions from message parsing or DB operations within the RESUME block
         db.session.rollback() 
         logger.error(f"/beacon - Error processing RESUME logic for agent {agent_id}: {e}")
+    """
 
     # 6. Trigger Incident if Status Change is Critical
     if oldStatus == False:
