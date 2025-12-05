@@ -28,7 +28,7 @@ MTU_MIN = 1200
 MTU_DEFAULT = 1300
 MTU_MAX = 1514
 AGENT_NAME="agenttest1"
-SERVER_URL="https://127.0.0.1:8080/beacon" #192.168.1.37
+SERVER_URL="https://192.168.1.37:8080/beacon"
 AUTH_TOKEN="testtoken"
 AGENT_TYPE="stabvest"
 SERVER_TIMEOUT=5
@@ -250,18 +250,19 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
                 # Parse result if we get one. Actually, we don't care as it's just one way
                 #response_body = response.read().decode("utf-8")
                 #result = json.loads(response_body)
+                print_debug(f"send_message(): sent msg to server: [{oldStatus,newStatus,message}]")
                 return True
             else:
-                print_debug(f"[-] Server error: {response.getcode()}")
+                print_debug(f"send_message(): Server error: {response.getcode()}")
 
     # Error handling
     except urllib.error.HTTPError as e:
-        print_debug(f"[!] HTTP error: {e.code} {e.reason}")
+        print_debug(f"[send_message(): HTTP error: {e.code} {e.reason}")
     except urllib.error.URLError as e:
-        print_debug(f"[!] URL error: {e.reason}")
+        print_debug(f"send_message(): URL error: {e.reason}")
     except Exception as e:
         # Various requests errors - networking failure or 4xx/5xx code from server
-        print_debug(f"[!] Beacon error: {e}")
+        print_debug(f"send_message(): Beacon error: {e}")
     return False
 
 #endregion###############

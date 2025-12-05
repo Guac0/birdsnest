@@ -145,6 +145,8 @@ def main():
         #"--plugin-enable=sqlalchemy",
         #"--include-module=sqlalchemy.orm.dependency",
         #"--include-module=flask_sqlalchemy.dependency",
+        "--include-package=OpenSSL",
+        #"--include-package=pyopenssl",
         f"--include-data-dir={BUILD_DIR}/templates=templates",
         f"--include-data-dir={BUILD_DIR}/static=static",
     ]
