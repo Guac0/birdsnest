@@ -1,5 +1,6 @@
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin, current_user
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, abort, send_from_directory, session
+from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime, timedelta
 import time
@@ -291,9 +292,10 @@ def insert_initial_data():
 
         # --- Insert Web Users ---
         for username, data in INITIAL_WEBGUI_USERS.items():
+            hashed_password = generate_password_hash(data["password"])
             new_user = WebUser(
                 username=username,
-                password=data["password"], # WARNING: Hash passwords in production!
+                password=hashed_password, # WARNING: Hash passwords in production!
                 role=data["role"]
             )
             db.session.add(new_user)
@@ -1215,7 +1217,7 @@ def login():
     next_param = request.form.get('next') or request.args.get('next') or ''
 
     user_record = WebUser.query.filter(WebUser.username == username).first()
-    if user_record and password == user_record.password:
+    if user_record and check_password_hash(user_record.password, password):
         user_obj = User(username, user_record.role)
         login_user(user_obj)
         session.permanent = True
@@ -1639,9 +1641,11 @@ def add_user():
 
     try:
        
+        hashed_password = generate_password_hash(password)
+
         new_user = WebUser(
             username=username,
-            password=password, # TODO hash
+            password=hashed_password,
             role=role
         )
 
