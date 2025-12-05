@@ -582,23 +582,23 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
     
     try:
         if (incident["message"].lower().split(' ')[0]  == "firewall"):
-            color = "3b9102"
+            color = "641f1a"
         elif (incident["message"].lower().split(' ')[0]  == "interface"):
-            color = "01410b"
+            color = "91251e"
         elif (incident["message"].lower().split(' ')[0]  == "service"):
-            color = "b87700"
+            color = "8C573A"
         elif (incident["message"].lower().split(' ')[0]  == "servicecustom"):
-            color = "5e4902"
+            color = "a37526"
         elif (incident["message"].lower().split(' ')[0] == "agent"):
-            color = "04459b"
-        elif (incident["message"].lower().split(' ')[0] == "ir"):
-            color = "a81106"
-        elif (incident["message"].lower().split(' ')[0] == "inject"):
-            color = "430477"
-        elif (incident["message"].lower().split(' ')[0] == "uptime"):
-            color = "5a0b05"
+            color = "404C24"
         elif (incident["message"].lower().split(' ')[0] == "server"):
-            color = "9306a0"
+            color = "6d39cf"
+        elif (incident["message"].lower().split(' ')[0] == "ir"):
+            color = "4e08aa"
+        elif (incident["message"].lower().split(' ')[0] == "inject"):
+            color = "036995"
+        elif (incident["message"].lower().split(' ')[0] == "uptime"):
+            color = "380a8e"
     except Exception as E:
         # weird format, fallback to generic color
         pass
