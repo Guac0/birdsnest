@@ -579,7 +579,7 @@ const ui = (function(){
   // in-memory incidents (keyed by id as string)
   let incidents = {};
   let refreshTimer = null;
-  const AUTO_INTERVAL_MS = 20_000; // 20s auto refresh (adjustable)
+  const AUTO_INTERVAL_MS = 30_000; // 30s auto refresh (adjustable)
 
   let agents = {}; // agent_id -> { agent_name, hostname, ip, ... }
 

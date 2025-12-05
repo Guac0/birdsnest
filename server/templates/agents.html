@@ -108,7 +108,7 @@
           <h1>Agents Dashboard</h1>
           <a href="/">Back to Home</a>
         </div>
-        <p class="lead">All agents recorded by the server. Times shown in your local timezone. Auto-refreshes every 30 seconds.</p>
+        <p class="lead">All agents recorded by the server. Times shown in your local timezone. Auto-refreshes every 60 seconds.</p>
         <p class="lead">Click column headers to sort. Type in the filters under headers to refine results per-column.</p>
       </div>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
@@ -304,7 +304,7 @@
     downloadBtn.addEventListener('click',downloadJSON);
 
     fetchAgents();
-    setInterval(fetchAgents,30000);
+    setInterval(fetchAgents,60000);
   </script>
 </body>
 </html>

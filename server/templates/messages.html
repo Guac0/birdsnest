@@ -91,7 +91,7 @@ th.sortable .sort-ind{font-size:11px;color:var(--muted)}
         <h1>Messages Dashboard</h1>
         <a href="/">Back to Home</a>
       </div>
-      <p class="lead">All messages recorded by the server. Times shown in your local timezone. Auto-refreshes every 60 seconds.</p>
+      <p class="lead">All messages recorded by the server. Times shown in your local timezone. Auto-refreshes every 90 seconds.</p>
       <p class="lead">Click column headers to sort. Type in the filters under headers to refine results per-column.</p>
     </div>
     <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
@@ -256,7 +256,7 @@ function escapeHtml(s){
 refreshBtn.addEventListener('click', fetchMessages);
 
 fetchMessages();
-setInterval(fetchMessages, 60000);  // Auto-refresh every 60 seconds
+setInterval(fetchMessages, 90000);  // Auto-refresh every 90 seconds
 </script>
 </body>
 </html>
