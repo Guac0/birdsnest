@@ -8,7 +8,7 @@
   "STALE_TIME": 300,
   "DEFAULT_WEBHOOK_SLEEP_TIME": 0.25,
   "MAX_WEBHOOK_MSG_PER_MINUTE": 50,
-  "WEBHOOK_URL": "",
+  "WEBHOOK_URL": "https://discord.com/api/webhooks/1446624965817274602/IxfnZJjmb1EdeBLv6zfIi-3hK1eQYYAqwRtggbOSoWbehJW3kgXWC4gHJazFkxgsiC13",
   "AGENT_AUTH_TOKENS": {
         "testtoken": { 
             "added_by": "default"

@@ -115,7 +115,7 @@ INITIAL_WEBGUI_USERS = CONFIG["WEBGUI_USERS"]
 # test
 #WEBHOOK_URL     = "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
 # ccdc
-#WEBHOOK_URL     = "https://discord.com/api/webhooks/1445154855214780459/N1mBMKjo2mvzCdGuRa6sH92UG394rFVr8PR9ZXuapcvLWDsGCYji47LN-GRQ5L2NTRzY"
+#
 # === BEACON CONFIG ===
 #agent_auth_tokens   = {
 #    "testtoken": { # Change this per engagement. Allows beacons to authenticate to the server
@@ -516,7 +516,8 @@ def webhook_main():
             payload = webhook_queue.popleft()
 
         # Send the webhook and get the response/body
-        resp, body = discord_webhook(payload["incident_id"], payload["incident"])
+        with app.app_context():
+            resp, body = discord_webhook(payload["incident_id"], payload["incident"])
 
         sleep_time = 0  # default unless rate limited
 
@@ -607,10 +608,16 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
 
     #data that the webhook will receive and use to display the alert in discord chat
     try:
+        incident_record = db.session.get(Incident,incident_id)
+        agent = db.session.get(Agent,incident_record.agent_id)
+        if not agent:
+            #logger.warning(f"Could not find agent {incident_obj.agent_id} for incident {incident_obj.incident_id}.")
+            raise KeyError
+        
         payload = json.dumps({
         "embeds": [
             {
-            "title": "Stabvest Alert - {} Incident Created on {} for {}".format(incident["message"].split('-')[0].strip(),agents[incident["agent_id"]]["hostname"],agents[incident["agent_id"]]["agent_name"]),
+            "title": "Stabvest Alert - {} Incident Created on {} for {}".format(incident["message"].split('-')[0].strip(),agent.hostname,agent.agent_name),
             "color": int(color,16),
             "description": "{}".format(incident["message"]),
             #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
@@ -633,17 +640,17 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
                 },
                 {
                 "name": "Agent Name",
-                "value": "{}".format(agents[incident["agent_id"]]["agent_name"]),
+                "value": "{}".format(agent.agent_name),
                 "inline": True
                 },
                 {
                 "name": "Hostname",
-                "value": "{}".format(agents[incident["agent_id"]]["hostname"]),
+                "value": "{}".format(agent.hostname),
                 "inline": True
                 },
                 {
                 "name": "IP Address",
-                "value": "{}".format(agents[incident["agent_id"]]["ip"]),
+                "value": "{}".format(agent.ip),
                 "inline": True
                 }
             ]
@@ -787,7 +794,7 @@ def periodic_stale(interval=60):
         
                         if incident_id:
                             try:
-                                incident = Incident.query.get(incident_id)
+                                incident = db.session.get(Incident,incident_id)
                                 if incident:
                                     incident.tag = "Closed"
                                     logger.info(f"periodic_stale(): Stale incident {incident_id} CLOSED for {agent.agent_id}.")
