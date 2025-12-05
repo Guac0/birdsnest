@@ -14,6 +14,7 @@ import time
 import urllib.request
 import urllib.error
 import winreg
+import ssl
 
 #endregion###############
 # Configuration Options #
@@ -22,17 +23,21 @@ import winreg
 DISARM = True
 DEBUG_PRINT = True
 BACKUPDIR = ""
-LOGFILE = "" #"agent_log.txt"
+LOGFILE = "log.txt" #"agent_log.txt"
 MTU_MIN = 1200
 MTU_DEFAULT = 1300
 MTU_MAX = 1514
 AGENT_NAME="agenttest1"
-SERVER_URL="http://127.0.0.1:8080/agent"
+SERVER_URL="https://127.0.0.1:8080/beacon" #192.168.1.37
 AUTH_TOKEN="testtoken"
-AGENT_TYPE="stabvest_test1"
+AGENT_TYPE="stabvest"
 SERVER_TIMEOUT=5
 REGISTRY_HIVE = winreg.HKEY_LOCAL_MACHINE
 SERVICE_PATH = r"SYSTEM\\CurrentControlSet\\Services\\service_name" #replace with actual service name
+
+CTX = ssl.create_default_context()
+CTX.check_hostname = False
+CTX.verify_mode = ssl.CERT_NONE
 
 #endregion###############
 # Generic Helper Funcs ##
@@ -60,7 +65,7 @@ def get_reg_val(key, service_path=SERVICE_PATH, reg_hive=REGISTRY_HIVE):
         result = winreg.QueryValueEx(oKey, key)[0] 
         winreg.CloseKey(oKey)
     except Exception as e:
-        print(f"get_reg_val(): {e}")
+        print_debug(f"get_reg_val(): {e}")
     return result
 
 def get_os(simple=False):
@@ -212,7 +217,7 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
         # Maybe redirect to print_debug instead?
         return True
 
-    # Prep payload. TODO encrypt
+    # Prep payload
     payload = {
         "name": AGENT_NAME,
         "hostname": systemInfo["hostname"],
@@ -240,7 +245,7 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
         )
 
         # Send payload
-        with urllib.request.urlopen(req, timeout=SERVER_TIMEOUT) as response:
+        with urllib.request.urlopen(req, timeout=SERVER_TIMEOUT, context=CTX) as response:
             if response.getcode() == 200:
                 # Parse result if we get one. Actually, we don't care as it's just one way
                 #response_body = response.read().decode("utf-8")
@@ -1041,6 +1046,8 @@ def firewall_main(protectedPorts):
             for issue in result_issues:
                 issues.append(issue)
 
+    # TODO: windows has additional options like rule per executable
+
     return oldStatus, newStatus, issues
 
 #endregion###############
@@ -1489,11 +1496,15 @@ def main():
 
     oldStatus = True
     newStatus = True
-    issues = []
+    oldIssues = []
+    newIssues = []
 
     print_debug(f"main(): System details - {get_system_details()}")
 
     while not paused:
+
+        sent_msg = False
+        suppressed_send = False
 
         # Firewall
         print_debug(f"main(): running firewall checks")
@@ -1503,10 +1514,14 @@ def main():
         if not result_newStatus:
             newStatus = False
         for issue in result_issues:
-            issues.append(f"Firewall Issue - {issue}")
+            newIssues.append(f"Firewall Issue - {issue}")
 
-            print_debug(issues[-1])
-            send_message(result_oldStatus,result_newStatus,issues[-1])
+            print_debug(newIssues[-1])
+            if newIssues[-1] not in oldIssues:
+                send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                sent_msg = True
+            else:
+                suppressed_send = True
 
         # Interface
         print_debug(f"main(): running interface checks")
@@ -1516,10 +1531,14 @@ def main():
         if not result_newStatus:
             newStatus = False
         for issue in result_issues:
-            issues.append(f"Interface Issue - {issue}")
+            newIssues.append(f"Interface Issue - {issue}")
 
-            print_debug(issues[-1])
-            send_message(result_oldStatus,result_newStatus,issues[-1])
+            print_debug(newIssues[-1])
+            if newIssues[-1] not in oldIssues:
+                send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                sent_msg = True
+            else:
+                suppressed_send = True
 
         # Service
         print_debug(f"main(): running service checks")
@@ -1529,10 +1548,20 @@ def main():
         if not result_newStatus:
             newStatus = False
         for issue in result_issues:
-            issues.append(f"Service Issue - {issue}")
+            newIssues.append(f"Service Issue - {issue}")
 
-            print_debug(issues[-1])
-            send_message(result_oldStatus,result_newStatus,issues[-1])
+            print_debug(newIssues[-1])
+            if newIssues[-1] not in oldIssues:
+                send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                sent_msg = True
+            else:
+                suppressed_send = True
+
+        if not sent_msg:
+            if suppressed_send:
+                send_message(True,True,"no new issues; at least one prior issue still exists but suppressing redundant alert")
+            else:
+                send_message(True,True,"all good")
 
         # Finish up
         print_debug(f"main(): oldStatus - {oldStatus}")
@@ -1543,6 +1572,9 @@ def main():
         
         print_debug(f"main(): sleeping for {sleeptime} seconds")
         print_debug(f"")
+
+        oldIssues = newIssues
+        newIssues = []
         
         time.sleep(sleeptime)
 
