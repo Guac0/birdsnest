@@ -22,9 +22,9 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import class_mapper
 
 CONFIG_DEFAULTS = {
-    "HOST": "127.0.0.1",
+    "HOST": "0.0.0.0",
     "PORT": 8080,
-    "PUBLIC_URL": "http://{HOST}:{PORT}",
+    "PUBLIC_URL": "https://{HOST}:{PORT}",
     "LOGFILE": "log_{timestamp}.txt",
     "SAVEFILE": "save_{timestamp}.db",
     "SAVE_INTERVAL": 60,
@@ -97,7 +97,7 @@ INITIAL_WEBGUI_USERS = CONFIG["WEBGUI_USERS"]
 
 # === WEBGUI CONFIG ===
 #webgui_users    = {                     # Valid roles: admin or analyst or guest
-#    "admin": {"password": "admin", "role": "admin"},  # TODO: use hashed passwords
+#    "admin": {"password": "admin", "role": "admin"},
 #    "analyst": {"password": "analyst", "role": "analyst"},
 #    "guest": {"password": "guest", "role": "guest"}
 #}
@@ -137,7 +137,7 @@ SQLALCHEMY_DATABASE_URI = f'sqlite:///{SAVEFILE}'
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=os.urandom(32), # Randomize the key every startup to avoid cookie reuse
-    #SESSION_COOKIE_SECURE=True, # Forces the session cookie to be sent only over HTTPS. TODO
+    SESSION_COOKIE_SECURE=True, # Forces the session cookie to be sent only over HTTPS.
     SESSION_COOKIE_HTTPONLY=True, # Prevents JavaScript from accessing the session cookie
     SESSION_COOKIE_SAMESITE="Strict", # "Strict": the cookie is only sent for requests from the same site (no subdomains)
     PERMANENT_SESSION_LIFETIME=timedelta(minutes=1),
@@ -746,29 +746,92 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
         logger.error(f"/discord_webhook - failed to send message for incident {incident_id}. StatusCode: {err.code}. Body: {body}.") # Headers: {err.headers}. 
         return err,body
 
-def check_stale(agents,incidents):
+def periodic_stale(interval=60):
     """
-    Given an agents dict, check their lastSeenTime and stale values and update stale if required.
-    If agent moves in to stale state, generate an incident.
-    If an agent moves out of stale state, close the relevant incident
+    Checks agents' lastSeenTime against STALE_TIME and updates the 'stale' status.
+    Generates a new incident if an agent moves into the stale state.
+    Closes the relevant incident if an agent moves out of the stale state.
     """
-    for agent_id in agents:
-        if agents[agent_id]["stale"]:
-            # If agent was previously stale, see if they've checked in recently
-            if (time.time() - agents[agent_id]["lastSeenTime"]) < STALE_TIME:
-                # No longer stale, so close the relevant incident
-                agents[agent_id]["stale"] = False
-                
-            else:
-                # Still stale - update incident time
-                continue
-        else:
-            # Agent not previously stale - check if they have not checked in recently
-            if (time.time() - agents[agent_id]["lastSeenTime"]) > STALE_TIME:
-                # Stale
-                agents[agent_id]["stale"] = True
+    while True:
+        time.sleep(interval)
 
-    return agents
+        with app.app_context():
+    
+            # 1. Retrieve all agent records directly
+            agents_records = Agent.query.all()
+            
+            agents_updated = False
+
+            for agent in agents_records:
+
+                if agent.agent_name == "custom":
+                    continue
+                    
+                time_since_seen = time.time() - agent.lastSeenTime
+                
+                # --- Check for state change ---
+
+                if agent.stale:
+                    # Scenario A: Agent was STALE, checking if it has recovered
+                    if time_since_seen < STALE_TIME:
+                        # Agent is NO LONGER STALE (checked in recently)
+                        agent.stale = False
+
+                        criteria = {
+                            "agent_id": agent.agent_id,
+                            "tag": ('New', 'Active'),
+                            "message": f"Agent - Agent {agent.agent_name} on {agent.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime("%Y-%m-%d_%H-%M-%S")}."
+                        }
+
+                        incident_id = find_incident_db(criteria, newest=True)
+        
+                        if incident_id:
+                            try:
+                                incident = Incident.query.get(incident_id)
+                                if incident:
+                                    incident.tag = "Closed"
+                                    logger.info(f"periodic_stale(): Stale incident {incident_id} CLOSED for {agent.agent_id}.")
+                                    return True
+                            except Exception as e:
+                                logger.warning(f"periodic_stale(): Failed to close incident {incident_id}: {e}")
+                                return False
+                        
+                        else:
+                            logger.warning(f"periodic_stale(): Did not find incident for agent {agent.agent_id} recovering from Stale state.")
+
+                        logger.info(f"periodic_stale(): Agent {agent.agent_id} recovered from stale state.")
+                        agents_updated = True
+                    # else: Agent is STILL STALE, continue checking others (no DB update)
+                
+                else:
+                    # Scenario B: Agent was NOT STALE, checking if it is now stale
+                    if time_since_seen > STALE_TIME:
+                        # Agent is NOW STALE (missed check-in)
+                        agent.stale = True
+                        
+                        # Generate a new incident
+                        incident_data = {
+                            "timestamp": time.time(),
+                            "agent_id": agent.agent_id,
+                            "oldStatus": agent.lastStatus,
+                            "newStatus": False,
+                            "message": f"Agent - Agent {agent.agent_name} on {agent.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime("%Y-%m-%d_%H-%M-%S")}.",
+                            "sla": 0
+                        }
+                        create_incident(incident_data)
+                        logger.info(f"periodic_stale(): Agent {agent.agent_id} moved to stale state. Incident created.")
+                        agents_updated = True
+
+            # 2. Commit all accumulated changes at the end for efficiency
+            if agents_updated:
+                try:
+                    db.session.commit()
+                    logger.info("periodic_stale(): Database commit successful for stale status updates.")
+                except Exception as e:
+                    db.session.rollback()
+                    logger.info(f"periodic_stale(): Database error during stale update: {e}")
+            else:
+                logger.info("periodic_stale(): No changes.")
 
 def find_incident(incidents, criteria, newest=False):
     """
@@ -1050,11 +1113,6 @@ def add_test_data_messages(num=15):
                     "Interface - Interface {interface} was set to DOWN, RESTORED UP state.",
                     "Interface - Bad system TTL set, DISARMED.",
                     "Interface - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
-                    "Agent - No logs from agent in {minutes} minutes.",
-                    "Agent - Paused for 60 seconds.",
-                    "Agent - Paused for 60 seconds.",
-                    "Agent - Paused for 60 seconds.",
-                    "Agent - Paused for 60 seconds.",
                     "Agent - Paused for 60 seconds.",
                     "Agent - Resumed after sleeping for 60 seconds.",
                     "Agent - Resumed after sleeping for 60 seconds, EARLY EXIT.",
@@ -1083,9 +1141,13 @@ def add_test_data_messages(num=15):
 
 def add_test_data_incidents(num=15,createAlert=True):
     for i in range(1, num + 1):
+        agent_id = f"agent_{random.randint(1,5)}"
+        agent_name = f"agent_{random.randint(1,5)}"
+        hostname = "exampleHost"
+        lastSeenTime = time.time() - ((num - i) * 100)
         incident_data = {
-            "timestamp": time.time() - ((num - i) * 100),
-            "agent_id":f"agent_{random.randint(1,5)}",
+            "timestamp": lastSeenTime,
+            "agent_id": agent_id,
             "oldStatus": random.choice([False,True]),
             "newStatus": random.choice([False,True]),
             "message": random.choice([
@@ -1099,7 +1161,7 @@ def add_test_data_incidents(num=15,createAlert=True):
                 "Interface - Interface {interface} was set to DOWN, RESTORED UP state.",
                 "Interface - Bad system TTL set, DISARMED.",
                 "Interface - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
-                "Agent - No logs from agent in {minutes} minutes.",
+                f"Agent - Agent {agent_name} on {hostname} moved to Stale state. Last seen {datetime.fromtimestamp(lastSeenTime).strftime('%Y-%m-%d_%H-%M-%S')}",
                 "Agent - Paused for 60 seconds.",
                 "Agent - Resumed after sleeping for 60 seconds.",
                 "Agent - Resumed after sleeping for 60 seconds, EARLY EXIT.",
@@ -1460,7 +1522,6 @@ def list_tokens():
 
 @app.route("/list_tokens_number", methods=["POST"])
 @login_required
-@admin_required
 def list_tokens_number():
     """
     Returns the count of authentication tokens in the database.
@@ -1951,15 +2012,16 @@ if __name__ == "__main__":
     # Start threads before test data to avoid delays
     threading.Thread(target=periodic_autosave, daemon=True).start()
     threading.Thread(target=webhook_main, daemon=True).start()
+    threading.Thread(target=periodic_stale, daemon=True).start()
 
     # Test data
     with app.app_context():
-        add_test_data_agents(30)
-        add_test_data_messages(50)
-        add_test_data_incidents_custom(30)
-        add_test_data_incidents(70)
+        add_test_data_agents(5)
+        add_test_data_messages(30)
+        add_test_data_incidents_custom(5)
+        add_test_data_incidents(10)
         #add_test_data_comp(0)
         #add_test_data_cmds()
 
     # Start main app. Do not put any code below this line
-    app.run(host=HOST, port=PORT)
+    app.run(host=HOST, port=PORT, ssl_context='adhoc')
