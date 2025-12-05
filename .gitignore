@@ -1,0 +1,4 @@
+instance/*
+server/instance/*
+log*
+server/log*

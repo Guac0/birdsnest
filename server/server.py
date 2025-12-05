@@ -15,26 +15,38 @@ from urllib.parse import urlparse, unquote_plus
 import urllib.request
 import urllib.error
 import math
-from pathlib import Path
 import logging
 from logging.handlers import RotatingFileHandler
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import class_mapper
 
 CONFIG_DEFAULTS = {
     "HOST": "127.0.0.1",
     "PORT": 8080,
     "PUBLIC_URL": "http://{HOST}:{PORT}",
     "LOGFILE": "log_{timestamp}.txt",
-    "SAVEFILE": "save_{timestamp}.json",
+    "SAVEFILE": "save_{timestamp}.db",
     "SAVE_INTERVAL": 60,
     "STALE_TIME": 300,
     "DEFAULT_WEBHOOK_SLEEP_TIME": 0.25,
     "MAX_WEBHOOK_MSG_PER_MINUTE": 50,
-    "WEBHOOK_URL": ""
+    "WEBHOOK_URL": "",
+    "AGENT_AUTH_TOKENS": {
+        "testtoken": { 
+            "added_by": "default"
+        }
+    },
+    "WEBGUI_USERS": {
+        "admin": {"password": "admin", "role": "admin"},
+        "analyst": {"password": "analyst", "role": "analyst"},
+        "guest": {"password": "guest", "role": "guest"}
+    }
 }
 
 def load_config(path):
     config = CONFIG_DEFAULTS.copy()
     badPath = False
+
     if os.path.exists(path):
         with open(path, "r") as f:
             config.update(json.load(f))
@@ -75,17 +87,19 @@ STALE_TIME = CONFIG["STALE_TIME"]
 DEFAULT_WEBHOOK_SLEEP_TIME = CONFIG["DEFAULT_WEBHOOK_SLEEP_TIME"]
 MAX_WEBHOOK_MSG_PER_MINUTE = CONFIG["MAX_WEBHOOK_MSG_PER_MINUTE"]
 WEBHOOK_URL = CONFIG["WEBHOOK_URL"]
+INITIAL_AGENT_AUTH_TOKENS = CONFIG["AGENT_AUTH_TOKENS"]
+INITIAL_WEBGUI_USERS = CONFIG["WEBGUI_USERS"]
 
 # =================================
 # ======= START USER CONFIG =======
 # =================================
 
 # === WEBGUI CONFIG ===
-webgui_users    = {                     # Valid roles: admin or analyst or guest
-    "admin": {"password": "admin", "role": "admin"},  # TODO: use hashed passwords
-    "analyst": {"password": "analyst", "role": "analyst"},
-    "guest": {"password": "guest", "role": "guest"}
-}
+#webgui_users    = {                     # Valid roles: admin or analyst or guest
+#    "admin": {"password": "admin", "role": "admin"},  # TODO: use hashed passwords
+#    "analyst": {"password": "analyst", "role": "analyst"},
+#    "guest": {"password": "guest", "role": "guest"}
+#}
 # === SERVER CONFIG ===
 #HOST            = "127.0.0.1"           # Listen IP
 #PORT            = 8080                  # Listen Port
@@ -102,12 +116,12 @@ webgui_users    = {                     # Valid roles: admin or analyst or guest
 # ccdc
 #WEBHOOK_URL     = "https://discord.com/api/webhooks/1445154855214780459/N1mBMKjo2mvzCdGuRa6sH92UG394rFVr8PR9ZXuapcvLWDsGCYji47LN-GRQ5L2NTRzY"
 # === BEACON CONFIG ===
-agent_auth_tokens   = {
-    "testtoken": { # Change this per engagement. Allows beacons to authenticate to the server
-        "timestamp": time.time(),
-        "added_by": "default"
-    }
-}
+#agent_auth_tokens   = {
+#    "testtoken": { # Change this per engagement. Allows beacons to authenticate to the server
+#        "timestamp": time.time(),
+#        "added_by": "default"
+#    }
+#}
 
 # =================================
 # ======== END USER CONFIG ========
@@ -118,6 +132,7 @@ agent_auth_tokens   = {
 # =================================
 
 # === Set Flask Config ===
+SQLALCHEMY_DATABASE_URI = f'sqlite:///{SAVEFILE}'
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=os.urandom(32), # Randomize the key every startup to avoid cookie reuse
@@ -127,12 +142,16 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(minutes=1),
     SESSION_REFRESH_EACH_REQUEST=True # Automatic refreshes mean that lifetime is effectively infinite! This means that users actively on the site won't get signed out, but people who close the site but not the browser and keep it closed for 1 min will have to sign in again
 )
+app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
+# Silence the deprecation warning
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # === Initialize Misc Vars ===
 start_time = time.time()
 last_save_time=0
 webhook_queue = deque()
 webhook_queue_cond = threading.Condition()
+db = SQLAlchemy(app) # Initialize SQLAlchemy
 TTYD_PROCESS = None
 class User(UserMixin):
     def __init__(self, id, role):
@@ -147,13 +166,188 @@ login_manager.login_view = 'login'  # redirect to login page if not authenticate
 # === DATA STRUCTURES ===
 # Note: all timestamps are logged in unix time
 # Note: all ids are created via joining the stated fields with "|" characters and base64ing the resulting string
-agents              = {}    # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int, epoch time),lastStatus(bool),stale(bool),pausedUntil(int, epoch time)}
-messages            = {}    # message_id (timestamp,agent_id): {timestamp(int),agent_id(str),oldStatus(bool),newStatus(bool),message(str)}
-incidents           = {}    # incident_id (increments with each incident): {timestamp(int),agent_id(str),tag(str),oldStatus(bool),newStatus(bool),message(str),assignee(str),sla(int, epoch time)}. TAG can be "New", "Active", or "Closed". TODO: consider refactoring this using a reference to messages
+#agents              = {}    # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int, epoch time),lastStatus(bool),stale(bool),pausedUntil(int, epoch time)}
+#messages            = {}    # message_id (timestamp,agent_id): {timestamp(int),agent_id(str),oldStatus(bool),newStatus(bool),message(str)}
+#incidents           = {}    # incident_id (increments with each incident): {timestamp(int),agent_id(str),tag(str),oldStatus(bool),newStatus(bool),message(str),assignee(str),sla(int, epoch time)}. TAG can be "New", "Active", or "Closed". TODO: consider refactoring this using a reference to messages
+
+# === DATABASE SETUP ===
+
+# --- 1. AGENT Model ---
+# Maps to the 'agents' dictionary structure. The primary key will be agent_name.
+class Agent(db.Model):
+    __tablename__ = 'agents'
+
+    # Primary Key
+    agent_id = db.Column(db.String(128), primary_key=True, nullable=False)
+
+    # Agent details
+    agent_name = db.Column(db.String(128))
+    hostname = db.Column(db.String(128))
+    ip = db.Column(db.String(45)) # IPv4 or IPv6
+    os = db.Column(db.String(64))
+    executionUser = db.Column(db.String(128))
+    executionAdmin = db.Column(db.Boolean, default=False)
+    
+    # Status and Time
+    lastSeenTime = db.Column(db.Integer, default=lambda: int(time.time())) # Epoch time (int)
+    lastStatus = db.Column(db.Boolean, default=True) # True for OK, False for issue
+    stale = db.Column(db.Boolean, default=False)
+    pausedUntil = db.Column(db.Integer, default=0) # Epoch time (int)
+
+    messages = db.relationship('Message', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == Message.agent_id")
+    incidents = db.relationship('Incident', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == Incident.agent_id")
+
+
+    def __repr__(self):
+        return f"<Agent {self.agent_name} ({'Online' if self.lastStatus else 'Down'})>"
+
+# --- 2. MESSAGE Model ---
+# Maps to the 'messages' dictionary structure.
+# Uses a composite primary key of (timestamp, agent_id) for uniqueness and ordering.
+class Message(db.Model):
+    __tablename__ = 'messages'
+
+    message_id = db.Column(db.String(128), primary_key=True, nullable=False)
+    agent_id = db.Column(db.String(128), db.ForeignKey('agents.agent_id'), nullable=False)
+    
+    # Message-specific fields
+    timestamp = db.Column(db.Integer, default=lambda: int(time.time()), nullable=False)
+    oldStatus = db.Column(db.Boolean, nullable=False)
+    newStatus = db.Column(db.Boolean, nullable=False)
+    message = db.Column(db.Text, nullable=False) # Use Text for potentially long messages
+
+    def __repr__(self):
+        return f"<Message {self.timestamp} from {self.agent_id}>"
+
+# --- 3. INCIDENT Model ---
+# Maps to the 'incidents' dictionary structure. Refactored TAG to use a more standard field name.
+class Incident(db.Model):
+    __tablename__ = 'incidents'
+
+    # Primary Key - using an auto-incrementing integer is standard for SQL primary keys
+    incident_id = db.Column(db.Integer, primary_key=True)
+    
+    # Incident fields
+    timestamp = db.Column(db.Integer, default=lambda: int(time.time()), nullable=False)
+    agent_id = db.Column(db.String(128), db.ForeignKey('agents.agent_id'), nullable=False)
+    
+    tag = db.Column(db.String(10), default="New", nullable=False) # "New", "Active", "Closed"
+    oldStatus = db.Column(db.Boolean, nullable=False)
+    newStatus = db.Column(db.Boolean, nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    assignee = db.Column(db.String(128))
+    sla = db.Column(db.Integer) # Epoch time (int)
+
+    def __repr__(self):
+        return f"<Incident {self.incident_id} for {self.agent_id} (Tag: {self.tag})>"
+
+# --- 4. AGENT_AUTH_TOKEN Model ---
+# Maps to 'agent_auth_tokens'. Token is the primary key.
+class AuthToken(db.Model):
+    __tablename__ = 'auth_tokens'
+    
+    token = db.Column(db.String(128), primary_key=True, nullable=False) # The token string itself
+    timestamp = db.Column(db.Integer, default=lambda: int(time.time()), nullable=False)
+    added_by = db.Column(db.String(128))
+
+    def __repr__(self):
+        return f"<AuthToken {self.token[:8]}...>"
+
+# --- 5. WEBGUI_USERS Model ---
+# Maps to 'webgui_users'. Username is the primary key.
+class WebUser(db.Model):
+    __tablename__ = 'web_users'
+    
+    username = db.Column(db.String(64), primary_key=True, nullable=False)
+    
+    password = db.Column(db.String(128), nullable=False) 
+    role = db.Column(db.String(20), nullable=False) # "admin", "analyst", or "guest"
+
+    def __repr__(self):
+        return f"<WebUser {self.username} (Role: {self.role})>"
 
 # =================================
 # ======= UTILITY FUNCTIONS =======
 # =================================
+
+# === DATABASE ====
+
+def insert_initial_data():
+    """
+    Inserts initial configuration data (auth tokens and users) into the database.
+    This should only be run after the tables have been created via db.create_all().
+    """
+    try:
+        # --- Insert Auth Tokens ---
+        for token_value, data in INITIAL_AGENT_AUTH_TOKENS.items():
+            # In a real app, you would first check if the token already exists 
+            # to prevent duplicates, but for a first run, direct insert is fine.
+            new_token = AuthToken(
+                token=token_value,
+                timestamp=time.time(),
+                added_by=data["added_by"]
+            )
+            db.session.add(new_token)
+
+        # --- Insert Web Users ---
+        for username, data in INITIAL_WEBGUI_USERS.items():
+            new_user = WebUser(
+                username=username,
+                password=data["password"], # WARNING: Hash passwords in production!
+                role=data["role"]
+            )
+            db.session.add(new_user)
+        
+        db.session.commit()
+        logger.info("Successfully inserted initial Auth Tokens and Web Users.")
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"FATAL: Failed to insert initial data into DB: {e}")
+
+def create_db_tables():
+
+    db_exists = os.path.exists(SAVEFILE)
+    # Use the application context to ensure Flask extensions are configured
+    with app.app_context():
+        # This checks the database file defined in SQLALCHEMY_DATABASE_URI.
+        # If the file (server.db) doesn't exist, it creates it.
+        # If the tables defined in your models don't exist, it creates them.
+        db.create_all()
+        if not db_exists:
+            insert_initial_data()
+            logger.info(f"Initialized database with initial data at {SAVEFILE}")
+        else:
+            logger.info(f"Initialized database at {SAVEFILE}")
+
+def serialize_model(instance):
+    """
+    Generic function to convert any SQLAlchemy model instance into a dictionary.
+    It iterates over the columns defined in the model's mapping and extracts their values.
+    
+    NOTE: This only serializes direct columns and ignores relationships.
+    """
+    
+    # Use class_mapper to get the mapped properties of the class
+    mapper = class_mapper(instance.__class__)
+    
+    # Dictionary comprehension to build the serialized data
+    serialized_data = {}
+    for column in mapper.columns:
+        # Get the value using the attribute name (column.key)
+        value = getattr(instance, column.key)
+        
+        # NOTE ON NAMING CONVENTION:
+        # If your clients expect camelCase/PascalCase (e.g., "executionUser", "lastSeenTime")
+        # but your model uses snake_case (e.g., "execution_user", "last_seen_time"), 
+        # you would need an extra mapping layer here. 
+        # For simplicity, we are using the column key (snake_case) as the final key name. 
+        # If needed, you can add a dictionary lookup here to map snake_case to the old 
+        # client-expected casing if it differs.
+        
+        serialized_data[column.key] = value
+
+    return serialized_data
 
 # === BEACON SUPPORT ===
 
@@ -202,46 +396,105 @@ def matches_pattern(value, pattern):
 
 def create_incident(messageDict,tag="New",assignee="",createAlert=True):
     """
-    Creates an incident and sends alerts
-    """
-    global incidents, agents
-
-    incident_id = len(incidents) + 1
-    incidentDict = {
-        "timestamp": messageDict["timestamp"],
-        "agent_id": messageDict["agent_id"],
-        "oldStatus": messageDict["oldStatus"],
-        "tag": tag,
-        "newStatus": messageDict["newStatus"],
-        "message": messageDict["message"],
-        "assignee": assignee,
-        "sla": messageDict["sla"]
-    }
-
-    if incident_id in incidents:
-        logger.warning(f"/create_incident - incidents hash collision. Old incident: {incidents[incident_id]}. New incident: {incidentDict}")
-    incidents[incident_id] = incidentDict
-
-    try:
-        # Handle paused
-        if incidentDict["message"].lower().split(" - ")[1].split(" ")[0] == "paused":
-            pattern = r'(\d+)\s*(?=seconds\b)'
-            match = re.search(pattern, incidentDict["message"])
-            if match:
-                seconds = int(match.group(1))
-                agents[incidentDict["agent_id"]]["pausedUntil"] = time.time() + seconds
-            else:
-                logger.error(f"/create_incident - cannot parse seconds attribute in pause incident. Full message: {incidentDict["message"]}.")
-    except Exception as E:
-        # Custom incident that doesnt follow the format
-        pass
-    if createAlert:
-        #discord_webhook(incident_id,incidentDict)
-        with webhook_queue_cond: # Might lead to minor sleep but nothing major
-            webhook_queue.append({"incident_id": incident_id, "incident":incidentDict})
-            webhook_queue_cond.notify() 
-        # TODO trigger web alert?
+    Creates a new incident record in the database and handles agent pause status.
     
+    Args:
+        messageDict (dict): Dictionary containing data derived from a Message (e.g., 
+                            timestamp, agent_id, statuses, message, sla).
+        tag (str): Incident status tag ("New", "Active", "Closed").
+        assignee (str): Assigned analyst username.
+        createAlert (bool): Whether to queue a webhook alert.
+    """
+
+    # --- 1. Create and Persist the Incident Record ---
+    try:
+        new_incident = Incident(
+            # incident_id is auto-incremented by the database
+            timestamp=messageDict["timestamp"],
+            agent_id=messageDict["agent_id"],
+            tag=tag,
+            # Note: Changed to snake_case for consistency with model definitions
+            oldStatus=messageDict["oldStatus"],
+            newStatus=messageDict["newStatus"],
+            message=messageDict["message"],
+            assignee=assignee,
+            sla=messageDict["sla"]
+        )
+
+        #if incident_id in incidents:
+        #    logger.warning(f"/create_incident - incidents hash collision. Old incident: {incidents[incident_id]}. New incident: {incidentDict}")
+        
+        db.session.add(new_incident)
+        db.session.commit()
+        
+        incident_id = new_incident.incident_id
+        # incident_id is now available after the commit
+        
+    except Exception as e:
+        # In a real app, use logger.error(f"Error creating incident: {e}")
+        logger.error(f"create_incident(): Error creating incident: {e}")
+        db.session.rollback() # Important: rollback the session on error
+        return
+
+    # --- 2. Handle Paused Status (Agent State Update) ---
+    agent_id = new_incident.agent_id
+    
+    try:
+        # Check if the incident message indicates a pause
+        if new_incident.message.lower().split(" - ")[1].split(" ")[0] == "paused":
+            
+            # Retrieve the Agent record using the primary key
+            agent = db.session.get(Agent,agent_id)
+            
+            if agent:
+                pattern = r'(\d+)\s*(?=seconds\b)'
+                match = re.search(pattern, new_incident.message)
+                
+                if match:
+                    seconds = int(match.group(1))
+                    
+                    # Update the database record directly
+                    agent.pausedUntil = int(time.time()) + seconds
+                    db.session.commit()
+                else:
+                    # logger.error(f"/create_incident - cannot parse seconds attribute...")
+                    print(f"create_incident(): Cannot parse seconds in pause incident for Agent {agent_id}.")         
+    except Exception as E:
+        # This catches errors during the pause update, often due to 
+        # messages not following the expected format.
+        db.session.rollback() 
+        # logger.debug(f"Non-standard incident message. Skipping pause update: {E}")
+        pass 
+
+    # --- 3. Handle Alerts ---
+    if createAlert:
+        # This part remains mostly the same, but uses the committed incident_id
+        # and the SQLAlchemy object attributes for the dictionary payload.
+        
+        # We assume webhook_queue_cond and webhook_queue are available globals.
+        try:
+            # We create a dictionary representation for the webhook handler if needed
+            incident_payload = {
+                "timestamp": new_incident.timestamp,
+                "agent_id": new_incident.agent_id,
+                "oldStatus": new_incident.oldStatus,
+                "tag": new_incident.tag,
+                "newStatus": new_incident.newStatus,
+                "message": new_incident.message,
+                "assignee": new_incident.assignee,
+                "sla": new_incident.sla
+            }
+            
+            #discord_webhook(incident_id,incidentDict)
+            with webhook_queue_cond: # Might lead to minor sleep but nothing major
+                webhook_queue.append({"incident_id": incident_id, "incident":incident_payload})
+                webhook_queue_cond.notify() 
+            # TODO trigger web alert?
+            
+        except Exception as E:
+            # logger.error(f"Error queueing webhook: {E}")
+            print(f"create_incident(): Could not queue webhook: {E}")
+
     return
 
 def webhook_main():
@@ -554,8 +807,64 @@ def find_incident(incidents, criteria, newest=False):
     selected_iid, _ = min(candidates, key=key_fn)
     return selected_iid
 
+def find_incident_db(criteria, newest=False):
+    """
+    Finds a single incident record in the database based on criteria.
+
+    NOTE: Criteria keys (e.g., 'oldStatus', 'agent_id') must match the 
+    SQLAlchemy Incident model attributes (snake_case).
+
+    Args:
+        criteria (dict): dict of field -> expected_value.
+                         (value may be tuple/list for OR-match using SQL IN operator)
+        newest (bool): False = return oldest match (default: timestamp ASC)
+                       True = return newest match (timestamp DESC)
+
+    returns: single matching incident_id (int) or None
+    """
+    
+    # Start the base query against the Incident model
+    query = Incident.query
+    
+    # 1. Apply Filters based on criteria
+    for key, required_value in criteria.items():
+        # Get the corresponding column attribute from the Incident class
+        column = getattr(Incident, key, None)
+        
+        if column is None:
+            # If a criteria key doesn't match an attribute, we stop the query or skip the filter.
+            # Choosing to stop and return None for strictness.
+            logger.warning(f"find_incident_db(): Warning: Criteria key '{key}' does not match a column in Incident model.")
+            return None 
+
+        if isinstance(required_value, (tuple, list)):
+            # Use the SQL 'IN' operator for OR-match (e.g., tag IN ('New', 'Active'))
+            query = query.filter(column.in_(required_value))
+        else:
+            # Use standard equality filtering (e.g., agent_id == 'XYZ')
+            query = query.filter(column == required_value)
+
+    # 2. Apply Ordering
+    if newest:
+        # Sort by timestamp descending to get the newest first
+        query = query.order_by(Incident.timestamp.desc())
+    else:
+        # Sort by timestamp ascending to get the oldest first (default)
+        query = query.order_by(Incident.timestamp.asc())
+        
+    # 3. Execute Query and Retrieve Result
+    # .first() retrieves the first result according to the ordering
+    selected_incident = query.first()
+
+    if selected_incident:
+        return selected_incident.incident_id
+    else:
+        return None
+    
 # === SAVE AND LOAD ===
 def save_state(filepath=SAVEFILE):
+    return False
+    """
     global last_save_time
 
     def prepare(data):
@@ -582,6 +891,7 @@ def save_state(filepath=SAVEFILE):
     last_save_time=time.time()
 
     logger.info(f"save_state - saved current database to {SAVEFILE}")
+    """
 
 def signal_handler(signum, frame):
     save_state()
@@ -593,6 +903,8 @@ def periodic_autosave(interval=SAVE_INTERVAL):
         save_state()
 
 def load_state(filepath=SAVEFILE):
+    return False
+    """
     global webgui_users, agents, messages, incidents, agent_auth_tokens
 
     try:
@@ -617,6 +929,7 @@ def load_state(filepath=SAVEFILE):
 
     except FileNotFoundError:
         logger.error(f"load_state - {filepath} not found, starting fresh!")
+    """
 
 # === LOGIN AND MISC ===
 
@@ -638,9 +951,9 @@ def analyst_required(f):
 
 @login_manager.user_loader
 def load_user(id):
-    user = webgui_users.get(id)
-    if user:
-        return User(id, user['role'])
+    user_record = WebUser.query.filter(WebUser.username == id).first()
+    if user_record:
+        return User(id, user_record.role)
     return None
 
 def is_safe_path(next_url: str) -> bool:
@@ -681,65 +994,94 @@ def get_random_time_offset_epoch(minutes_offset=30, direction="either"):
 
 def add_test_data_agents(num=5):
     # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int),lastStatus(bool),stale(bool)}
-    global agents
-    for i in range(1,num + 1):
-        agent = {
-            "agent_name": random.choice(["apache2","iis","smb","mysql","vsftpd"]),
-            "hostname": random.choice(["webserver1","webserver2","fileshare1","fileshare2","dc01"]),
-            "ip": random.choice(["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5"]),
-            "os": random.choice(["Windows 10","Windows 2016Server","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8"]),
-            "executionUser": random.choice(["root","admin",".\\administrator","domain\\dadmin","user"]),
-            "executionAdmin": random.choice([True,False]),
-            "lastSeenTime": time.time() - ((num - i) * 100),
-            "lastStatus": random.choice([True,False]),
-            "stale": False,
-            "pausedUntil": 0
-        }
-        agents[f"agent_{i}"] = agent
+    try:
+        for i in range(1,num + 1):
+            agent_name = random.choice(["apache2","iis","smb","mysql","vsftpd"])
+            hostname = random.choice(["webserver1","webserver2","fileshare1","fileshare2","dc01"])
+            ip = random.choice(["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5"])
+            os = random.choice(["Windows 10","Windows 2016Server","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8"])
+
+            # The agent_id is computed but we use a unique prefix for test data to avoid collisions
+            computed_agent_id = hash_id(f"test_agent_{i}", hostname, ip, os)
+
+            new_agent = Agent(
+                agent_id=computed_agent_id,
+                agent_name=agent_name,
+                hostname=hostname,
+                ip=ip,
+                os=os,
+                executionUser=random.choice(["root", "admin", ".\\administrator", "domain\\dadmin", "user"]),
+                executionAdmin=random.choice([True, False]),
+                lastSeenTime=time.time() - ((num - i) * 100),
+                lastStatus=random.choice([True, False]),
+                stale=random.choice([True, False]),
+                pausedUntil=0
+            )
+            db.session.add(new_agent)
+        db.session.commit()
+        logger.info(f"Successfully added {num} test agents to the database.")
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to add test agent data: {e}")
 
 def add_test_data_messages(num=15):
-    for i in range(1,num + 1):
-        timestamp = time.time() - ((num - i) * 100)
-        agent_id = f"agent_{random.randint(1,5)}"
-        message_id = hash_id(timestamp, agent_id)
-        message = {
-            "timestamp": timestamp,
-            "agent_id": agent_id,
-            "oldStatus": random.choice([False,True]),
-            "newStatus": random.choice([False,True]),
-            "message": random.choice([
-                "Service - Missing required package {package} for service {service}, DISARMED.",
-                "Service - Service {service_name} not running, RESTORED service to START state.",
-                "Service - Service {service_name} not set to automatic start, FAILED to set to automatic start.",
-                "Firewall - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. SUCCESSFULLY created firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
-                "Firewall - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. DISARMED, but told to create firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
-                "Firewall - SUCCESSFULLY removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.",
-                "Firewall - Could not get firewall rule information due to PowerShell error.",
-                "Interface - Interface {interface} was set to DOWN, RESTORED UP state.",
-                "Interface - Bad system TTL set, DISARMED.",
-                "Interface - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
-                "Agent - No logs from agent in {minutes} minutes.",
-                "Agent - Paused for 60 seconds.",
-                "Agent - Paused for 60 seconds.",
-                "Agent - Paused for 60 seconds.",
-                "Agent - Paused for 60 seconds.",
-                "Agent - Paused for 60 seconds.",
-                "Agent - Resumed after sleeping for 60 seconds.",
-                "Agent - Resumed after sleeping for 60 seconds, EARLY EXIT.",
-                "Agent - Agent re-registered.",
-                "ServiceCustom - MySQL users changed.",
-                "ServiceCustom - MySQL data changed.",
-                "ServiceCustom - IIS Site Config changed.",
-                "ServiceCustom - IIS Application Pool changed."#,
-                #"Generic - Test Test Test.",
-                #"Generic - Test Test Test."
-            ])
-        }
-        messages[message_id] = message
+    try:
+        for i in range(1, num + 1):
+            timestamp = time.time() - ((num - i) * 100)
+            agent_id = f"agent_{random.randint(1, 5)}" # Uses the agent_id naming pattern from the original code
+
+            message_id = hash_id(timestamp, agent_id)
+            new_message = Message(
+                message_id = message_id,
+                timestamp=timestamp,
+                agent_id=agent_id,
+                oldStatus=random.choice([False, True]),
+                newStatus=random.choice([False, True]),
+                message=random.choice([
+                    "Service - Missing required package {package} for service {service}, DISARMED.",
+                    "Service - Service {service_name} not running, RESTORED service to START state.",
+                    "Service - Service {service_name} not set to automatic start, FAILED to set to automatic start.",
+                    "Firewall - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. SUCCESSFULLY created firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
+                    "Firewall - Default {direction} policy is deny_all and no specific {direction.lower()} allow rule for port {port} exists. DISARMED, but told to create firewall rule Stabvest_Rule_{port}_{direction}_{action}.",
+                    "Firewall - SUCCESSFULLY removed firewall rule: {rule['Name']}/{rule['DisplayName']}: {rule['Action']} {port} {rule['Direction']} on profile {rule['Profile']}.",
+                    "Firewall - Could not get firewall rule information due to PowerShell error.",
+                    "Interface - Interface {interface} was set to DOWN, RESTORED UP state.",
+                    "Interface - Bad system TTL set, DISARMED.",
+                    "Interface - Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}.",
+                    "Agent - No logs from agent in {minutes} minutes.",
+                    "Agent - Paused for 60 seconds.",
+                    "Agent - Paused for 60 seconds.",
+                    "Agent - Paused for 60 seconds.",
+                    "Agent - Paused for 60 seconds.",
+                    "Agent - Paused for 60 seconds.",
+                    "Agent - Resumed after sleeping for 60 seconds.",
+                    "Agent - Resumed after sleeping for 60 seconds, EARLY EXIT.",
+                    "Agent - Agent re-registered.",
+                    "ServiceCustom - MySQL users changed.",
+                    "ServiceCustom - MySQL data changed.",
+                    "ServiceCustom - IIS Site Config changed.",
+                    "ServiceCustom - IIS Application Pool changed.",
+                    "checkin",
+                    "checkin",
+                    "checkin",
+                    "checkin",
+                    "checkin",
+                    "checkin"#,
+                    #"Generic - Test Test Test.",
+                    #"Generic - Test Test Test."
+                ])
+            )
+            db.session.add(new_message)
+            
+        db.session.commit()
+        logger.info(f"Successfully added {num} test messages to the database.")
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to add test message data: {e}")
 
 def add_test_data_incidents(num=15,createAlert=True):
-    for i in range(1,num + 1):
-        incident = {
+    for i in range(1, num + 1):
+        incident_data = {
             "timestamp": time.time() - ((num - i) * 100),
             "agent_id":f"agent_{random.randint(1,5)}",
             "oldStatus": random.choice([False,True]),
@@ -771,11 +1113,17 @@ def add_test_data_incidents(num=15,createAlert=True):
             ]),
             "sla": random.choice([0,get_random_time_offset_epoch(90)])
         }
-        create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),createAlert)
+        create_incident(
+            incident_data,
+            tag=random.choice(["New", "Active", "Closed"]),
+            assignee=random.choice(["Andrew", "James", "Max", "Windows", "Windows", "Linux", "Linux", "", "", "", ""]),
+            createAlert=createAlert
+        )
+    logger.info(f"Successfully added {num} test incidents to the database.")
 
 def add_test_data_incidents_custom(num=5,createAlert=True):
-    for i in range(1,num + 1):
-        incident = {
+    for i in range(1, num + 1):
+        incident_data = {
             "timestamp": time.time() - ((num - i) * 100),
             "agent_id":f"custom",
             "oldStatus": random.choice([False,True]),
@@ -790,7 +1138,13 @@ def add_test_data_incidents_custom(num=5,createAlert=True):
             ]),
             "sla": random.choice([0,get_random_time_offset_epoch(90)])
         }
-        create_incident(incident,random.choice(["New","Active","Closed"]),random.choice(["Andrew","James","Max","Windows","Windows","Linux","Linux","","","",""]),createAlert)
+        create_incident(
+            incident_data,
+            tag=random.choice(["New", "Active", "Closed"]),
+            assignee=random.choice(["Andrew", "James", "Max", "Windows", "Windows", "Linux", "Linux", "", "", "", ""]),
+            createAlert=createAlert
+        )
+    logger.info(f"Successfully added {num} test custom incidents to the database.")
 
 # =================================
 # ========= API ENDPOINTS =========
@@ -860,9 +1214,9 @@ def login():
     password = request.form.get('password')
     next_param = request.form.get('next') or request.args.get('next') or ''
 
-    user = webgui_users.get(username)
-    if user and password == user['password']:
-        user_obj = User(username, user['role'])
+    user_record = WebUser.query.filter(WebUser.username == username).first()
+    if user_record and password == user_record.password:
+        user_obj = User(username, user_record.role)
         login_user(user_obj)
         session.permanent = True
         logger.info(f"/login - Successful authentication for {username} from {request.remote_addr}")
@@ -902,96 +1256,158 @@ def ping():
 def handle_beacon():
     data = request.json
 
-    agent_name = data.get("name")
-    hostname = data.get("hostname")
-    ip = data.get("ip")
-    os_name = data.get("os")
-    executionUser = data.get("executionUser")
-    executionAdmin = data.get("executionAdmin")
-    auth = data.get("auth")
-    beacon_type = data.get("beacon_type")
-    oldStatus = data.get("oldStatus")
-    newStatus = data.get("newStatus")
-    message = data.get("message")
-
-    # Auth check
-    if not auth in agent_auth_tokens:
-        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[hostname, ip, os_name, auth]}")
-        return "Unauthorized", 403
+    agent_name = data.get("name","")
+    hostname = data.get("hostname","")
+    ip = data.get("ip","")
+    os_name = data.get("os","")
+    executionUser = data.get("executionUser","")
+    executionAdmin = data.get("executionAdmin","")
+    auth = data.get("auth","")
+    beacon_type = data.get("beacon_type","")
+    oldStatus = data.get("oldStatus","")
+    newStatus = data.get("newStatus","")
+    message = data.get("message","")
     
     if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
         logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
         return "Missing data", 400
+    
+    # Auth check
+    auth_token_record = AuthToken.query.filter_by(token=auth).first()
+    if not auth_token_record:
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
+        return "Unauthorized", 403
 
     # Register client if new, or update agent fields if not
     agent_id = hash_id(agent_name, hostname, ip, os_name)
 
     try:
-        if message.split(" ")[0].lower() == "reregister":
-            if agent_id in agents:
-                del agents[agent_id]
-            else:
-                logger.warning(f"/beacon - Agent claims it is reregistering but we have no prior record of it. Agent_id: {agent_id}. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
-    except Exception as E:
-        # Weird format
-        pass
+        agent = db.session.get(Agent,agent_id)
+        is_reregister_request = message.split(" ")[0].lower() == "reregister"
+    except Exception:
+        # Avoid crashing if message format is unexpected
+        is_reregister_request = False
 
-    if agent_id not in agents:
-        agents[agent_id] = {
-            "agent_name": agent_name,
-            "hostname": hostname,
-            "ip": ip,
-            "os": os_name,
-            "executionUser": executionUser,
-            "executionAdmin": executionAdmin,
-            "lastSeenTime": time.time(),
-            "lastStatus": newStatus,
-            "stale": False,
-            "pausedUntil": 0
-        }
-    else:
-        # TODO re-register agents might need a refresh on hostname and etc
-        agents[agent_id]["last_seen"] = time.time()
-        agents[agent_id]["lastStatus"] = newStatus
+    try:
+        # Reregistration logic
+        if is_reregister_request and agent:
+            # Delete existing agent record
+            db.session.delete(agent)
+            agent = None # Set to None so it gets re-created in the next block
+            logger.info(f"/beacon - Reregistering and deleting old agent record for agent {agent_id} with details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
+            
+        # Register or update client
+        if not agent:
+            # CREATE NEW AGENT
+            new_agent = Agent(
+                agent_id=agent_id,
+                agent_name=agent_name,
+                hostname=hostname,
+                ip=ip,
+                os=os_name,
+                executionUser=executionUser,
+                executionAdmin=executionAdmin,
+                lastSeenTime=time.time(),
+                lastStatus=newStatus,
+                # stale field is typically derived, but if stored: stale=False,
+                pausedUntil=0
+            )
+            db.session.add(new_agent)
+            
+        else:
+            # UPDATE EXISTING AGENT
+            agent.lastSeenTime = time.time()
+            agent.lastStatus = newStatus
+            
+        db.session.commit()
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/beacon - Failed to register or update agent {agent_id}: {e}")
+        return "Database error during agent update", 500
     
-    # Update messages{}
+    # 4. Update Messages (DB Write)
     message_id = hash_id(time.time(), agent_id)
-    messageDict = {
+    message_data = {
         "timestamp": time.time(),
         "agent_id": agent_id,
         "oldStatus": oldStatus,
         "newStatus": newStatus,
         "message": message
     }
-
-    if message_id in messages:
-        logger.warning(f"/beacon - messages hash collision. Old message: {messages[message_id]}. New message: {messageDict}")
-    messages[message_id] = messageDict
-
-    # Handle RESUME
+    
     try:
-        if messageDict["message"].lower().split(" - ")[1].split(" ")[0] == "resumed":
-            agents[messageDict["agent_id"]]["pausedUntil"] = 0
-            pattern = r'(\d+)\s*(?=seconds\b)'
-            match = re.search(pattern, messageDict["message"])
-            if match:
-                seconds = int(match.group(1))
-                criteria = {"agent_id": messageDict["agent_id"], "tag": ("New", "Active"), "message": (f"Agent - Resumed after sleeping for {seconds} seconds.",f"Agent - Resumed after sleeping for {seconds} seconds, EARLY EXIT.")}
-                incident_id = find_incident(incidents,criteria,False)
-                incidents[incident_id]["tag"] = "Closed"
-            else:
-                logger.error(f"/beacon - cannot parse seconds attribute in resume incident. Full message: {messageDict["message"]}.")
-    except Exception as E:
-        # Doesnt match format
+        new_message = Message(
+            message_id = message_id,
+            timestamp=message_data["timestamp"],
+            agent_id=message_data["agent_id"],
+            oldStatus=message_data["oldStatus"],
+            newStatus=message_data["newStatus"],
+            message=message_data["message"]
+        )
+        db.session.add(new_message)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/beacon - Failed to create message for agent {agent_id}: {e}")
+        # Not returning an error, as this is secondary to agent update/auth
         pass
 
-    # Trigger incident if needed. Incident means that oldStatus is FALSE (malicious action or critical error detected)
+    # 5. Handle RESUME Logic (DB Read/Write)
+    try:
+        # Check for RESUME message pattern
+        if message.lower().split(" - ")[1].split(" ")[0] == "resumed":
+            # 5a. Update Agent Status
+            # We already have the agent record (or the new one was created)
+            current_agent = db.session.get(Agent,agent_id)
+            if current_agent:
+                current_agent.pausedUntil = 0
+                db.session.commit()
+
+            # 5b. Find and Close Incident
+            pattern = r'(\d+)\s*seconds\b'
+            match = re.search(pattern, message)
+            
+            if match:
+                seconds = int(match.group(1))
+                
+                # Search for the corresponding PAUSE incident that is still open
+                incident_to_close = Incident.query.filter(
+                    Incident.agent_id == agent_id,
+                    Incident.tag.in_(["New", "Active"]),
+                    # Match either the full message or the 'EARLY EXIT' message
+                    or_(
+                        Incident.message.like(f"%Resumed after sleeping for {seconds} seconds%"),
+                        Incident.message.like(f"%Resumed after sleeping for {seconds} seconds, EARLY EXIT%")
+                    )
+                ).first()
+                
+                if incident_to_close:
+                    incident_to_close.tag = "Closed"
+                    db.session.commit()
+                else:
+                    logger.warning(f"/beacon - RESUME message received but no open incident found to close for agent {agent_id}.")
+            else:
+                logger.error(f"/beacon - cannot parse seconds attribute in resume incident. Full message: {message}.")
+                
+    except Exception as e:
+        # Catches exceptions from message parsing or DB operations within the RESUME block
+        db.session.rollback() 
+        logger.error(f"/beacon - Error processing RESUME logic for agent {agent_id}: {e}")
+
+    # 6. Trigger Incident if Status Change is Critical
     if oldStatus == False:
-        create_incident(messageDict)
+        # The original code just passed the messageDict, which is okay since it contains all necessary info.
+        incident_data = {
+            "timestamp": time.time(),
+            "agent_id": agent_id,
+            "oldStatus": oldStatus,
+            "newStatus": newStatus,
+            "message": message,
+            "sla": 0
+        }
+        create_incident(incident_data)
 
-    # dont log successful connection as thats in messages
-
-    # Return
     return "ok", 200
 
 # === FRONTEND DISPLAY ===
@@ -1000,53 +1416,120 @@ def handle_beacon():
 @login_required
 @admin_required
 def list_users():
-    logger.info(f"/list_users - Successful connection from {current_user.id} at {request.remote_addr}")
-    return jsonify(webgui_users)
+    try:
+        logger.info(f"/list_users - Successful connection from {current_user.id} at {request.remote_addr}")
+        users = WebUser.query.all()
+        user_dict = {user.username: serialize_model(user) for user in users}
+        return jsonify(user_dict)
+    except Exception as e:
+        logger.error(f"/list_users - Database or serialization error: {e}")
+        return jsonify({"error": "Failed to retrieve user list"}), 500
 
 @app.route("/list_users_simple", methods=["POST"])
 @login_required
 def list_users_simple():
-    logger.info(f"/list_users_simple - Successful connection from {current_user.id} at {request.remote_addr}")
-    
-    users = {} # username: role, where role is "guest","analyst", or "admin"
-    for username in webgui_users:
-        users[username] = webgui_users[username]["role"]
+    """
+    Retrieves a simple dictionary of all users and their roles from the database.
+    """
+    try:
+        logger.info(f"/list_users_simple - Successful connection from {current_user.id} at {request.remote_addr}")
+        
+        users = WebUser.query.all()
+        user_roles = {user.username: user.role for user in users}
 
-    return users
+        return jsonify(user_roles)
+
+    except Exception as e:
+        logger.error(f"/list_users_simple - Database error: {e}")
+        return jsonify({"error": "Failed to retrieve simple user list"}), 500
 
 @app.route("/list_tokens", methods=["POST"])
 @login_required
 @admin_required
 def list_tokens():
-    logger.info(f"/list_tokens - Successful connection from {current_user.id} at {request.remote_addr}")
-    
-    return jsonify(agent_auth_tokens)
+    try:
+        logger.info(f"/list_tokens - Successful connection from {current_user.id} at {request.remote_addr}")
+        tokens = AuthToken.query.all()
+        token_dict = {token.token: serialize_model(token) for token in tokens}
+        return jsonify(token_dict)
+    except Exception as e:
+        logger.error(f"/list_tokens - Database or serialization error: {e}")
+        return jsonify({"error": "Failed to retrieve token list"}), 500
 
 @app.route("/list_tokens_number", methods=["POST"])
 @login_required
 @admin_required
 def list_tokens_number():
-    logger.info(f"/list_tokens - Successful connection from {current_user.id} at {request.remote_addr}")
-    return jsonify({"number": len(agent_auth_tokens)})
+    """
+    Returns the count of authentication tokens in the database.
+    """
+    try:
+        logger.info(f"/list_tokens_number - Successful connection from {current_user.id} at {request.remote_addr}")
+        
+        token_count = AuthToken.query.count()
+        
+        return jsonify({"number": token_count})
+    
+    except Exception as e:
+        logger.error(f"/list_tokens_number - Database error: {e}")
+        return jsonify({"error": "Failed to retrieve token count"}), 500
 
 @app.route("/list_agents", methods=["POST"])
 @login_required
 def list_agents():
-    logger.info(f"/list_agents - Successful connection from {current_user.id} at {request.remote_addr}")
-    return jsonify(agents)
+    try:
+        logger.info(f"/list_agents - Successful connection from {current_user.id} at {request.remote_addr}")
+        
+        agents = Agent.query.all()
+        
+        agent_dict = {
+            agent.agent_id: serialize_model(agent)
+            for agent in agents
+        }
+        
+        return jsonify(agent_dict)
+        
+    except Exception as e:
+        logger.error(f"/list_agents - Database or serialization error: {e}")
+        return jsonify({"error": "Failed to retrieve agent list"}), 500
 
 @app.route("/list_messages", methods=["POST"])
 @login_required
 def list_messages():
-    logger.info(f"/list_messages - Successful connection from {current_user.id} at {request.remote_addr}")
-    
-    return jsonify(messages)
+    try:
+        logger.info(f"/list_messages - Successful connection from {current_user.id} at {request.remote_addr}")
+        
+        messages = Message.query.all()
+        
+        message_dict = {
+            message.message_id: serialize_model(message)
+            for message in messages
+        }
+        
+        return jsonify(message_dict)
+
+    except Exception as e:
+        logger.error(f"/list_messages - Database or serialization error: {e}")
+        return jsonify({"error": "Failed to retrieve message list"}), 500
 
 @app.route("/list_incidents", methods=["POST"])
 @login_required
 def list_incidents():
-    logger.info(f"/list_incidents - Successful connection from {current_user.id} at {request.remote_addr}")
-    return jsonify(incidents)
+    try:
+        logger.info(f"/list_incidents - Successful connection from {current_user.id} at {request.remote_addr}")
+        
+        incidents = Incident.query.all()
+        
+        incident_dict = {
+            incident.incident_id: serialize_model(incident)
+            for incident in incidents
+        }
+        
+        return jsonify(incident_dict)
+        
+    except Exception as e:
+        logger.error(f"/list_incidents - Database or serialization error: {e}")
+        return jsonify({"error": "Failed to retrieve incident list"}), 500
 
 @app.route("/list_logfile", methods=["POST"])
 @login_required
@@ -1067,6 +1550,8 @@ def list_logfile(filepath=LOGFILE,lines=50):
 @login_required
 @admin_required
 def save_export(filepath=SAVEFILE):
+    return jsonify({"error": "Deprecated"}), 500
+
     logger.info(f"/save_export - Successful connection from {current_user.id} at {request.remote_addr}")
     
     try:
@@ -1143,29 +1628,44 @@ def add_user():
         logger.warning(f"/add_user - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[username, password, role]}")
         return "Missing data", 400
     
-    if role != "guest" and role != "analyst":
+    if role not in ["guest","analyst","admin"]:
         logger.warning(f"/add_user - Failed connection from {current_user.id} at {request.remote_addr} - bad role value. Full details: {[username, password, role]}")
         return "Bad role value", 400
 
-    if username in webgui_users:
+    existing_user = WebUser.query.filter_by(username=username).first()
+    if existing_user:
         logger.warning(f"/add_user - Failed connection from {current_user.id} at {request.remote_addr} - bad username value, conflicts with existing user. Full details: {[username, password, role]}")
         return "New user overlaps with existing user", 400
 
-    webgui_users[username] = {"password": password, "role": role} # TODO hash
+    try:
+       
+        new_user = WebUser(
+            username=username,
+            password=password, # TODO hash
+            role=role
+        )
 
-    incident = {
-        "timestamp": time.time(),
-        "agent_id":f"custom",
-        "oldStatus": False,
-        "newStatus": False,
-        "message": f"Server - User Added With Username {username} and Role {role} by User {current_user.id}",
-        "sla": 0
-    }
-    create_incident(incident)
+        db.session.add(new_user)
+        db.session.commit()
 
-    logger.info(f"/add_user - Successful connection from {current_user.id} at {request.remote_addr}. Adding user {username} with role {role}")
-    return jsonify({"status": "ok"})
+        incident_data = {
+            "timestamp": time.time(),
+            "agent_id": "custom",
+            "oldStatus": False,
+            "newStatus": False,
+            "message": f"Server - User Added With Username {username} and Role {role} by User {current_user.id}",
+            "sla": 0
+        }
+        create_incident(incident_data)
 
+        logger.info(f"/add_user - Successful connection from {current_user.id} at {request.remote_addr}. Adding user {username} with role {role}")
+        return jsonify({"status": "ok"})
+    
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/add_user - Database error: {e}")
+        return jsonify({"error": "Database error while adding user"}), 500
+    
 @app.route("/delete_user", methods=["POST"])
 @login_required
 @admin_required
@@ -1177,29 +1677,39 @@ def delete_user():
         logger.warning(f"/delete_user - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[username]}")
         return "Missing data", 400
     
-    if not webgui_users[username]:
-        logger.warning(f"/delete_user - Failed connection from {current_user.id} at {request.remote_addr} - username not found. Full details: {[username]}")
-        return "Bad role value", 400
-    
     if username == current_user.id:
         logger.warning(f"/delete_user - Failed connection from {current_user.id} at {request.remote_addr} - cannot delete own user. Full details: {[username]}")
         return "Target username cannot be the same as current username", 400
-
-    logger.info(f"/delete_user - Successful connection from {current_user.id} at {request.remote_addr}. Deleting user {username} with role {webgui_users[username]["role"]}")
     
-    incident = {
-        "timestamp": time.time(),
-        "agent_id":f"custom",
-        "oldStatus": False,
-        "newStatus": False,
-        "message": f"Server - User Deleted With Username {username} and Role {webgui_users[username]["role"]} by User {current_user.id}",
-        "sla": 0
-    }
-    create_incident(incident)
+    user_to_delete = WebUser.query.filter_by(username=username).first()
+    
+    if not user_to_delete:
+        logger.warning(f"/delete_user - Failed connection from {current_user.id} at {request.remote_addr} - username not found. Full details: {[username]}")
+        return "Bad role value", 400
 
-    webgui_users.pop(username)
+    try:
+        user_role = user_to_delete.role
+        
+        incident_data = {
+            "timestamp": time.time(),
+            "agent_id": "custom",
+            "oldStatus": False,
+            "newStatus": False,
+            "message": f"Server - User Deleted With Username {username} and Role {user_role} by User {current_user.id}",
+            "sla": 0
+        }
+        create_incident(incident_data)
 
-    return jsonify({"status": "ok"})
+        db.session.delete(user_to_delete)
+        db.session.commit()
+        
+        logger.info(f"/delete_user - Successful connection from {current_user.id} at {request.remote_addr}. Deleting user {username} with role {user_role}")
+        return jsonify({"status": "ok"})
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/delete_user - Database error: {e}")
+        return jsonify({"error": "Database error while deleting user"}), 500
 
 @app.route("/add_token", methods=["POST"])
 @login_required
@@ -1212,24 +1722,38 @@ def add_token():
         logger.warning(f"/add_token - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[token]}")
         return "Missing data", 400
     
-    if token in agent_auth_tokens:
+    token_record = AuthToken.query.filter_by(token=token).first()
+    if token_record:
         logger.warning(f"/add_token - Failed connection from {current_user.id} at {request.remote_addr} - bad token value, conflicts with existing token. Full details: {[token]}")
-        return "New user overlaps with existing user", 400
+        return "New token overlaps with existing token", 400
     
-    incident = {
-        "timestamp": time.time(),
-        "agent_id":f"custom",
-        "oldStatus": False,
-        "newStatus": False,
-        "message": f"Server - Token Added by User {current_user.id}",
-        "sla": 0
-    }
-    create_incident(incident)
+    try:
+        new_token = AuthToken(
+            token=token,
+            timestamp=time.time(),
+            added_by=current_user.id
+        )
+        
+        db.session.add(new_token)
+        db.session.commit()
+        
+        incident_data = {
+            "timestamp": time.time(),
+            "agent_id": "custom",
+            "oldStatus": False,
+            "newStatus": False,
+            "message": f"Server - Token Added by User {current_user.id}",
+            "sla": 0
+        }
+        create_incident(incident_data)
 
-    agent_auth_tokens[token] = {"timestamp": time.time(), "added_by": current_user.id}
-
-    logger.info(f"/add_token - Successful connection from {current_user.id} at {request.remote_addr}. Adding token {token}")
-    return jsonify({"status": "ok"})
+        logger.info(f"/add_token - Successful connection from {current_user.id} at {request.remote_addr}. Adding token {token}")
+        return jsonify({"status": "ok"})
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/add_token - Database error: {e}")
+        return jsonify({"error": "Database error while adding token"}), 500
 
 @app.route("/delete_token", methods=["POST"])
 @login_required
@@ -1242,25 +1766,36 @@ def delete_token():
         logger.warning(f"/delete_token - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[token]}")
         return "Missing data", 400
     
-    if not agent_auth_tokens[token]:
+    token_to_delete = AuthToken.query.filter_by(token=token).first()
+    
+    if not token_to_delete:
         logger.warning(f"/delete_token - Failed connection from {current_user.id} at {request.remote_addr} - username not found. Full details: {[token]}")
         return "Bad role value", 400
 
-    logger.info(f"/delete_token - Successful connection from {current_user.id} at {request.remote_addr}. Deleting token {token} that was added by {agent_auth_tokens[token]["added_by"]} at {datetime.fromtimestamp(agent_auth_tokens[token]["timestamp"])}")
-    
-    incident = {
-        "timestamp": time.time(),
-        "agent_id":f"custom",
-        "oldStatus": False,
-        "newStatus": False,
-        "message": f"Server - Token Deleted by User {current_user.id}",
-        "sla": 0
-    }
-    create_incident(incident)
+    try:
+        added_by = token_to_delete.added_by
+        timestamp = datetime.fromtimestamp(token_to_delete.timestamp)
+        
+        incident_data = {
+            "timestamp": time.time(),
+            "agent_id": "custom",
+            "oldStatus": False,
+            "newStatus": False,
+            "message": f"Server - Token Deleted by User {current_user.id}",
+            "sla": 0
+        }
+        create_incident(incident_data)
+        
+        db.session.delete(token_to_delete)
+        db.session.commit()
 
-    agent_auth_tokens.pop(token)
-
-    return jsonify({"status": "ok"})
+        logger.info(f"/delete_token - Successful connection from {current_user.id} at {request.remote_addr}. Deleting token {token} that was added by {added_by} at {timestamp}")
+        return jsonify({"status": "ok"})
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/delete_token - Database error: {e}")
+        return jsonify({"error": "Database error while deleting token"}), 500
 
 @app.route("/update_incident_tag", methods=["POST"])
 @login_required
@@ -1284,10 +1819,18 @@ def update_incident_tag():
         logger.info(f"/update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. Invalid tag {tag}")
         return "Bad tag value", 400
     
-    if incident_id in incidents:
-        incidents[incident_id]["tag"] = tag
-        logger.info(f"update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. Updating tag for incident {incident_id} to {tag}")
-        return "ok", 200
+    incident = db.session.get(Incident,incident_id)
+    
+    if incident:
+        try:
+            incident.tag = tag
+            db.session.commit()
+            logger.info(f"update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. Updating tag for incident {incident_id} to {tag}")
+            return jsonify({"status": "ok"}), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"/update_incident_tag - Database update error: {e}")
+            return jsonify({"error": "Database error during update"}), 500
     else:
         logger.warning(f"/update_incident_tag - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}")
         return "Invalid incident ID", 400
@@ -1310,10 +1853,18 @@ def update_incident_assignee():
         logger.warning(f"/update_incident_assignee - Failed connection from {current_user.id} at {request.remote_addr} - Invalid incident ID {incident_id} (failed to parse to int). Full details: {[incident_id, assignee]}")
         return "Bad incident value", 400
     
-    if incident_id in incidents:
-        incidents[incident_id]["assignee"] = assignee
-        logger.info(f"/update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. Updating assignee for incident {incident_id} to {assignee}")
-        return "ok", 200
+    incident = db.session.get(Incident,incident_id)
+    
+    if incident:
+        try:
+            incident.assignee = assignee
+            db.session.commit()
+            logger.info(f"/update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. Updating assignee for incident {incident_id} to {assignee}")
+            return jsonify({"status": "ok"}), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"/update_incident_assignee - Database update error: {e}")
+            return jsonify({"error": "Database error during update"}), 500
     else:
         logger.warning(f"/update_incident_assignee - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}")
         return "Invalid incident ID", 400
@@ -1342,10 +1893,18 @@ def update_incident_sla():
         logger.warning(f"/update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. Cannot cast SLA of {sla} to int.")
         return "Bad sla value", 400
     
-    if incident_id in incidents:
-        incidents[incident_id]["sla"] = sla
-        logger.info(f"/update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. Updating sla for incident {incident_id} to {sla}")
-        return "ok", 200
+    incident = db.session.get(Incident,incident_id)
+
+    if incident:
+        try:
+            incident.sla = sla
+            db.session.commit()
+            logger.info(f"/update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. Updating sla for incident {incident_id} to {sla}")
+            return jsonify({"status": "ok"}), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"/update_incident_sla - Database update error: {e}")
+            return jsonify({"error": "Database error during update"}), 500
     else:
         logger.warning(f"/update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}")
         return "Invalid incident ID", 400
@@ -1354,6 +1913,8 @@ def update_incident_sla():
 @login_required
 @analyst_required
 def save_manual():
+    return jsonify({"error": "Deprecated"}), 500
+
     logger.info(f"/save_manual - Successful connection from {current_user.id} at {request.remote_addr}")
     
     try:
@@ -1372,26 +1933,29 @@ if __name__ == "__main__":
 
     logger.info(f"Starting server on {HOST}:{PORT}")
 
+    create_db_tables()
+
     # Load previous state if available
-    load_state()
+    #load_state()
 
     # Save on exit setup - see signal_handler() and save_state()
     # Registering both signal and atexit may cause saves to happen twice, but oh well. Not like it's a ton of work anyways.
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    atexit.register(save_state)
+    #signal.signal(signal.SIGINT, signal_handler)
+    #signal.signal(signal.SIGTERM, signal_handler)
+    #atexit.register(save_state)
 
     # Start threads before test data to avoid delays
     threading.Thread(target=periodic_autosave, daemon=True).start()
     threading.Thread(target=webhook_main, daemon=True).start()
 
     # Test data
-    add_test_data_agents(30)
-    add_test_data_messages(50)
-    add_test_data_incidents_custom(30)
-    add_test_data_incidents(70)
-    #add_test_data_comp(0)
-    #add_test_data_cmds()
+    with app.app_context():
+        add_test_data_agents(30)
+        add_test_data_messages(50)
+        add_test_data_incidents_custom(30)
+        add_test_data_incidents(70)
+        #add_test_data_comp(0)
+        #add_test_data_cmds()
 
     # Start main app. Do not put any code below this line
     app.run(host=HOST, port=PORT)
