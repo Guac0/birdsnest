@@ -12,6 +12,16 @@ SERVER_FILE = "agent.py"
 NUITKA_ARGS = [
     #"--standalone",
     "--onefile",
+    #"--include-package=encodings",
+    #"--include-package=ctypes",
+    #"--include-package=os", 
+    #"--include-package=io",
+    #"--include-package=win32timezone",
+    #"--include-data-file=pythonservice.exe=pythonservice.exe",
+    #"--include-package-data=python",
+    #"--verbose",
+    #"--report=nuitka_report.xml",
+    #"--enable-plugin=anti-bloat", #pywin32
     #"--python-flag=no_docstrings", # breaks sqlalchemy
 ]
 
@@ -25,12 +35,6 @@ def main():
         "python", "-m", "nuitka",
         SERVER_FILE,
         *NUITKA_ARGS,
-        #"--plugin-enable=flask",
-        #"--plugin-enable=sqlalchemy",
-        #"--include-module=sqlalchemy.orm.dependency",
-        #"--include-module=flask_sqlalchemy.dependency",
-        #f"--include-data-dir={BUILD_DIR}/templates=templates",
-        #f"--include-data-dir={BUILD_DIR}/static=static",
     ]
 
     print("Running:", " ".join(nuitka_cmd))

@@ -15,6 +15,12 @@ import urllib.request
 import urllib.error
 import winreg
 import ssl
+#import win32serviceutil
+#import win32service
+#import win32event
+import sys
+#import servicemanager
+#import threading
 
 #endregion###############
 # Configuration Options #
@@ -664,24 +670,24 @@ def interface_uninstall_windows(interface_name,ipv4_address,prefix_length,gatewa
 
     # --- Step 2: reinstall IPv4 if missing ---
     if ipv4_state == "Missing":
-        print("[+] IPv4 is not installed. Reinstalling...")
+        print_debug("[+] IPv4 is not installed. Reinstalling...")
         ps_install = r'''
         netsh interface ipv4 install
         Write-Output "Installed"
         '''
         run_powershell(ps_install)
     else:
-        print("[+] IPv4 already installed.")
+        print_debug("[+] IPv4 already installed.")
 
     # --- Step 3: restore IPv4 address ---
-    print(f"[+] Restoring IPv4 address on {interface_name}...")
+    print_debug(f"[+] Restoring IPv4 address on {interface_name}...")
     ps_set_ip = fr'''
     netsh interface ipv4 set address name="{interface_name}" static {ipv4_address} {prefix_length} {gateway}
     '''
     run_powershell(ps_set_ip)
 
     # --- Step 4: restore DNS ---
-    print("[+] Restoring DNS servers...")
+    print_debug("[+] Restoring DNS servers...")
     # Clear existing DNS entries
     ps_clear_dns = fr'''
     netsh interface ipv4 set dnsservers name="{interface_name}" source=static address={dns_servers[0]} register=primary
@@ -695,7 +701,7 @@ def interface_uninstall_windows(interface_name,ipv4_address,prefix_length,gatewa
         '''
         run_powershell(ps_add_dns)
 
-    print("[+] IPv4 configuration restored successfully.")
+    print_debug("[+] IPv4 configuration restored successfully.")
     return True
 
 def interface_main(interface,ip_address,subnet,gateway):
@@ -1399,6 +1405,47 @@ def reregister():
     return True
 
 #endregion###############
+### Windows Service #####
+#region##################
+
+"""
+class MyService(win32serviceutil.ServiceFramework):
+    _svc_name_ = f"Stabvest_{AGENT_NAME}"
+    _svc_display_name_ = f"Stabvest_{AGENT_NAME}"
+
+    def __init__(self, args):
+        super().__init__(args)
+        self.stop_event = win32event.CreateEvent(None, 0, 0, None)
+
+    def SvcStop(self):
+        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+        win32event.SetEvent(self.stop_event)
+
+    def SvcDoRun(self):
+        servicemanager.LogInfoMsg("Service starting...")
+        
+        thread = threading.Thread(target=main, args=(self.stop_event,), daemon=True)
+        thread.start()
+        
+        self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+        
+        win32event.WaitForSingleObject(self.stop_event, win32event.INFINITE)
+        
+        self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+        servicemanager.LogInfoMsg("Service stopped.")
+        servicemanager.LogInfoMsg("Service starting...")
+        self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+        
+        try:
+            main(stop_event=self.stop_event)
+        except Exception as e:
+            servicemanager.LogErrorMsg(str(e))
+        finally:
+            self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+            servicemanager.LogInfoMsg("Service stopped.")
+"""
+
+#endregion###############
 ######### Main ##########
 #region##################
 
@@ -1468,23 +1515,23 @@ def test_network():
     ip_address,prefix,gateway = init_int_vars()
 
     # main
-    print(f"interface_get_primary(): {interface}")
+    print_debug(f"interface_get_primary(): {interface}")
     #print(f"interface_mtu(): {interface_mtu()}")
     #print(f"interface_ttl(): {interface_ttl()}")
-    print(f"interface_main({interface,ip_address,prefix,gateway}): {interface_main(interface,ip_address,prefix,gateway)}")
+    print_debug(f"interface_main({interface,ip_address,prefix,gateway}): {interface_main(interface,ip_address,prefix,gateway)}")
     #print(f"firewall_rules_audit_windows('81'): {firewall_rules_audit_windows("81")}")
-    print(f"firewall_main(['81','82']): {firewall_main(["81","82"])}")
+    print_debug(f"firewall_main(['81','82']): {firewall_main(["81","82"])}")
 
 def test_service():
     service = "AxInstSV"
-    print(f"service_audit({service}): {service_audit(service)}")
+    print_debug(f"service_audit({service}): {service_audit(service)}")
 
 def test_main():
-    print(f"get_system_details(): {get_system_details()}")
+    print_debug(f"get_system_details(): {get_system_details()}")
     #test_network()
     test_service()
 
-def main():
+def main(stop_event=None):
     paused = False
     sleeptime = 60
     ports = [81]
@@ -1577,9 +1624,46 @@ def main():
         oldIssues = newIssues
         newIssues = []
         
+        # SERVICE-SAFE SLEEP for windows service
+        """
+        system = platform.system()
+        if system == "Windows":
+            if len(sys.argv) > 1:
+                for _ in range(sleeptime):
+                    if stop_event is not None:
+                        if win32event.WaitForSingleObject(stop_event, 0) == win32event.WAIT_OBJECT_0:
+                            print_debug("Service stop requested during sleep.")
+                            return
+                    time.sleep(1)
+            else:
+                time.sleep(sleeptime)
+        else:
+            time.sleep(sleeptime)
+        """
         time.sleep(sleeptime)
 
 if __name__ == "__main__":
+
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        if len(sys.argv) == 1:
+            servicemanager.Initialize()
+            servicemanager.PrepareToHostSingle(MyService)
+            servicemanager.StartServiceCtrlDispatcher()
+        else:
+            win32serviceutil.HandleCommandLine(MyService)
+
+        if len(sys.argv) > 1:
+            # related to interacting as windows service
+            win32serviceutil.HandleCommandLine(MyService)
+        else:
+            # Normal execution
+            main()
+    else:
+        main()
+    """
     main()
 
 #endregion###############
