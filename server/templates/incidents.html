@@ -442,7 +442,7 @@ const utils = (function(){
     const msg = (incident.message||'').toLowerCase();
     if (msg.includes('cannot read') || msg.includes('no logs')) return 'NoLogs';
     // If status changed between old and new -> remediation effected (success)
-    if (typeof incident.newStatus !== 'undefined' && typeof incident.oldStatus !== 'undefined' && (incident.newStatus !== incident.oldStatus)) return 'Success';
+    if (typeof incident.newStatus !== 'undefined' && (incident.newStatus === true)) return 'Success';
     // Otherwise treat as Failed remediation/unchanged
     return 'Failed';
   }
