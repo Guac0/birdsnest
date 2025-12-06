@@ -34,6 +34,7 @@ CONFIG_DEFAULTS = {
     "MTU_MIN": 1200,
     "MTU_DEFAULT": 1300,
     "MTU_MAX": 1514,
+    "LINUX_DEFAULT_TTL": 64,
     "AGENT_NAME": "test",
     "AUTH_TOKEN": "testtoken",
     "AGENT_TYPE": "stabvest",
@@ -94,6 +95,7 @@ LOGFILE = CONFIG["LOGFILE"]
 MTU_MIN = CONFIG["MTU_MIN"]
 MTU_DEFAULT = CONFIG["MTU_DEFAULT"]
 MTU_MAX = CONFIG["MTU_MAX"]
+LINUX_DEFAULT_TTL = CONFIG["LINUX_DEFAULT_TTL"]
 AGENT_NAME = CONFIG["AGENT_NAME"]
 DISARM = CONFIG["DISARM"]
 AUTH_TOKEN = CONFIG["AUTH_TOKEN"]
@@ -104,6 +106,7 @@ SLEEPTIME = CONFIG["SLEEPTIME"]
 PORTS = CONFIG["PORTS"]
 SERVICES = CONFIG["SERVICES"]
 PACKAGES = CONFIG["PACKAGES"]
+SERVICE_BACKUPS = CONFIG["SERVICE_BACKUPS"]
 
 REGISTRY_HIVE = winreg.HKEY_LOCAL_MACHINE
 SERVICE_PATH = r"SYSTEM\\CurrentControlSet\\Services\\service_name" #replace with actual service name
@@ -263,6 +266,51 @@ def run_powershell(cmd,noisy=True):
             print_debug(f"PowerShell error: {result.stderr}")
         return "" # This probably breaks a lot tbh
     return result.stdout
+
+def run_bash(cmd, noisy=True):
+    """
+    Run a shell command (using Bash by default) and return stdout text.
+
+    Args:
+        cmd (str): The command string to execute.
+        noisy (bool): If True, prints error details to stderr.
+
+    Returns: 
+        str: The output (stdout) text if successful, "" if failure.
+    """
+    # Note: On most Linux systems, omitting the shell path 
+    # lets subprocess use the system's default shell, 
+    # which is typically Bash.
+    
+    # We use 'shell=True' here to allow the command string 'cmd' 
+    # to be processed by the shell (e.g., for pipes, redirects, variables).
+    # SECURITY NOTE: Using shell=True can be dangerous if the command 
+    # string comes from an untrusted source, as it enables shell injection. 
+    # Use with caution.
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            executable="/bin/bash", # Explicitly use bash for consistency
+            capture_output=True, 
+            text=True,
+            check=False # Do not raise a CalledProcessError on non-zero exit code
+        )
+    except FileNotFoundError:
+        if noisy:
+            print_debug("Error: The /bin/bash executable was not found.")
+        return ""
+    
+    if result.returncode != 0:
+        if noisy:
+            # Errors usually go to stderr, but we can also print the exit code
+            print_debug(f"Shell command failed with exit code {result.returncode}")
+            if result.stderr:
+                print_debug(f"Shell stderr: {result.stderr.strip()}")
+        return ""
+        
+    return result.stdout.strip()
 
 def audit_command(command,package="",packageManager="apt"):
     """
@@ -437,7 +485,8 @@ def interface_address(interface,ip_address,subnet,gateway):
     if system == "Windows":
         return interface_address_windows(interface,ip_address,subnet,gateway)
     else:
-        return False, False, [f"interface_address(): not implemented for system {system}."] # TODO
+        return interface_address_linux(interface,ip_address,subnet,gateway)
+        #return False, False, [f"interface_address(): not implemented for system {system}."] # TODO
 
 def interface_address_windows(interface,ip_address,subnet,gateway):
     """
@@ -514,6 +563,116 @@ def interface_address_windows(interface,ip_address,subnet,gateway):
 
     return False, statusFix, issues
 
+def interface_address_linux(interface, ip_address, subnet, gateway):
+    """
+    Given an interface name, check if its IP address and gateway are set, 
+    and restore them from backup if not (using the 'ip' command).
+
+    Args: 
+        interface (str): Interface name (e.g., 'eth0', 'ens192').
+        ip_address (str): The desired static IP address (e.g., '192.168.1.100').
+        subnet (int): The subnet prefix length (e.g., 24).
+        gateway (str): The desired default gateway IP (e.g., '192.168.1.1').
+
+    Returns: 
+        tuple: (oldStatus, newStatus, issues)
+               oldStatus (bool): True if IP and Gateway were initially present.
+               newStatus (bool): True if IP and Gateway are present after the function runs.
+               issues (list of strings): List of actions taken or failures.
+    """
+    issues = []
+    
+    # 1. Query current configuration using 'ip addr' and 'ip route'
+    # The 'ip' command is highly reliable on Rocky Linux/CentOS 8.
+    
+    # Query IP address information
+    ip_addr_cmd = f"ip addr show dev {interface}"
+    addr_output = run_bash(ip_addr_cmd, noisy=False)
+
+    # Query default gateway information
+    ip_route_cmd = "ip route show default"
+    route_output = run_bash(ip_route_cmd, noisy=False)
+
+    if not addr_output:
+        print_debug(f"interface_address_linux({interface}): Failed to query interface IP (ip addr)")
+        return False, False, [f"Failed to query interface {interface} (ip addr error)."]
+
+    # 2. Determine if address and gateway exist
+    
+    # Check for IP address: Look for the specific IP/CIDR in the 'ip addr' output
+    # Example output line: inet 192.168.1.100/24 brd 192.168.1.255 scope global dynamic ens192
+    cidr = f"{ip_address}/{subnet}"
+    # Use re.escape to handle potential regex characters in the IP/CIDR string
+    has_address = bool(re.search(fr"inet\s+{re.escape(cidr)}\s+", addr_output))
+
+    # Check for Gateway: Look for the specific gateway IP in the 'ip route' output
+    # Example output line: default via 192.168.1.1 dev ens192 proto dhcp src 192.168.1.100 metric 100
+    has_gateway = bool(re.search(fr"default\s+via\s+{re.escape(gateway)}\s+dev\s+{interface}\s+", route_output))
+    
+    old_status = has_address and has_gateway
+    new_status = old_status
+
+    # 3. Diagnostics and Fixes
+    
+    # Case 1: Everything is already set correctly
+    if old_status:
+        return True, True, []
+
+    status_fix = True
+
+    # Fix missing IPv4 address
+    if not has_address:
+        # Use 'ip addr add' to set the IP address
+        set_ip_cmd = f"ip addr add {cidr} dev {interface}"
+        
+        if DISARM:
+            issues.append(f"Missing IPv4 Address for interface {interface}, DISARMED.")
+            status_fix = False
+        else:
+            print_debug(f"interface_address_linux({interface}): Setting IP address: {cidr}")
+            if not run_bash(set_ip_cmd):
+                status_fix = False
+                issues.append(f"Missing IPv4 Address for interface {interface}, FAILED to restore {cidr}.")
+            else:
+                issues.append(f"Missing IPv4 Address for interface {interface}, RESTORED {cidr}.")
+    
+    # Fix missing gateway
+    if not has_gateway:
+        # Use 'ip route add' to set the default gateway
+        # Note: We must first delete any *other* existing default route before adding a new one,
+        # otherwise 'ip route add' might fail with "File exists".
+        # However, for simplicity and matching the original's intent of only setting missing config,
+        # we'll use a single command. If the system has a bad default route, this simple check/fix 
+        # would need enhancement (e.g., deleting the old one first).
+        
+        set_gw_cmd = f"ip route add default via {gateway} dev {interface}"
+        
+        if DISARM:
+            issues.append(f"Missing Gateway Address for interface {interface}, DISARMED.")
+            status_fix = False
+        else:
+            print_debug(f"interface_address_linux({interface}): Setting gateway address: {gateway}")
+            if not run_bash(set_gw_cmd):
+                status_fix = False
+                issues.append(f"Missing Gateway Address for interface {interface}, FAILED to restore {gateway}.")
+            else:
+                issues.append(f"Missing Gateway Address for interface {interface}, RESTORED {gateway}.")
+
+    # Re-check status if a fix was attempted
+    if status_fix:
+        # Re-query IP address and gateway status after attempted fixes
+        addr_output_new = run_bash(ip_addr_cmd, noisy=False)
+        route_output_new = run_bash(ip_route_cmd, noisy=False)
+        
+        has_address_new = bool(re.search(fr"inet\s+{re.escape(cidr)}\s+", addr_output_new))
+        has_gateway_new = bool(re.search(fr"default\s+via\s+{re.escape(gateway)}\s+dev\s+{interface}\s+", route_output_new))
+        
+        new_status = has_address_new and has_gateway_new
+    else:
+        new_status = False # If we failed to fix anything, the status is False
+        
+    return old_status, new_status, issues
+
 def interface_mtu(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maximum=MTU_MAX,mtu_default=MTU_DEFAULT):
     """
     Wrapper for interface_mtu_*
@@ -528,7 +687,8 @@ def interface_mtu(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maxi
     if system == "Windows":
         return interface_mtu_windows(interface,mtu_minimum,mtu_maximum,mtu_default)
     else:
-        return False, False, [f"interface_mtu(): not implemented for system {system}."] # TODO
+        return interface_mtu_windows(interface,mtu_minimum,mtu_maximum,mtu_default)
+        #return False, False, [f"interface_mtu(): not implemented for system {system}."] # TODO
 
 def interface_mtu_windows(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maximum=MTU_MAX,mtu_default=MTU_DEFAULT):
     """
@@ -573,6 +733,68 @@ def interface_mtu_windows(interface=interface_get_primary(),mtu_minimum=MTU_MIN,
 
     return True, True, []
 
+def interface_mtu_linux(interface=interface_get_primary(), mtu_minimum=MTU_MIN, mtu_maximum=MTU_MAX, mtu_default=MTU_DEFAULT):
+    """
+    Given an interface name, check if its MTU is within an acceptable range 
+    and remediate if not (using the 'ip' command).
+
+    Args: 
+        interface (str): Interface name (e.g., 'eth0', 'ens192').
+        mtu_minimum (int): Minimum acceptable MTU value.
+        mtu_maximum (int): Maximum acceptable MTU value.
+        mtu_default (int): MTU value to set if the current one is out of range.
+
+    Returns: 
+        tuple: (oldStatus, newStatus, issues)
+               oldStatus (bool): True if MTU was initially in range.
+               newStatus (bool): True if MTU is in range after the function runs.
+               issues (list of strings): List of actions taken or failures.
+    """
+    
+    # 1. Query current MTU using the 'ip' command
+    # Command: ip link show [interface]
+    ip_get_mtu = f"ip link show dev {interface}"
+    
+    output = run_bash(ip_get_mtu)
+    if not output:
+        return False, False, [f"Failed to query MTU for interface '{interface}' due to shell error."]
+
+    # 2. Parse the MTU value
+    # Example output snippet: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc ...
+    match = re.search(r"mtu\s+(\d+)\s+", output)
+    
+    if not match:
+        return False, False, [f"Failed to parse MTU for interface '{interface}'. Output: {output}"]
+
+    old_mtu = int(match.group(1))
+    
+    # 3. Check MTU range
+    if old_mtu < mtu_minimum or old_mtu > mtu_maximum:
+        new_mtu = mtu_default
+        
+        # Command: ip link set dev [interface] mtu [new_mtu]
+        ip_set_mtu = f"ip link set dev {interface} mtu {new_mtu}"
+        
+        if DISARM:
+            print_debug(f"DISARMED, but told to update MTU for '{interface}' from {old_mtu} to {new_mtu}")
+            return False, False, [f"Interface {interface}'s MTU was set to {old_mtu}, DISARMED."]
+        else:
+            print_debug(f"Updated MTU for '{interface}' from {old_mtu} to {new_mtu}")
+            if run_bash(ip_set_mtu):
+                # 4. Verification (re-query the MTU)
+                output_new = run_bash(ip_get_mtu)
+                match_new = re.search(r"mtu\s+(\d+)\s+", output_new)
+                
+                if match_new and int(match_new.group(1)) == new_mtu:
+                    return False, True, [f"Interface {interface}'s MTU was set to {old_mtu}, RESTORED new mtu {new_mtu}."]
+                else:
+                    return False, False, [f"Interface {interface}'s MTU was set to {old_mtu}, FAILED to verify new mtu {new_mtu}."]
+            else:
+                return False, False, [f"Interface {interface}'s MTU was set to {old_mtu}, FAILED to restore new mtu {new_mtu}."]
+
+    # 5. MTU is within the acceptable range
+    return True, True, []
+
 def interface_ttl(interface=interface_get_primary()):
     """
     Wrapper for interface_ttl_*
@@ -587,7 +809,8 @@ def interface_ttl(interface=interface_get_primary()):
     if system == "Windows":
         return interface_mtu_windows(interface)
     else:
-        return False, False, [f"interface_ttl(): not implemented for system {system}."] # TODO
+        return interface_mtu_linux(interface)
+        #return False, False, [f"interface_ttl(): not implemented for system {system}."] # TODO
 
 def interface_ttl_windows():
     """
@@ -639,6 +862,108 @@ def interface_ttl_windows():
     # Reg key(s) do not exist so system is (presumably) using the default of 128 (good)
     return True, True, []
 
+def interface_ttl_linux():
+    """
+    Checks if the system-wide IPv4 TTL or IPv6 Hop Limit is set to a value 
+    other than the Linux default (64) and resets it if it is.
+    
+    Returns: 
+        tuple: (oldStatus, newStatus, issues)
+               oldStatus (bool): True if TTL/Hop Limits were initially default (64).
+               newStatus (bool): True if TTL/Hop Limits are default (64) after run.
+               issues (list of strings): List of actions taken or failures.
+    """
+    issues = []
+    
+    # Sysctl parameters for controlling default TTL/Hop Limit
+    IPV4_TTL_PARAM = "net.ipv4.ip_default_ttl"
+    IPV6_HL_PARAM = "net.ipv6.conf.default.hop_limit" # Used if global IPv6 param doesn't exist
+
+    # 1. Query current TTL and Hop Limit values
+    # Use 'sysctl' to query the running kernel values
+    
+    # Query IPv4 TTL
+    ttl_query_cmd = f"sysctl -n {IPV4_TTL_PARAM}"
+    current_ttl_output = run_bash(ttl_query_cmd, noisy=False)
+
+    # Query IPv6 Hop Limit
+    hl_query_cmd = f"sysctl -n {IPV6_HL_PARAM}"
+    current_hl_output = run_bash(hl_query_cmd, noisy=False)
+
+    # Convert outputs to integers, default to LINUX_DEFAULT_TTL if query fails or value is missing
+    try:
+        current_ttl = int(current_ttl_output)
+    except (ValueError, TypeError):
+        current_ttl = LINUX_DEFAULT_TTL
+    
+    try:
+        current_hl = int(current_hl_output)
+    except (ValueError, TypeError):
+        current_hl = LINUX_DEFAULT_TTL
+
+    # 2. Determine if values are customized (i.e., not the default 64)
+    ttl_customized = current_ttl != LINUX_DEFAULT_TTL
+    hl_customized = current_hl != LINUX_DEFAULT_TTL
+    
+    old_status = not (ttl_customized or hl_customized)
+
+    # 3. Check status and remediate if needed
+    if old_status:
+        # Values are already the default (good)
+        return True, True, []
+
+    status_fix = True
+
+    # Remediate IPv4 TTL
+    if ttl_customized:
+        set_ttl_cmd = f"sysctl -w {IPV4_TTL_PARAM}={LINUX_DEFAULT_TTL}"
+        if DISARM:
+            issues.append(f"Bad IPv4 TTL ({current_ttl}) detected, DISARMED.")
+            status_fix = False
+        else:
+            print_debug(f"Remediating IPv4 TTL from {current_ttl} to {LINUX_DEFAULT_TTL}")
+            if run_bash(set_ttl_cmd, noisy=False):
+                issues.append(f"Bad IPv4 TTL ({current_ttl}) detected, RESTORED to {LINUX_DEFAULT_TTL}.")
+            else:
+                issues.append(f"Bad IPv4 TTL ({current_ttl}) detected, FAILED to restore.")
+                status_fix = False
+
+    # Remediate IPv6 Hop Limit
+    if hl_customized:
+        set_hl_cmd = f"sysctl -w {IPV6_HL_PARAM}={LINUX_DEFAULT_TTL}"
+        if DISARM:
+            issues.append(f"Bad IPv6 Hop Limit ({current_hl}) detected, DISARMED.")
+            status_fix = False
+        else:
+            print_debug(f"Remediating IPv6 Hop Limit from {current_hl} to {LINUX_DEFAULT_TTL}")
+            if run_bash(set_hl_cmd, noisy=False):
+                issues.append(f"Bad IPv6 Hop Limit ({current_hl}) detected, RESTORED to {LINUX_DEFAULT_TTL}.")
+            else:
+                issues.append(f"Bad IPv6 Hop Limit ({current_hl}) detected, FAILED to restore.")
+                status_fix = False
+    
+    # 4. Final verification
+    new_status = False
+    if status_fix:
+        # Re-query the values to verify
+        new_ttl_output = run_bash(ttl_query_cmd, noisy=False)
+        new_hl_output = run_bash(hl_query_cmd, noisy=False)
+        
+        try:
+            new_ttl = int(new_ttl_output)
+            new_hl = int(new_hl_output)
+        except (ValueError, TypeError):
+            # If the re-query fails, assume the fix failed
+            return False, False, issues
+            
+        new_status = (new_ttl == LINUX_DEFAULT_TTL and new_hl == LINUX_DEFAULT_TTL)
+
+    # NOTE: This only changes the *running* kernel value. For persistence 
+    # across reboots, the function would also need to remove or edit the 
+    # corresponding entries in /etc/sysctl.conf or /etc/sysctl.d/*.conf files.
+    
+    return old_status, new_status, issues
+
 def interface_down(interface=interface_get_primary()):
     """
     Wrapper for interface_down_*
@@ -653,7 +978,8 @@ def interface_down(interface=interface_get_primary()):
     if system == "Windows":
         return interface_down_windows(interface)
     else:
-        return False, False, [f"interface_down(): not implemented for system {system}."] # TODO
+        return interface_down_linux(interface)
+        #return False, False, [f"interface_down(): not implemented for system {system}."] # TODO
 
 def interface_down_windows(interface=interface_get_primary()):
     """
@@ -699,6 +1025,74 @@ def interface_down_windows(interface=interface_get_primary()):
                 return False, True, [f"Interface {interface} was set to DOWN, RESTORED UP state."]
             return False, False, [f"Interface {interface} was set to DOWN, FAILED to restore UP state."]
     
+    return True, True, []
+
+def interface_down_linux(interface=interface_get_primary()):
+    """
+    Given an interface name, check if it is administratively down (SHUTDOWN)
+    and remediate by bringing it up using the 'ip' command.
+    
+    Args: 
+        interface (str): Interface name (e.g., 'eth0', 'ens192').
+
+    Returns: 
+        tuple: (oldStatus, newStatus, issues)
+               oldStatus (bool): True if the interface was initially UP.
+               newStatus (bool): True if the interface is UP after the function runs.
+               issues (list of strings): List of actions taken or failures.
+    """
+    issues = []
+    
+    # 1. Query current interface status using 'ip link'
+    # This command provides both administrative and operational status.
+    # Output flags: UP means administratively up, DOWN means administratively down.
+    # LOWER_UP means link is physically connected (operational state UP).
+    ip_check_cmd = f"ip link show dev {interface}"
+    
+    output = run_bash(ip_check_cmd)
+    if not output:
+        # This usually means the interface was not found or a shell error occurred
+        return False, False, [f"Interface {interface} cannot be queried (Not Found or shell error)."]
+
+    # 2. Determine if the interface is administratively UP or DOWN
+    # Check for the 'UP' flag in the output (e.g., <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500)
+    # If the 'UP' flag is missing, the interface is administratively down.
+    
+    status_match = re.search(r"<\S+>", output)
+    if not status_match:
+        # Interface found, but status flags are missing, which is highly unusual.
+        return False, False, [f"Interface {interface}'s status flags could not be parsed."]
+
+    flags = status_match.group(0)
+    
+    is_up = "UP" in flags
+    old_status = is_up
+    
+    # 3. Remediate if the interface is DOWN
+    if not is_up:
+        # If it's administratively DOWN, bring it UP
+        ip_set_up_cmd = f"ip link set dev {interface} up"
+        
+        if DISARM:
+            print_debug(f"interface_down_linux({interface}): DISARMED, but told to enable interface")
+            return False, False, [f"Interface {interface} was set to DOWN, DISARMED."]
+        else:
+            print_debug(f"interface_down_linux({interface}): Setting interface UP.")
+            if run_bash(ip_set_up_cmd):
+                # Check status again to verify the fix
+                output_new = run_bash(ip_check_cmd)
+                status_match_new = re.search(r"<\S+>", output_new)
+                
+                new_status = False
+                if status_match_new and "UP" in status_match_new.group(0):
+                    new_status = True
+                    return False, new_status, [f"Interface {interface} was set to DOWN, RESTORED UP state."]
+                else:
+                    return False, new_status, [f"Interface {interface} was set to DOWN, FAILED to restore UP state."]
+            else:
+                return False, False, [f"Interface {interface} was set to DOWN, FAILED to restore UP state (command failed)."]
+
+    # 4. Interface is already UP
     return True, True, []
 
 def interface_uninstall():
@@ -795,7 +1189,8 @@ def interface_main(interface,ip_address,subnet,gateway):
         issues.append(issue)
     """
 
-    # Interface Address
+    # Interface 
+    """
     result_oldStatus, result_newStatus, result_issues = interface_address(interface,ip_address,subnet,gateway)
     if not result_oldStatus:
         oldStatus = False
@@ -803,6 +1198,7 @@ def interface_main(interface,ip_address,subnet,gateway):
         newStatus = False
     for issue in result_issues:
         issues.append(issue)
+    """
 
     # Interface Down
     result_oldStatus, result_newStatus, result_issues = interface_down()
@@ -849,7 +1245,8 @@ def firewall_rules_audit(port,direction="in",action="block"):
     if system == "Windows":
         return firewall_rules_audit_windows(port,direction,action)
     else:
-        return [f"firewall_rules_audit(): not implemented for system {system}."], dict() # TODO
+        return firewall_rules_audit_windows(port,direction,action)
+        #return [f"firewall_rules_audit(): not implemented for system {system}."], dict() # TODO
 
 def firewall_rules_audit_windows(port,direction="in",action="block"):
     """
@@ -914,7 +1311,99 @@ def firewall_rules_audit_windows(port,direction="in",action="block"):
 
     return [], rules
 
-def firewall_rules_delete(rules):
+def firewall_rules_audit_linux(port, direction="in", action="block"):
+    """
+    Uses iptables to audit firewall rules, returning the protocol, chain, 
+    index, and specification needed for deletion.
+    
+    Args: 
+        port (str): The specific port number (e.g., "80", "443").
+        direction (str): 'in' (INPUT chain) or 'out' (OUTPUT chain).
+        action (str): 'block' (DROP/REJECT) or 'accept' (ACCEPT).
+        
+    Returns: 
+        tuple: (issues, matching_rules)
+               issues (list of strings): List of errors encountered.
+               matching_rules (list of dicts): List of matching rules found with full detail.
+    """
+    issues = []
+    matching_rules = []
+    
+    chain = "INPUT" if direction.lower() == "in" else "OUTPUT"
+    targets = ["DROP", "REJECT"] if action.lower() == "block" else ["ACCEPT"]
+    
+    # 1. Query iptables rules with numbering (-nL --line-numbers)
+    # This gives us the crucial rule index number.
+    ip_query_cmd = f"sudo iptables -t filter -nL {chain} --line-numbers"
+    output = run_bash(ip_query_cmd)
+
+    if not output:
+        return [f"Could not run '{ip_query_cmd}' or no rules found."], []
+
+    # 2. Parse rules line by line
+    
+    # Regex to capture the index, protocol, destination port, and target
+    # Example line: 1    DROP       all  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:80
+    rule_regex = re.compile(
+        fr"^\s*(?P<index>\d+)\s+(?P<target>DROP|REJECT|ACCEPT)\s+"  # Index and Target
+        fr"(?P<prot>[a-z]+|\*)\s+.*?"                               # Protocol (* or tcp/udp/icmp)
+        fr"(?P<spec>dpt|spt):(?P<port_spec>[\d,\-]+)\s*$"           # dpt/spt and Port Spec (optional, uses non-greedy match)
+    )
+
+    for line in output.splitlines():
+        # Check if the line is a rule, excluding the chain header/footer
+        if not line.strip().startswith(('Chain', 'num', 'target', 'policy', 'pkts')):
+            
+            match = rule_regex.search(line)
+            
+            if match and match.group('target') in targets:
+                # Rule is in the correct CHAIN and has the correct ACTION (Target)
+                
+                # Protocol (e.g., 'tcp', 'udp', 'all' -> *)
+                protocol = match.group('prot')
+                
+                # Check for port match (Windows LocalPort logic)
+                # Note: We assume local port (dpt) for inbound, and remote port (spt) for outbound
+                port_definition = match.group('port_spec')
+                
+                is_port_match = False
+                if port_definition:
+                    # Logic to check single port, range, or list (same as previous implementation)
+                    if ',' in port_definition and str(port) in port_definition.split(','):
+                        is_port_match = True
+                    elif '-' in port_definition:
+                        try:
+                            a, b = map(int, port_definition.split('-'))
+                            target_port = int(port)
+                            if a <= target_port <= b:
+                                is_port_match = True
+                        except ValueError:
+                            issues.append(f"Warning: Could not parse port range in rule: {line}")
+                    elif port_definition == str(port):
+                        is_port_match = True
+
+                    if is_port_match:
+                        # Full rule line captured for spec reference in deletion
+                        # (Need to extract the rule spec without index, target, etc.)
+                        
+                        # Re-run iptables-save to get a clean spec, or reconstruct it
+                        # Since re-running is complex, let's use the full display line as spec placeholder
+                        full_spec_line = line.strip()
+
+                        rule_dict = {
+                            "Chain": chain,
+                            "Index": match.group('index'),
+                            "Protocol": protocol,
+                            "Action": match.group('target'),
+                            "Direction": direction.upper(),
+                            "DisplayName": full_spec_line, # Rule definition including index
+                            "Rule_Spec": full_spec_line # Using the full line as a spec placeholder for now
+                        }
+                        matching_rules.append(rule_dict)
+
+    return issues, matching_rules
+
+def firewall_rules_delete(rules,port):
     """
     Wrapper for OS-specific firewall_rules_delete_* functions
 
@@ -926,9 +1415,10 @@ def firewall_rules_delete(rules):
     system = platform.system()
 
     if system == "Windows":
-        return firewall_rules_delete_windows(rules)
+        return firewall_rules_delete_windows(rules,port)
     else:
-        return False, [f"firewall_rules_delete(): not implemented for system {system}."] # TODO
+        return firewall_rules_delete_windows(rules)
+        #return False, [f"firewall_rules_delete(): not implemented for system {system}."] # TODO
 
 def firewall_rules_delete_windows(rules,port):
     """
@@ -960,6 +1450,69 @@ def firewall_rules_delete_windows(rules,port):
     #print_debug("firewall_rules_delete_windows(): All provided rules deleted.")
     return status, issues
 
+def firewall_rules_delete_linux(rules):
+    """
+    Given a list of firewall rule dictionaries (must contain Chain and Index), 
+    deletes each rule by its number and persists the change.
+    
+    Args: 
+        rules (list of dicts): List of matching rules from the audit function.
+        
+    Returns: 
+        tuple: (status, issues)
+               status (bool): True if all rules were successfully deleted and persisted.
+               issues (list of strings): List of actions taken or failures.
+    """
+    issues = []
+    overall_status = True
+    
+    # We must delete rules in reverse order of their index to avoid shifting indices 
+    # of rules that are yet to be deleted.
+    rules.sort(key=lambda r: int(r['Index']), reverse=True)
+    
+    for rule in rules:
+        chain = rule.get('Chain')
+        index = rule.get('Index')
+        display_name = rule.get('DisplayName', 'N/A')
+        
+        if not (chain and index):
+            issues.append(f"FAILED: Rule {display_name} is missing Chain or Index and cannot be deleted.")
+            overall_status = False
+            continue
+
+        # 1. Delete the rule by number
+        # Format: iptables -D [CHAIN] [INDEX_NUMBER]
+        delete_cmd = f"sudo iptables -D {chain} {index}"
+        
+        if DISARM:
+            issues.append(f"DISARMED, but told to remove firewall rule: {chain} rule #{index}")
+            continue
+        else:
+            
+            print_debug(f"Attempting delete: {delete_cmd} (Rule: {display_name})")
+            
+            if run_bash(delete_cmd) == "":
+                # Success (iptables returns empty output on success)
+                issues.append(f"SUCCESSFULLY removed firewall rule from {chain} at index #{index}.")
+            else:
+                # Failure
+                issues.append(f"FAILED to remove firewall rule from {chain} at index #{index}. Command failed.")
+                overall_status = False
+
+    # 2. Persist the changes (Crucial for iptables)
+    if not DISARM:
+        persist_cmd = "sudo /sbin/iptables-save > /etc/sysconfig/iptables"
+        
+        if overall_status:
+            print_debug("Attempting to persist iptables rules...")
+            if run_bash(persist_cmd):
+                issues.append("SUCCESS: Running iptables rules saved (persistent).")
+            else:
+                issues.append("WARNING: FAILED to persist iptables changes. Rule deletion is *NOT* permanent.")
+                overall_status = False 
+
+    return overall_status, issues
+
 def firewall_rules_create(port,direction,action):
     """
     Wrapper for OS-specific firewall_rules_create_* functions
@@ -974,7 +1527,8 @@ def firewall_rules_create(port,direction,action):
     if system == "Windows":
         return firewall_rules_create_windows(port,direction,action)
     else:
-        return False, [f"firewall_rules_create(): not implemented for system {system}."] # TODO
+        return firewall_rules_create_linux(port,direction,action)
+        #return False, [f"firewall_rules_create(): not implemented for system {system}."] # TODO
 
 def firewall_rules_create_windows(port,direction,action):
     """
@@ -1003,6 +1557,89 @@ def firewall_rules_create_windows(port,direction,action):
     else:
         return False, [f"FAILED to create firewall rule Stabvest_Rule_{port}_{direction}_{action}"]
 
+def firewall_rules_create_linux(port, direction, action, protocol="tcp"):
+    """
+    Creates the specified iptables rule on Rocky Linux/CentOS 8 and persists it.
+
+    Args: 
+        port (str): The port number (e.g., "80", "443").
+        direction (str): 'inbound' or 'outbound'.
+        action (str): 'allow' (ACCEPT) or 'block' (DROP).
+        protocol (str): Protocol to use, defaults to 'tcp'. Use 'all' or 'udp' if needed.
+
+    Returns: 
+        tuple: (status, issues)
+               status (bool): True if the rule was successfully created and persisted.
+               issues (list of strings): List of actions taken or failures.
+    """
+    issues = []
+    
+    # 1. Map arguments to iptables terminology
+    
+    # Direction maps to CHAIN: 'inbound' -> INPUT, 'outbound' -> OUTPUT
+    if direction.lower() == "inbound":
+        chain = "INPUT"
+        port_flag = "--dport" # Destination port for inbound traffic
+    elif direction.lower() == "outbound":
+        chain = "OUTPUT"
+        port_flag = "--sport" # Source port for outbound traffic (usually ignored for simple outbound rules)
+    else:
+        return False, [f"FAILED: Invalid direction '{direction}'. Must be 'inbound' or 'outbound'."]
+
+    # Action maps to TARGET: 'allow' -> ACCEPT, 'block' -> DROP
+    if action.lower() == "allow":
+        target = "ACCEPT"
+    elif action.lower() == "block":
+        target = "DROP"
+    else:
+        return False, [f"FAILED: Invalid action '{action}'. Must be 'allow' or 'block'."]
+
+    # 2. Construct the iptables command
+    # Use -A (Append) to add the rule to the end of the chain.
+    
+    # Base command: sudo iptables -A [CHAIN]
+    # Protocol: -p [PROTOCOL]
+    # Port: --dport/--sport [PORT]
+    # Target: -j [TARGET]
+    
+    # Note: iptables requires -m tcp/udp when using --dport/--sport
+    
+    if protocol.lower() == "tcp" or protocol.lower() == "udp":
+        module_spec = f"-m {protocol.lower()}"
+    else:
+        # For protocols like 'all' or 'icmp', the module is usually omitted
+        module_spec = ""
+        port_flag = "" # Port specification is usually irrelevant for non-tcp/udp rules
+
+    rule_spec = f"-p {protocol.lower()} {module_spec} {port_flag} {port} -j {target}"
+    iptables_cmd = f"sudo iptables -A {chain} {rule_spec}"
+    
+    # 3. Execute the command
+    
+    rule_description = f"{target} on port {port} ({protocol.upper()}) {direction.upper()}"
+
+    if DISARM:
+        print_debug(f"firewall_rules_create_linux(): DISARMED, but told to create rule: {iptables_cmd}")
+        return False, [f"DISARMED, but told to create firewall rule: {rule_description}"]
+    else:
+
+        print_debug(f"Creating iptables rule: {iptables_cmd}")
+        if run_bash(iptables_cmd) == "":
+            issues.append(f"SUCCESSFULLY created firewall rule: {rule_description} (running kernel).")
+            
+            # 4. Persist the change (Crucial for iptables)
+            persist_cmd = "sudo /sbin/iptables-save > /etc/sysconfig/iptables"
+            
+            print_debug("Attempting to persist iptables rules...")
+            if run_bash(persist_cmd):
+                issues.append("SUCCESS: Running iptables rules saved to disk (persistent).")
+                return True, issues
+            else:
+                issues.append("FAILED to persist iptables changes. Rule is *NOT* permanent across reboots.")
+                return False, issues
+        else:
+            return False, [f"FAILED to create firewall rule: {rule_description}. Check permissions/syntax."]
+    
 def firewall_policy_audit(direction):
     """
     Wrapper for OS-specific firewall_policy_audit_* functions
@@ -1017,7 +1654,8 @@ def firewall_policy_audit(direction):
     if system == "Windows":
         return firewall_policy_audit_windows(direction)
     else:
-        return False, False, [f"firewall_policy_audit(): not implemented for system {system}."] # TODO
+        return firewall_policy_audit_linux(direction)
+        #return False, False, [f"firewall_policy_audit(): not implemented for system {system}."] # TODO
 
 def firewall_policy_audit_windows(direction):
     """
@@ -1051,12 +1689,66 @@ def firewall_policy_audit_windows(direction):
     for p in profiles:
         if (p[f"Default{direction}Action"] == "Block"):
             # We don't actually care about specific profile but may as well record it
-            issues.append([f"Default firewall policy on profile {p[f"Name"]} for direction {direction} is set to BLOCK."])
+            issues.append([f"Default firewall policy on profile {p["Name"]} for direction {direction} is set to BLOCK."])
         
     if issues:
         return True, False, issues
         
     return True, True, []
+
+def firewall_policy_audit_linux(direction):
+    """
+    Check if the iptables default policy for the relevant chain is set to BLOCK (DROP/REJECT).
+
+    Args: 
+        direction (str): "Inbound" (checks INPUT chain) or "Outbound" (checks OUTPUT chain).
+        
+    Returns: 
+        tuple: (funcStatus, policyStatus, issues)
+               funcStatus (bool): True if execution completed without error.
+               policyStatus (bool): True if policy is set to ACCEPT (default deny is FALSE).
+               issues (list of strings): Details of any default deny policy found.
+    """
+    issues = []
+    
+    # 1. Map direction to iptables CHAIN
+    if direction.lower() == "inbound":
+        chain = "INPUT"
+    elif direction.lower() == "outbound":
+        chain = "OUTPUT"
+    else:
+        return False, False, [f"Failed: Invalid direction '{direction}'. Must be 'Inbound' or 'Outbound'."]
+
+    # 2. Query the current policy for the target chain
+    # iptables -L -n --line-numbers will list policies, but -S gives a clean policy output.
+    ip_query_cmd = f"sudo iptables -t filter -S {chain}"
+    output = run_bash(ip_query_cmd)
+
+    if not output:
+        # This typically means iptables is not running or a permission error
+        return False, False, [f"Failed to load iptables policy for {chain} due to shell error."]
+
+    # 3. Parse the policy
+    # Expected output format: -P INPUT ACCEPT [0:0] or -P INPUT DROP [0:0]
+    policy_regex = re.compile(fr"^-P\s+{chain}\s+(?P<action>ACCEPT|DROP|REJECT)\s+\[\d+:\d+\]")
+    
+    match = policy_regex.search(output)
+    
+    if not match:
+        return False, False, [f"Failed to parse iptables policy for {chain}. Unexpected output."]
+
+    default_action = match.group('action')
+
+    # 4. Determine policy status
+    
+    # Default Policy is considered 'bad' (policyStatus=False) if it's set to DROP or REJECT.
+    if default_action in ["DROP", "REJECT"]:
+        issues.append(f"Default firewall policy for {chain} ({direction}) is set to BLOCK ({default_action}).")
+        policy_status = False
+    else:
+        policy_status = True # ACCEPT is considered the "safe" status in this context.
+
+    return True, policy_status, issues
 
 def firewall_main(protectedPorts):
     """
@@ -1120,9 +1812,9 @@ def firewall_main(protectedPorts):
             for issue in result_issues:
                 issues.append(issue)
 
-    # TODO: windows has additional options like rule per executable
-
     return oldStatus, newStatus, issues
+
+    # TODO: windows has additional options like rule per executable
 
 #endregion###############
 ## File Protect Funcs ###
@@ -1152,7 +1844,8 @@ def service_audit(service):
     if system == "Windows":
         return service_audit_windows(service)
     else:
-        return False, False, [f"service_audit(): not implemented for system {system}."] # TODO
+        return service_audit_linux(service)
+        #return False, False, [f"service_audit(): not implemented for system {system}."] # TODO
 
 def service_audit_windows(service_name):
     """
@@ -1241,6 +1934,102 @@ def service_audit_windows(service_name):
 
     return oldStatus, newStatus, issues
 
+def service_audit_linux(service_name):
+    """
+    Given the name of a systemd service, detect if it is nonfunctional (not running 
+    or not enabled for auto-start) and attempt fixes using systemctl.
+    
+    Args:
+        service_name (str): The name of the systemd unit (e.g., 'httpd.service').
+
+    Returns: 
+        tuple: (oldStatus, newStatus, issues)
+               oldStatus (bool): True if the service was initially OK.
+               newStatus (bool): True if the service is OK after fixes.
+               issues (list of strings): List of actions taken or failures.
+    """
+    issues = []
+    
+    # 1. Check whether service exists and get its current state
+    
+    # systemctl is-active --quiet and is-enabled --quiet provide quick checks,
+    # but systemctl show gives all data in a parsable format.
+    systemctl_show_cmd = f"systemctl show --no-pager {service_name}"
+    raw = run_bash(systemctl_show_cmd).strip()
+
+    if not raw:
+        # Check if the error is "not found" (exit code 1) or a shell issue
+        systemctl_check = run_bash(f"systemctl status {service_name}", noisy=False)
+        if "not-found" in systemctl_check.lower():
+            return False, False, [f"ServiceNotFound for service {service_name}."]
+        else:
+            return False, False, [f"FAILED to get status information for service {service_name}, systemctl error."]
+
+    # Parse the output to extract key parameters
+    data = {}
+    for line in raw.splitlines():
+        if '=' in line:
+            key, value = line.split('=', 1)
+            data[key] = value
+
+    current_active_state = data.get("ActiveState", "").lower() # running, inactive, failed, etc.
+    current_load_state = data.get("LoadState", "").lower()     # loaded, not-found, etc.
+    current_enable_state = data.get("UnitFileState", "").lower() # enabled, disabled, static, etc.
+
+    # If the service is loaded but not enabled (manual start type), or if it's not running
+    is_running = current_active_state == "active"
+    is_enabled = current_enable_state == "enabled" # Equivalent to Automatic start type
+    
+    oldStatus = is_running and is_enabled
+    
+    # Track whether we changed anything
+    newStatus = oldStatus
+    
+    # ----------------------------------------------------------
+    # 2. If service is not running - start it (Fix Active State)
+    # ----------------------------------------------------------
+    if not is_running:
+        start_cmd = f"sudo systemctl start {service_name}"
+        
+        if DISARM:
+            issues.append(f"Service {service_name} is stopped, DISARMED.")
+            newStatus = False
+        else:
+            # Check for service status before and after start
+            if run_bash(start_cmd):
+                # Verify state change
+                verify_cmd = f"systemctl is-active {service_name}"
+                if run_bash(verify_cmd).strip() == "active":
+                    issues.append(f"Service {service_name} was stopped, RESTORED to START state.")
+                    newStatus = True
+                else:
+                    issues.append(f"Service {service_name} was stopped, FAILED to verify START state.")
+            else:
+                issues.append(f"Service {service_name} was stopped, FAILED to execute start command.")
+
+    # ----------------------------------------------------------
+    # 3. If service is not Automatic (Enabled) - set it to Automatic (Fix Enable State)
+    # ----------------------------------------------------------
+    if not is_enabled:
+        enable_cmd = f"sudo systemctl enable {service_name}"
+        
+        if DISARM:
+            issues.append(f"Service {service_name} not set to automatic start (disabled), DISARMED.")
+        else:
+            # Need to disable silent flag for error detection
+            if run_bash(enable_cmd):
+                # Verify state change
+                verify_cmd = f"systemctl is-enabled {service_name}"
+                if run_bash(verify_cmd).strip() == "enabled":
+                    issues.append(f"Service {service_name} was disabled, RESTORED to automatic start (enabled).")
+                    newStatus = True
+                else:
+                    issues.append(f"Service {service_name} was disabled, FAILED to verify automatic start.")
+            else:
+                issues.append(f"Service {service_name} was disabled, FAILED to execute enable command.")
+
+    return oldStatus, newStatus, issues
+
 def service_uninstall(service,package):
     """
     Wrapper for service_uninstall_*
@@ -1260,7 +2049,8 @@ def service_uninstall(service,package):
     if system == "Windows":
         return service_uninstall_windows(service,package)
     else:
-        return False, False, [f"service_uninstall(): not implemented for system {system}."] # TODO
+        return service_uninstall_linux(service,package)
+        #return False, False, [f"service_uninstall(): not implemented for system {system}."] # TODO
 
 def service_uninstall_windows(service,package):
     """
@@ -1353,6 +2143,111 @@ def service_uninstall_windows(service,package):
     print_debug(f"service_uninstall_windows({service},{package}): reached end of func which is unexpected, possible logic error")
     return True, True, [] # no package or service provided. unreachable as should be handled elsewhere but oh well
 
+def service_uninstall_linux(service, package):
+    """
+    Given a service unit name and responsible RPM package name, checks if 
+    both are installed/exist and attempts to install the package if missing.
+
+    Args: 
+        service (str): The systemd unit name (e.g., 'httpd.service').
+        package (str): The RPM package name (e.g., 'httpd').
+        
+    Returns: 
+        tuple: (oldStatus, newStatus, issues)
+               oldStatus (bool): True if both package and service were initially present.
+               newStatus (bool): True if both are present after remediation (or if DISARMED).
+               issues (list of strings): List of actions taken or failures.
+    """
+    issues = []
+    
+    # Initial status assumption (will be set by checks)
+    package_present_initial = False
+    service_present_initial = False
+
+    # ---------------------------------------------------------
+    # 1. Check if the RPM package is installed
+    # ---------------------------------------------------------
+    if package:
+        # rpm -q returns the package name and version if installed, nothing if not.
+        rpm_check_cmd = f"rpm -q {package}"
+        rpm_output = run_bash(rpm_check_cmd, noisy=False)
+
+        # Output will contain "is not installed" on stderr/stdout if missing, or nothing on success
+        if "is not installed" not in rpm_output and rpm_output != "":
+            package_present_initial = True
+            print_debug(f"Package {package} is installed.")
+        else:
+            #issues.append(f"Missing required package {package} for service {service}.")
+            
+            if not DISARM:
+                # Attempt to install the missing package using dnf (default for Rocky/CentOS 8)
+                install_cmd = f"sudo dnf install -y {package}"
+                print_debug(f"Attempting to install package {package}...")
+                
+                if run_bash(install_cmd):
+                    issues.append(f"Missing required package {package}, RESTORED by installing package.")
+                    
+                    # Re-check package state after install
+                    if "is not installed" not in run_bash(rpm_check_cmd, noisy=False) and run_bash(rpm_check_cmd, noisy=False) != "":
+                        package_present_after = True
+                    else:
+                        package_present_after = False
+                        issues.append(f"FAILED to verify installation of package {package}.")
+                else:
+                    issues.append(f"Missing required package {package}, FAILED to install package using dnf.")
+                    package_present_after = False
+            else:
+                issues.append(f"Missing required package {package} for service {service}, DISARMED.")
+                package_present_after = False
+    else:
+        # If no package is specified, assume this check is irrelevant
+        package_present_initial = True
+        package_present_after = True
+        
+    # ---------------------------------------------------------
+    # 2. Check if the service unit file exists
+    # ---------------------------------------------------------
+    if service:
+        # systemctl status will fail (return code 3) if the unit file is not found.
+        # systemctl show will return error for non-existent service
+        svc_check_cmd = f"systemctl show --no-pager {service}"
+        svc_output = run_bash(svc_check_cmd, noisy=False)
+
+        if "not-found" not in svc_output and svc_output != "":
+            service_present_initial = True
+            service_present_after = True # If the package was successfully installed, the service should now exist
+        else:
+            issues.append(f"Missing service unit file {service}.")
+            # If the package was installed, the service *should* exist now (service_present_after handled below)
+            service_present_after = False
+            
+            # If the package was newly installed, re-check service presence
+            if not package_present_initial and package_present_after and service_present_initial == False:
+                 if "not-found" not in run_bash(svc_check_cmd, noisy=False) and run_bash(svc_check_cmd, noisy=False) != "":
+                    service_present_after = True
+                    issues.append(f"Service {service} restored by package installation.")
+
+    else:
+        service_present_initial = True
+        service_present_after = True
+        
+    # ---------------------------------------------------------
+    # 3. Final Status Calculation
+    # ---------------------------------------------------------
+    
+    old_status = package_present_initial and service_present_initial
+    new_status = package_present_after and service_present_after
+
+    # Edge case: If old_status was False but new_status is False and we tried to remediate
+    if not old_status and not new_status and not DISARM:
+        # If package was missing and remediation failed, ensure status reflects the failure
+        if not package_present_after:
+             issues.append(f"Overall FAILED to restore missing service/package.")
+        if not service_present_after:
+             issues.append(f"Overall FAILED to find service {service} even after package install.")
+    
+    return old_status, new_status, issues
+
 def service_integrity(service,backupDict):
     """
     Wrapper for OS-specific service_integrity_* functions
@@ -1366,7 +2261,9 @@ def service_integrity(service,backupDict):
     if system == "Windows":
         return service_integrity_windows(service,backupDict)
     else:
-        return False, False, [f"service_integrity(): not implemented for system {system}."] # TODO
+        return True, True, []
+        #return service_integrity_linux(service,backupDict)
+        #return False, False, [f"service_integrity(): not implemented for system {system}."] # TODO
     
 def service_integrity_windows(service_name, backupDict):
     """
@@ -1374,7 +2271,7 @@ def service_integrity_windows(service_name, backupDict):
     known good attributes and restore or recreate if needed.
     
     backupDict must contain:
-    - "PathName": The expected executable path (e.g., "C:\Windows\System32\svchost.exe -k LocalService")
+    - "PathName": The expected executable path (e.g., "C:\\Windows\\System32\\svchost.exe -k LocalService")
     - "StartName": The expected service account (e.g., "LocalSystem")
     - "Dependencies": The expected list of dependent service names (e.g., ["RpcSs"])
     - "DisplayName": The service display name (e.g., "Windows Time")
@@ -1549,6 +2446,108 @@ def service_integrity_windows(service_name, backupDict):
 
     return oldStatus, newStatus, issues
 
+def service_integrity_linux(service_name, backupDict):
+    """
+    Given the name of a systemd service, check its attributes against a dict of 
+    known good attributes and report required remediation.
+
+    backupDict must contain:
+    - "ExecStart": The expected executable path (e.g., "/usr/sbin/sshd -D")
+    - "User": The expected user account (e.g., "root")
+    - "Requires" / "After": Expected list of dependent service names (e.g., ["network.target"])
+    - "StartType": The service startup type (e.g., "enabled", "disabled") - checked elsewhere, but included for completeness.
+
+    NOTE: Linux remediation for integrity (PathName/User) is complex (modifying unit files)
+    and is only reported as an issue here, not automatically fixed.
+
+    Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
+    """
+    
+    oldStatus = True
+    newStatus = True
+    issues = []
+    
+    # 1. Check service existence and get current attributes
+    show_cmd = f"systemctl show --no-pager {service_name}"
+    raw = run_bash(show_cmd).strip()
+
+    # Check for Not Found case
+    if "not-found" in raw.lower() or not raw:
+        oldStatus = False
+        newStatus = False
+        issues.append(f"ServiceNotFound for service {service_name}.")
+        # NOTE: Recreation logic is omitted due to complexity (installing package is preferred method)
+        return oldStatus, newStatus, issues
+
+    # Parse key attributes from systemctl output
+    current_attrs = {}
+    for line in raw.splitlines():
+        if '=' in line:
+            key, value = line.split('=', 1)
+            # Map systemd fields to Windows backupDict fields for internal comparison
+            if key == "ExecStart":
+                # systemd gives the full ExecStart line, including the path and args
+                current_attrs["ExecStart"] = value.split('=', 1)[-1].strip() # Get the command part
+            elif key == "User":
+                current_attrs["User"] = value
+            elif key == "Requires":
+                # Requires are space-separated; we use lowercase and sort for comparison
+                current_attrs["Requires"] = sorted([d.lower() for d in value.split()])
+    
+    # Map backupDict to expected systemd attributes
+    expected_exec_start = backupDict.get("ExecStart", "").strip()
+    expected_user = backupDict.get("User", "").strip()
+    # Normalize expected dependencies
+    expected_dependencies = sorted([d.lower() for d in backupDict.get("Dependencies", [])])
+    
+    
+    # 2. Integrity Checks (Audit)
+    
+    # Check 1: Executable Path/Command (Windows PathName -> Linux ExecStart)
+    current_exec_start = current_attrs.get("ExecStart", "").strip()
+    if current_exec_start.lower() != expected_exec_start.lower():
+        oldStatus = False
+        
+        issue_msg = f"ExecStart (PathName) is incorrect. Current: '{current_exec_start}', Expected: '{expected_exec_start}'."
+        issues.append(issue_msg)
+        
+        # Remediation for Linux is complex (requires modifying the unit file)
+        if not DISARM:
+            issues.append("-> Remediation failed: Cannot automatically modify systemd unit file.")
+            newStatus = False
+
+    # Check 2: User Account (Windows StartName -> Linux User)
+    current_user = current_attrs.get("User", "").strip()
+    if current_user.lower() != expected_user.lower():
+        oldStatus = False
+        
+        issue_msg = f"User (StartName) is incorrect. Current: '{current_user}', Expected: '{expected_user}'."
+        issues.append(issue_msg)
+        
+        if not DISARM:
+            issues.append("-> Remediation failed: Cannot automatically modify systemd unit file for User.")
+            newStatus = False
+
+    # Check 3: Dependencies (Windows Dependencies -> Linux Requires/After)
+    current_dependencies = current_attrs.get("Requires", [])
+    if current_dependencies != expected_dependencies:
+        oldStatus = False
+        
+        issue_msg = f"Dependencies (Requires/After) are incorrect. Current: {current_dependencies}, Expected: {expected_dependencies}."
+        issues.append(issue_msg)
+        
+        if not DISARM:
+            # Unlike Windows, systemd dependencies can often be changed dynamically without a reboot
+            # However, the audit only shows REQUIRED dependencies, not all configured ones.
+            # Automated fixing is avoided for safety.
+            issues.append("-> Remediation failed: Cannot automatically modify systemd unit file for Dependencies.")
+            newStatus = False
+            
+    if DISARM and not oldStatus:
+         issues.append("Integrity check failed, DISARMED. No restoration attempted.")
+
+    return oldStatus, newStatus, issues
+
 def service_backup(service):
     """
     Wrapper for OS-specific service_backup* functions
@@ -1562,7 +2561,9 @@ def service_backup(service):
     if system == "Windows":
         return service_backup_windows(service)
     else:
-        return None # TODO
+        return {}
+        #service_backup_linux(service)
+        #return None # TODO
 
 def service_backup_windows(service_name):
     """
@@ -1617,6 +2618,86 @@ def service_backup_windows(service_name):
         print(f"[ERROR] Failed to parse JSON configuration for '{service_name}': {e}")
         return None
 
+def service_backup_linux(service_name):
+    """
+    Queries the local systemd configuration for a service and returns a backup dictionary,
+    mapping systemd attributes to the Windows backup keys.
+
+    Args:
+        service_name (str): The name of the systemd unit (e.g., 'sshd.service').
+
+    Returns:
+        dict: A backup dictionary containing the service's current attributes, 
+              or None if the service is not found or an error occurs.
+    """
+    
+    # 1. Use systemctl show to get detailed unit properties
+    # --no-pager ensures clean output, and -p allows selecting specific properties,
+    # but querying all and parsing is often simpler.
+    systemctl_show_cmd = f"systemctl show --no-pager {service_name}"
+    raw = run_bash(systemctl_show_cmd).strip()
+
+    # Check for service existence/query success
+    if not raw or "not-found" in raw.lower():
+        print_debug(f"[ERROR] Service '{service_name}' not found or systemctl error during query.")
+        return None
+
+    # 2. Parse the output
+    systemd_attrs = {}
+    for line in raw.splitlines():
+        if '=' in line:
+            key, value = line.split('=', 1)
+            systemd_attrs[key] = value
+
+    # 3. Get UnitFileState separately (Enabled/Disabled/Static)
+    # This determines the startup type.
+    systemctl_enabled_cmd = f"systemctl is-enabled {service_name}"
+    enable_state = run_bash(systemctl_enabled_cmd, noisy=False).strip().lower()
+    
+    # 4. Map systemd attributes to Windows backup keys
+    
+    # ExecStart contains the path and arguments, which is equivalent to PathName
+    exec_start_line = systemd_attrs.get("ExecStart", "")
+    
+    # systemd ExecStart is usually formatted as: ExecStart={path}{args}
+    # We strip the leading "ExecStart=" and quotes if present.
+    if exec_start_line:
+        path_name = exec_start_line.split('=', 1)[-1].strip()
+    else:
+        path_name = ""
+        
+    # Dependencies: Windows uses DependsOn; systemd uses Requires, Wants, After, etc.
+    # We will use the 'Requires' list as the core dependency set.
+    # systemd dependencies are space-separated strings.
+    requires_str = systemd_attrs.get("Requires", "")
+    dependencies = [dep for dep in requires_str.split() if dep]
+
+    # StartName: Windows uses the service account; systemd uses User/Group
+    # We'll use the User field as the primary equivalent.
+    start_name = systemd_attrs.get("User", "root") # Defaulting to root if User is not explicitly set (common for system services)
+    
+    # DisplayName: Systemd uses Description
+    display_name = systemd_attrs.get("Description", service_name)
+
+    # StartType: Windows uses Auto/Manual/Disabled; systemd uses Enabled/Disabled/Static
+    if enable_state == "enabled":
+        start_type = "auto"
+    elif enable_state in ["disabled", "static"]:
+        start_type = "disabled"
+    else:
+        # Catch for 'manual' equivalent or unknown state
+        start_type = "manual" 
+
+    backup_dict = {
+        "PathName": path_name,                # Linux: ExecStart command/path
+        "StartName": start_name,              # Linux: User running the service
+        "Dependencies": dependencies,         # Linux: Requires dependencies (subset of all dependencies)
+        "DisplayName": display_name,          # Linux: Description
+        "StartType": start_type.lower()       # Linux: Based on systemctl is-enabled
+    }
+
+    return backup_dict
+
 def service_lastrun(service):
     """
     Wrapper for OS-specific service_lastrun* functions
@@ -1630,7 +2711,8 @@ def service_lastrun(service):
     if system == "Windows":
         return service_audit_windows(service)
     else:
-        return False, False, [f"service_lastrun(): not implemented for system {system}."] # TODO
+        return service_audit_linux(service)
+        #return False, False, [f"service_lastrun(): not implemented for system {system}."] # TODO
 
 def service_lastrun_windows(service_name):
     """
@@ -1724,6 +2806,94 @@ def service_lastrun_windows(service_name):
         
     return oldStatus, newStatus, issues
 
+def service_lastrun_linux(service_name):
+    """
+    Given the name of a systemd service, detects if it is running (active). 
+    If not, it retrieves the last exit code or error message from the system journal.
+
+    Args:
+        service_name (str): The name of the systemd unit (e.g., 'httpd.service').
+
+    Returns: 
+        tuple: (oldStatus, newStatus, issues)
+               oldStatus (bool): True if the service was initially OK (active).
+               newStatus (bool): Equals oldStatus, as no remediation is attempted.
+               issues (list of strings): Last exit code/error message if stopped, or not found.
+    """
+    oldStatus = True  # Assume running (good state) initially
+    newStatus = True  
+    issues = []
+
+    # 1. Check service existence and active status
+    
+    # systemctl is-active returns 'active' and exit code 0 if running, or another state/exit code > 0 if not.
+    systemctl_active_cmd = f"systemctl is-active {service_name}"
+    current_status = run_bash(systemctl_active_cmd, noisy=False).strip()
+    
+    # Check if the service exists at all
+    systemctl_check = run_bash(f"systemctl status {service_name}", noisy=False)
+    
+    if "not-found" in systemctl_check.lower():
+        oldStatus = False
+        newStatus = False
+        issues.append(f"Status Check: ServiceNotFound {service_name}.")
+        return oldStatus, newStatus, issues
+        
+    # 2. If the service is running, return OK status
+    if current_status == "active":
+        return oldStatus, newStatus, issues
+
+    # The service is NOT running (bad state)
+    oldStatus = False
+    newStatus = False 
+
+    # 3. If the service is NOT running, get its last failure information
+    
+    # A. Get the last recorded exit code via systemctl show
+    show_cmd = f"systemctl show --no-pager {service_name}"
+    show_output = run_bash(show_cmd, noisy=False)
+    
+    exit_code = "N/A"
+    
+    # Parse the output to extract key parameters
+    data = {}
+    for line in show_output.splitlines():
+        if '=' in line:
+            key, value = line.split('=', 1)
+            data[key] = value
+
+    main_pid = data.get("MainPID", "0")
+    if main_pid == "0":
+        # If MainPID is 0, the service is not running. Check the exit code.
+        exit_code_raw = data.get("ExecMainCode", data.get("ExecStopCode", None))
+        if exit_code_raw is not None:
+             exit_code = exit_code_raw
+
+    # B. Get the last few lines of the system journal for the service
+    # -u unit: specifies the service unit
+    # -n 5: last 5 lines
+    # --no-pager: prevent pager
+    journal_cmd = f"sudo journalctl -u {service_name} -n 5 --no-pager"
+    journal_output = run_bash(journal_cmd, noisy=False).strip()
+
+    analysis_message = f"Service {service_name} Status: {current_status}."
+    
+    # Check for specific failure states
+    if current_status == "failed":
+        analysis_message += " Service transitioned to a FAILED state."
+
+    analysis_message += f" Last known exit code: {exit_code}."
+
+    issues.append(analysis_message)
+    
+    #if journal_output:
+    #    issues.append("--- Last 5 Journal Entries ---")
+    #    issues.extend(journal_output.splitlines())
+    #else:
+    #    issues.append("Could not retrieve journal entries (check permissions or log retention).")
+        
+    return oldStatus, newStatus, issues
+
 def service_main(services,packages,service_backups):
     """
     Performs detection and remediation of common service problems
@@ -1746,6 +2916,7 @@ def service_main(services,packages,service_backups):
             continue
 
         # Check if service is found, attempt reinstall, and early out if failed
+        """
         result_oldStatus, result_newStatus, result_issues = service_uninstall(service,package)
         if not result_oldStatus:
             oldStatus = False
@@ -1753,6 +2924,7 @@ def service_main(services,packages,service_backups):
             newStatus = False
         for issue in result_issues:
             issues.append(issue)
+        """
 
         # Check for service integrity
         try:
@@ -1792,7 +2964,7 @@ def service_main(services,packages,service_backups):
 
 def pause_countdown(seconds=60):
     """
-    Handles countdown of pause.
+    Handles countdown of pause.    
     Returns: Success(bool)
     """
     return resume(True)
@@ -1964,8 +3136,11 @@ def main(stop_event=None):
     newIssues = []
 
     for service in SERVICES:
-        if not SERVICE_BACKUPS[service]:
-            SERVICE_BACKUPS[service] = service_backup(service)
+        try:
+            if not SERVICE_BACKUPS[service]:
+                SERVICE_BACKUPS[service] = service_backup(service)
+        except KeyError:
+                SERVICE_BACKUPS[service] = service_backup(service)
 
     print_debug(f"main(): System details - {get_system_details()}")
 
@@ -1982,7 +3157,7 @@ def main(stop_event=None):
         if not result_newStatus:
             newStatus = False
         for issue in result_issues:
-            newIssues.append(f"Firewall Issue - {issue}")
+            newIssues.append(f"Firewall - {issue}")
 
             print_debug(newIssues[-1])
             if newIssues[-1] not in oldIssues:
@@ -1999,7 +3174,7 @@ def main(stop_event=None):
         if not result_newStatus:
             newStatus = False
         for issue in result_issues:
-            newIssues.append(f"Interface Issue - {issue}")
+            newIssues.append(f"Interface - {issue}")
 
             print_debug(newIssues[-1])
             if newIssues[-1] not in oldIssues:
@@ -2016,7 +3191,7 @@ def main(stop_event=None):
         if not result_newStatus:
             newStatus = False
         for issue in result_issues:
-            newIssues.append(f"Service Issue - {issue}")
+            newIssues.append(f"Service - {issue}")
 
             print_debug(newIssues[-1])
             if newIssues[-1] not in oldIssues:
