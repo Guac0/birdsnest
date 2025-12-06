@@ -42,7 +42,15 @@ CONFIG_DEFAULTS = {
     "SLEEPTIME": 60,
     "PORTS": [],
     "SERVICES": [""],
-    "PACKAGES": [""]
+    "PACKAGES": [""],
+    "SERVICE_BACKUPS": {}
+    #"SERVICE_BACKUPS": {
+    #    "PathName": "C:\Windows\System32\svchost.exe -k LocalService",
+    #    "StartName": "LocalSystem",
+    #    "Dependencies": ["RpcSs"],
+    #    "DisplayName": "Windows Time",
+    #    "StartType": "auto"
+    #}
 }
 
 def load_config(path):
@@ -1353,8 +1361,6 @@ def service_integrity(service,backupDict):
     
     Returns: Returns: oldStatus(bool), newStatus(bool), issues(list of string)
     """
-    return False, False, [f"service_integrity(): not implemented."] # TODO
-
     system = platform.system()
 
     if system == "Windows":
@@ -1362,15 +1368,363 @@ def service_integrity(service,backupDict):
     else:
         return False, False, [f"service_integrity(): not implemented for system {system}."] # TODO
     
-def service_integrity_windows(service,backupDict):
+def service_integrity_windows(service_name, backupDict):
     """
-    Given the name of a Windows service, check its attributes against a dict of known good attributes and restore if needed
+    Given the name of a Windows service, check its attributes against a dict of 
+    known good attributes and restore or recreate if needed.
     
+    backupDict must contain:
+    - "PathName": The expected executable path (e.g., "C:\Windows\System32\svchost.exe -k LocalService")
+    - "StartName": The expected service account (e.g., "LocalSystem")
+    - "Dependencies": The expected list of dependent service names (e.g., ["RpcSs"])
+    - "DisplayName": The service display name (e.g., "Windows Time")
+    - "StartType": The service startup type (e.g., "auto", "demand", "disabled")
+    
+    Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
+    """
+    
+    # 1. Check whether service exists and get its current attributes
+    ps_check = fr"""
+    $svc = Get-CimInstance Win32_Service -Filter "Name='{service_name}'" -ErrorAction SilentlyContinue
+    if ($svc -eq $null) {{
+        Write-Output 'NotFound'
+    }} else {{
+        $obj = New-Object PSObject -Property @{{
+            StartName = $svc.StartName
+            PathName = $svc.PathName
+            Dependencies = $svc.DependsOn
+        }}
+        $obj | ConvertTo-Json
+    }}
+    """
+    
+    raw = run_powershell(ps_check).strip()
+    if not raw:
+        return False, False, [f"FAILED to get integrity information for service {service_name}, PowerShell error."]
+
+    oldStatus = True
+    newStatus = oldStatus
+    issues = []
+
+    # ----------------------------------------------------------
+    # 1.5. If Service is NotFound - recreate it
+    # ----------------------------------------------------------
+    if raw == "NotFound" or raw == "":
+        
+        # Service is missing, so initial state is bad
+        oldStatus = False 
+
+        # Extract required attributes from backupDict for recreation
+        expected_path_name = backupDict.get("PathName", "")
+        expected_display_name = backupDict.get("DisplayName", service_name)
+        expected_start_type = backupDict.get("StartType", "auto").lower()
+        expected_start_name = backupDict.get("StartName", "LocalSystem")
+        
+        # Format dependencies for sc.exe: list of services separated by '/'
+        dependencies_str = "/".join(backupDict.get("Dependencies", []))
+
+        # Check for minimum required attributes for creation
+        if not expected_path_name:
+            issues.append(f"Service {service_name} was MISSING, FAILED to create (PathName not in backupDict).")
+            return oldStatus, False, issues
+
+        # Construct the sc.exe create command
+        # Note: 'binpath=' and 'obj=' are required for creation.
+        ps_create = fr"""
+        sc.exe create "{service_name}" ^
+            binpath= "{expected_path_name}" ^
+            displayname= "{expected_display_name}" ^
+            start= {expected_start_type} ^
+            obj= "{expected_start_name}" ^
+            depend= "{dependencies_str}"
+        """
+        
+        if DISARM:
+            issues.append(f"Service {service_name} was MISSING, DISARMED. (Would attempt to create it.)")
+            return oldStatus, False, issues 
+        else:
+            if run_powershell(ps_create):
+                issues.append(f"Service {service_name} was MISSING, RESTORED by creating the service.")
+                # After creation, the service is present and attributes are set from backupDict
+                return oldStatus, True, issues 
+            else:
+                issues.append(f"Service {service_name} was MISSING, FAILED to create service.")
+                return oldStatus, False, issues 
+
+    # --- Continue to attribute checks if service was found ---
+
+    # Parse the JSON result
+    try:
+        data = json.loads(raw)
+    except:
+        return False, False, [f"FAILED to get integrity information for service {service_name}, PowerShell JSON parse error. Raw: {raw[:50]}..."]
+
+    current_start_name = data.get("StartName", "")
+    current_path_name  = data.get("PathName", "")
+    current_dependencies = data.get("Dependencies", [])
+
+    expected_start_name = backupDict.get("StartName", "").strip()
+    expected_path_name  = backupDict.get("PathName", "").strip()
+    expected_dependencies = backupDict.get("Dependencies", [])
+    
+    # Normalize and sort dependencies for comparison
+    current_dependencies_sorted = sorted([d.lower() for d in current_dependencies])
+    expected_dependencies_sorted = sorted([d.lower() for d in expected_dependencies])
+
+    # Re-evaluate initial state (in case any check below fails)
+    if (current_start_name != expected_start_name) or \
+       (current_path_name.lower().strip() != expected_path_name.lower().strip()) or \
+       (current_dependencies_sorted != expected_dependencies_sorted):
+        oldStatus = False
+
+    # ----------------------------------------------------------
+    # 2. If PathName is incorrect - restore it
+    # ----------------------------------------------------------
+    if current_path_name.lower().strip() != expected_path_name.lower().strip():
+        # NOTE: PathName/binPath change requires the service to be STOPPED first.
+        ps_path_fix = fr"""
+        Stop-Service -Name '{service_name}' -Force -ErrorAction SilentlyContinue | Out-Null
+        sc.exe config "{service_name}" binPath= "{expected_path_name}"
+        Start-Service -Name '{service_name}' -ErrorAction SilentlyContinue | Out-Null
+        """
+
+        if DISARM:
+            issues.append(f"Service {service_name} PathName ('{current_path_name}') is incorrect, DISARMED. (Expected: {expected_path_name})")
+        else:
+            if run_powershell(ps_path_fix):
+                issues.append(f"Service {service_name} PathName from ('{current_path_name}') to {expected_path_name} restored. Service stopped/restarted.")
+                newStatus = True
+            else:
+                issues.append(f"Service {service_name} PathName from ('{current_path_name}') to {expected_path_name} restoration FAILED.")
+                
+    # ----------------------------------------------------------
+    # 3. If StartName is incorrect - restore it
+    # ----------------------------------------------------------
+    if current_start_name != expected_start_name:
+        
+        # Only support built-in accounts without needing a password parameter
+        ps_start_name_fix = None
+        if expected_start_name in ("LocalSystem", "NT AUTHORITY\\LocalSystem"):
+             # For built-in accounts, password is set to an empty string
+             ps_start_name_fix = fr"""sc.exe config "{service_name}" obj= "LocalSystem" password= "" """
+        elif expected_start_name in ("LocalService", "NT AUTHORITY\\LocalService"):
+             ps_start_name_fix = fr"""sc.exe config "{service_name}" obj= "NT AUTHORITY\LocalService" password= "" """
+        
+        if ps_start_name_fix is None:
+            issues.append(f"Service {service_name} StartName ('{current_start_name}') is incorrect, expected '{expected_start_name}'. RESTORE IMPOSSIBLE (user account password needed).")
+        else:
+            if DISARM:
+                issues.append(f"Service {service_name} StartName ('{current_start_name}') is incorrect, DISARMED. (Expected: {expected_start_name})")
+            else:
+                if run_powershell(ps_start_name_fix):
+                    issues.append(f"Service {service_name} StartName ('{current_start_name}') restored to '{expected_start_name}'.")
+                    newStatus = True
+                else:
+                    issues.append(f"Service {service_name} StartName ('{current_start_name}') restoration FAILED. (Expected: {expected_start_name})")
+
+
+    # ----------------------------------------------------------
+    # 4. If Dependencies are incorrect - restore them
+    # ----------------------------------------------------------
+    if current_dependencies_sorted != expected_dependencies_sorted:
+        
+        # Format the expected list into a slash-separated string for sc.exe
+        dependency_list_str = "/".join(expected_dependencies)
+
+        # NOTE: Changing Dependencies requires the service to be STOPPED first.
+        ps_dep_fix = fr"""
+        Stop-Service -Name '{service_name}' -Force -ErrorAction SilentlyContinue | Out-Null
+        sc.exe config "{service_name}" depend= "{dependency_list_str}"
+        Start-Service -Name '{service_name}' -ErrorAction SilentlyContinue | Out-Null
+        """
+
+        if DISARM:
+            issues.append(f"Service {service_name} Dependencies are incorrect, DISARMED. (Expected: {expected_dependencies}) (Actual: {current_dependencies_sorted})")
+        else:
+            if run_powershell(ps_dep_fix):
+                issues.append(f"Service {service_name} Dependencies restored to '{expected_dependencies}'. Service stopped/restarted. Old bad dependencies: {current_dependencies_sorted}")
+                newStatus = True
+            else:
+                issues.append(f"Service {service_name} Dependencies restoration FAILED. Old bad dependencies: {current_dependencies_sorted}. Current dependencies: {expected_dependencies}")
+
+    return oldStatus, newStatus, issues
+
+def service_backup(service):
+    """
+    Wrapper for OS-specific service_backup* functions
+
+    Given the name of a Windows service, create a backupDict as used in service_integrity()
+    
+    Returns: backupDict(dict)
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return service_backup_windows(service)
+    else:
+        return None # TODO
+
+def service_backup_windows(service_name):
+    """
+    Queries the local Windows system for the current configuration of a service
+    and returns a backup dictionary.
+
+    Args:
+        service_name (str): The name of the Windows service (e.g., 'Dnscache').
+
+    Returns:
+        dict: A backup dictionary containing the service's current attributes, 
+              or None if the service is not found or an error occurs.
+    """
+    
+    # PowerShell command to query all required attributes using Win32_Service
+    ps_query = fr"""
+    $svc = Get-CimInstance Win32_Service -Filter "Name='{service_name}'" -ErrorAction SilentlyContinue
+    if ($svc -eq $null) {{
+        Write-Output 'NotFound'
+    }} else {{
+        $obj = New-Object PSObject -Property @{{
+            PathName = $svc.PathName
+            StartName = $svc.StartName
+            Dependencies = $svc.DependsOn
+            DisplayName = $svc.DisplayName
+            StartType = $svc.StartMode
+        }}
+        $obj | ConvertTo-Json
+    }}
+    """
+    
+    raw = run_powershell(ps_query).strip()
+    
+    if not raw or raw == "NotFound":
+        print(f"[ERROR] Service '{service_name}' not found or PowerShell error during query.")
+        return None
+
+    # Parse the JSON result
+    try:
+        data = json.loads(raw)
+        
+        # Ensure StartType is lowercased to match the expected format ('auto', 'manual', 'disabled')
+        data['StartType'] = data['StartType'].lower()
+        
+        # Ensure Dependencies is a list, even if it's null (PowerShell often returns null for no dependencies)
+        if data['Dependencies'] is None:
+            data['Dependencies'] = []
+            
+        return data
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to parse JSON configuration for '{service_name}': {e}")
+        return None
+
+def service_lastrun(service):
+    """
+    Wrapper for OS-specific service_lastrun* functions
+
+    Given the name of a Windows service, detect if it is running. If not, get the last error message and return it
+
     Returns: Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
     """
-    return False, False, []
+    system = platform.system()
+
+    if system == "Windows":
+        return service_audit_windows(service)
+    else:
+        return False, False, [f"service_lastrun(): not implemented for system {system}."] # TODO
+
+def service_lastrun_windows(service_name):
+    """
+    Given the name of a Windows service, detect if it is running. If not, get the last error message and return it
+
+    Returns: Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
+    """
     
-def service_main(services,packages):
+    oldStatus = True  # Assume running (good state) initially
+    newStatus = True  # Since we are not attempting a fix, newStatus = oldStatus unless an issue is found
+    issues = []
+
+    # 1. Check whether service exists and get its current state (Status)
+    ps_check = fr"""
+    $svc = Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue
+    if ($svc -eq $null) {{
+        Write-Output 'NotFound'
+    }} else {{
+        $obj = New-Object PSObject -Property @{{
+            Status = $svc.Status
+        }}
+        $obj | ConvertTo-Json
+    }}
+    """
+
+    raw = run_powershell(ps_check).strip()
+    
+    if not raw:
+        oldStatus = False
+        newStatus = False
+        issues.append(f"FAILED to get status information for service {service_name}, PowerShell error.")
+        return oldStatus, newStatus, issues
+
+    # Case: Service not found
+    if raw == "NotFound" or raw == "":
+        oldStatus = False
+        newStatus = False
+        issues.append(f"Status Check: ServiceNotFound {service_name}.")
+        return oldStatus, newStatus, issues
+
+    # Parse the JSON result
+    try:
+        data = json.loads(raw)
+    except:
+        oldStatus = False
+        newStatus = False
+        issues.append(f"FAILED to get status information for service {service_name}, PowerShell JSON parse error.")
+        return oldStatus, newStatus, issues
+
+    current_status = data.get("Status", "Unknown")
+
+    # ----------------------------------------------------------
+    # 2. If the service is running, return OK status
+    # ----------------------------------------------------------
+    if current_status == "Running":
+        return oldStatus, newStatus, issues
+
+    # The service is NOT running (bad state)
+    oldStatus = False
+    newStatus = False 
+
+    # ----------------------------------------------------------
+    # 3. If the service is NOT running, get its last exit code
+    # ----------------------------------------------------------
+    
+    ps_exit_code_query = fr"sc.exe qc {service_name}"
+    qc_output = run_powershell(ps_exit_code_query, noisy=False)
+
+    if not qc_output:
+        issues.append(f"Service Status: {current_status}. FAILED to query exit codes via sc.exe.")
+        return oldStatus, newStatus, issues
+
+    # Use regular expressions to extract the exit codes
+    win32_match = re.search(r"WIN32_EXIT_CODE\s+:\s+(\d+)", qc_output, re.IGNORECASE)
+    service_match = re.search(r"SERVICE_EXIT_CODE\s+:\s+(\d+)", qc_output, re.IGNORECASE)
+
+    win32_code = int(win32_match.group(1)) if win32_match else -1
+    service_code = int(service_match.group(1)) if service_match else -1
+
+    # Analyze the codes
+    if win32_code == 0:
+        analysis_message = f"Service Status: {current_status}. Last stop was **clean** (WIN32_EXIT_CODE: 0)."
+    elif win32_code == 1066:
+        analysis_message = f"Service Status: {current_status}. Last stop was due to a **Service-Specific Error Code**: {service_code} (WIN32_EXIT_CODE: 1066)."
+    elif win32_code != -1:
+        analysis_message = f"Service Status: {current_status}. Last stop was due to **System Error Code**: {win32_code}."
+    else:
+        analysis_message = f"Service Status: {current_status}. Could not determine the last exit reason (Codes unavailable)."
+        
+    issues.append(analysis_message)
+        
+    return oldStatus, newStatus, issues
+
+def service_main(services,packages,service_backups):
     """
     Performs detection and remediation of common service problems
     
@@ -1401,15 +1755,16 @@ def service_main(services,packages):
             issues.append(issue)
 
         # Check for service integrity
-        """ # TODO
-        result_oldStatus, result_newStatus, result_issues = service_integrity(service)
-        if not result_oldStatus:
-            oldStatus = False
-        if not result_newStatus:
-            newStatus = False
-        for issue in result_issues:
-            issues.append(issue)
-        """
+        try:
+            result_oldStatus, result_newStatus, result_issues = service_integrity(service,SERVICE_BACKUPS[service])
+            if not result_oldStatus:
+                oldStatus = False
+            if not result_newStatus:
+                newStatus = False
+            for issue in result_issues:
+                issues.append(issue)
+        except KeyError:
+            print_debug(f"service_main(): no backup data available for {service}")
 
         # Check if service is running/enabled
         result_oldStatus, result_newStatus, result_issues = service_audit(service)
@@ -1421,7 +1776,13 @@ def service_main(services,packages):
             issues.append(issue)
 
         # Check service last run status
-        # TODO
+        result_oldStatus, result_newStatus, result_issues = service_lastrun(service)
+        if not result_oldStatus:
+            oldStatus = False
+        if not result_newStatus:
+            newStatus = False
+        for issue in result_issues:
+            issues.append(issue)
 
     return oldStatus, newStatus, issues
 
@@ -1602,6 +1963,10 @@ def main(stop_event=None):
     oldIssues = []
     newIssues = []
 
+    for service in SERVICES:
+        if not SERVICE_BACKUPS[service]:
+            SERVICE_BACKUPS[service] = service_backup(service)
+
     print_debug(f"main(): System details - {get_system_details()}")
 
     while not paused:
@@ -1645,7 +2010,7 @@ def main(stop_event=None):
 
         # Service
         print_debug(f"main(): running service checks")
-        result_oldStatus, result_newStatus, result_issues = service_main(SERVICES,PACKAGES)
+        result_oldStatus, result_newStatus, result_issues = service_main(SERVICES,PACKAGES,SERVICE_BACKUPS)
         if not result_oldStatus:
             oldStatus = False
         if not result_newStatus:

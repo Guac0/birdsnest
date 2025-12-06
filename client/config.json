@@ -14,5 +14,12 @@
     "SLEEPTIME": 60,
     "PORTS": [81],
     "SERVICES": ["AxInstSV"],
-    "PACKAGES": [""]
+    "PACKAGES": [""],
+    "SERVICE_BACKUPS": {
+        "PathName": "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup",
+        "StartName": "LocalSystem",
+        "Dependencies": null,
+        "DisplayName": "ActiveX Installer (AxInstSV)",
+        "StartType": "Manual"
+    }
 }
