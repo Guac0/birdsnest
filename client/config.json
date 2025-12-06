@@ -1,0 +1,18 @@
+{
+    "DISARM": true,
+    "DEBUG_PRINT": true,
+    "BACKUPDIR": "",
+    "LOGFILE": "log_.txt",
+    "MTU_MIN": 1200,
+    "MTU_DEFAULT": 1300,
+    "MTU_MAX": 1514,
+    "AGENT_NAME": "test1",
+    "AUTH_TOKEN": "testtoken",
+    "AGENT_TYPE": "stabvest",
+    "SERVER_URL": "https://192.168.1.37:8080/beacon",
+    "SERVER_TIMEOUT": 5,
+    "SLEEPTIME": 60,
+    "PORTS": [81],
+    "SERVICES": ["AxInstSV"],
+    "PACKAGES": [""]
+}

@@ -26,18 +26,77 @@ import sys
 # Configuration Options #
 #region##################
 
-DISARM = True
-DEBUG_PRINT = True
-BACKUPDIR = ""
-LOGFILE = "log.txt" #"agent_log.txt"
-MTU_MIN = 1200
-MTU_DEFAULT = 1300
-MTU_MAX = 1514
-AGENT_NAME="agenttest1"
-SERVER_URL="https://192.168.1.37:8080/beacon"
-AUTH_TOKEN="testtoken"
-AGENT_TYPE="stabvest"
-SERVER_TIMEOUT=5
+CONFIG_DEFAULTS = {
+    "DISARM": True,
+    "DEBUG_PRINT": True,
+    "BACKUPDIR": "",
+    "LOGFILE": "log.txt",
+    "MTU_MIN": 1200,
+    "MTU_DEFAULT": 1300,
+    "MTU_MAX": 1514,
+    "AGENT_NAME": "test",
+    "AUTH_TOKEN": "testtoken",
+    "AGENT_TYPE": "stabvest",
+    "SERVER_URL": "https://127.0.0.1:8080/beacon",
+    "SERVER_TIMEOUT": 5,
+    "SLEEPTIME": 60,
+    "PORTS": [],
+    "SERVICES": [""],
+    "PACKAGES": [""]
+}
+
+def load_config(path):
+    config = CONFIG_DEFAULTS.copy()
+    badPath = False
+
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            config.update(json.load(f))
+    else:
+        badPath = True
+
+    # Generate timestamp once
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    # Replace placeholders in strings
+    for key, value in config.items():
+        if isinstance(value, str):
+            config[key] = value.format(
+                HOST=config.get("HOST"),
+                PORT=config.get("PORT"),
+                timestamp=timestamp
+            )
+
+    if badPath:
+        print(f"[-] {timestamp} load_config(): config file path not found: {path}")
+        with open(config.get("LOGFILE"), "a") as f: # intentionally not the correct logfile format
+            f.write(f"[{timestamp}] CRITICAL - load_config(): config file path not found: {path}")
+
+    #config["PUBLIC_URL"] = f"http://{config['HOST']}:{config['PORT']}"
+    #config["LOGFILE"] = f"log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+    #config["SAVEFILE"] = f"save_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+
+    return config
+
+CONFIG = load_config("config.json") # relative to cwd!
+DISARM = CONFIG["DISARM"]
+DEBUG_PRINT = CONFIG["DEBUG_PRINT"]
+BACKUPDIR = CONFIG["BACKUPDIR"]
+LOGFILE = CONFIG["LOGFILE"]
+MTU_MIN = CONFIG["MTU_MIN"]
+MTU_DEFAULT = CONFIG["MTU_DEFAULT"]
+MTU_MAX = CONFIG["MTU_MAX"]
+AGENT_NAME = CONFIG["AGENT_NAME"]
+DISARM = CONFIG["DISARM"]
+AUTH_TOKEN = CONFIG["AUTH_TOKEN"]
+AGENT_TYPE = CONFIG["AGENT_TYPE"]
+SERVER_URL = CONFIG["SERVER_URL"]
+SERVER_TIMEOUT = CONFIG["SERVER_TIMEOUT"]
+SLEEPTIME = CONFIG["SLEEPTIME"]
+PORTS = CONFIG["PORTS"]
+SERVICES = CONFIG["SERVICES"]
+PACKAGES = CONFIG["PACKAGES"]
+
 REGISTRY_HIVE = winreg.HKEY_LOCAL_MACHINE
 SERVICE_PATH = r"SYSTEM\\CurrentControlSet\\Services\\service_name" #replace with actual service name
 
@@ -1533,11 +1592,7 @@ def test_main():
 
 def main(stop_event=None):
     paused = False
-    sleeptime = 60
-    ports = [81]
-    services = ["AxInstSV"]
-    packages = [""]
-    ip_address,prefix,gateway = init_int_vars()
+    ip_address,prefix,gateway = init_int_vars() # TODO
 
     #test_main()
     #return
@@ -1556,7 +1611,7 @@ def main(stop_event=None):
 
         # Firewall
         print_debug(f"main(): running firewall checks")
-        result_oldStatus, result_newStatus, result_issues = firewall_main(ports)
+        result_oldStatus, result_newStatus, result_issues = firewall_main(PORTS)
         if not result_oldStatus:
             oldStatus = False
         if not result_newStatus:
@@ -1590,7 +1645,7 @@ def main(stop_event=None):
 
         # Service
         print_debug(f"main(): running service checks")
-        result_oldStatus, result_newStatus, result_issues = service_main(services,packages)
+        result_oldStatus, result_newStatus, result_issues = service_main(SERVICES,PACKAGES)
         if not result_oldStatus:
             oldStatus = False
         if not result_newStatus:
@@ -1618,7 +1673,7 @@ def main(stop_event=None):
             #print_debug(f"main(): issue - {issue}")
             #send_message(oldStatus,newStatus,issue)
         
-        print_debug(f"main(): sleeping for {sleeptime} seconds")
+        print_debug(f"main(): sleeping for {SLEEPTIME} seconds")
         print_debug(f"")
 
         oldIssues = newIssues
@@ -1640,7 +1695,7 @@ def main(stop_event=None):
         else:
             time.sleep(sleeptime)
         """
-        time.sleep(sleeptime)
+        time.sleep(SLEEPTIME)
 
 if __name__ == "__main__":
 
