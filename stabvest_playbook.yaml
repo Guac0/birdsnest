@@ -1,0 +1,16 @@
+---
+- name: Deploy Stabvest Server
+  hosts: host1
+  roles:
+    - stabvest_server
+  tags:
+    - stabvest
+    - stabvest_server
+
+- name: Deploy Stabvest Client
+  hosts: host2
+  roles:
+    - stabvest_client
+  tags:
+    - stabvest
+    - stabvest_client
