@@ -4,4 +4,4 @@
 
 - name: Start scheduled task
   ansible.builtin.include_tasks: scheduled_task.yaml
-  when: stabvet_task_create
+  when: stabvest_task_create

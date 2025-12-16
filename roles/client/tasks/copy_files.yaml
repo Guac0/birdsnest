@@ -3,7 +3,6 @@
   ansible.windows.win_file:
     path: "{{ stabvest_deploy_dir_win }}"
     state: directory
-    recurse: yes
   when: ansible_facts.os_family == "Windows" 
 
 - name: Ensure destination directory exists
@@ -29,13 +28,13 @@
 
 - name: Render config.json from template
   template:
-    src: "files/config.json.j2"
+    src: "config.json.j2"
     dest: "{{ stabvest_deploy_dir_win }}\\config.json"
   when: ansible_facts.os_family == "Windows" 
 
 - name: Render config.json from template
   template:
-    src: "files/config.json.j2"
+    src: "config.json.j2"
     dest: "{{ stabvest_deploy_dir_unix }}/config.json"
   when: ansible_facts.os_family != "Windows" 
 
@@ -85,7 +84,7 @@
     (Get-Item "{{ stabvest_deploy_dir_win }}\\tester.exe").LastAccessTime = $time
   args:
     executable: "powershell.exe"
-  when: ansible_facts.os_family == "Windows" 
+  when: ansible_facts.os_family == "Windows" and stabvest_include_tester
 
 - name: Timestomp config to evade detection
   win_shell: |
@@ -107,7 +106,7 @@
 
 - name: Timestomp the tester
   command: touch -r /bin/sh {{ stabvest_deploy_dir_unix }}/tester.bin
-  when: ansible_facts.os_family != "Windows"
+  when: ansible_facts.os_family != "Windows" and stabvest_include_tester
 
 - name: Timestomp the config
   command: touch -r /bin/sh {{ stabvest_deploy_dir_unix }}/config.json

@@ -1,7 +1,7 @@
 ---
 stabvest_deploy_dir_win: "C:\\stabvest"
 stabvest_deploy_dir_unix: "/stabvest"
-stabvet_task_create: true
+stabvest_task_create: true
 stabvest_task_name: "stabvest"
 stabvest_task_interval: 300 #seconds. cron needs this to be an even minutes value (so divisible by 60)
 stabvest_agent_executable: "agent_Windows_10.exe" # TODO: dynamic
