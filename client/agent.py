@@ -13,12 +13,12 @@ from datetime import datetime
 import time
 import urllib.request
 import urllib.error
-import winreg
 import ssl
+#import winreg
 #import win32serviceutil
 #import win32service
 #import win32event
-import sys
+#import sys
 #import servicemanager
 #import threading
 
@@ -108,8 +108,8 @@ SERVICES = CONFIG["SERVICES"]
 PACKAGES = CONFIG["PACKAGES"]
 SERVICE_BACKUPS = CONFIG["SERVICE_BACKUPS"]
 
-REGISTRY_HIVE = winreg.HKEY_LOCAL_MACHINE
-SERVICE_PATH = r"SYSTEM\\CurrentControlSet\\Services\\service_name" #replace with actual service name
+#REGISTRY_HIVE = winreg.HKEY_LOCAL_MACHINE
+#SERVICE_PATH = r"SYSTEM\\CurrentControlSet\\Services\\service_name" #replace with actual service name
 
 CTX = ssl.create_default_context()
 CTX.check_hostname = False
@@ -129,6 +129,7 @@ def print_debug(msg):
                 f.write(f"{timestamp} {msg}\n")
     return
 
+"""
 def get_reg_val(key, service_path=SERVICE_PATH, reg_hive=REGISTRY_HIVE):
     '''
     Given a registry key name (variable), returns its value from the specified service path and hive.
@@ -143,6 +144,7 @@ def get_reg_val(key, service_path=SERVICE_PATH, reg_hive=REGISTRY_HIVE):
     except Exception as e:
         print_debug(f"get_reg_val(): {e}")
     return result
+"""
 
 def get_os(simple=False):
     """
