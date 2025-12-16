@@ -3,6 +3,7 @@ import shutil
 import subprocess
 from pathlib import Path
 import re
+import platform
 
 from htmlmin import minify as html_minify
 from jsmin import jsmin
@@ -14,7 +15,7 @@ SOURCE_TEMPLATES = "templates"
 SOURCE_STATIC = "static"
 BUILD_DIR = "build_assets"
 
-SERVER_FILE = "server.py"
+TARGET_FILE = "server.py"
 NUITKA_ARGS = [
     #"--standalone",
     "--onefile",
@@ -139,7 +140,7 @@ def main():
     print("=== Running Nuitka ===")
     nuitka_cmd = [
         "python", "-m", "nuitka",
-        SERVER_FILE,
+        TARGET_FILE,
         *NUITKA_ARGS,
         #"--plugin-enable=flask",
         #"--plugin-enable=sqlalchemy",
@@ -155,6 +156,31 @@ def main():
     subprocess.run(nuitka_cmd, check=True)
 
     print("\n=== Build complete! ===")
+
+    osname=""
+    system = platform.system()
+    simple=False
+    if system == "Linux":
+        if simple:
+            osname = platform.dist()[1] # Ubuntu, debian, redhat
+        else:
+            osname = '_'.join(platform.dist()) # Ubuntu 10.04 lucid, debian 4.0 , fedora 17 Beefy Miracle, redhat 5.6 Tikanga, redhat 5.9 Final (<- centos)
+    else:
+        if simple:
+            osname = platform.system() # Windows, FreeBSD
+        else:
+            osname = f"{platform.system()}_{platform.release()}"
+
+    try:
+        if platform.system() == "Windows":
+            os.rename(f"{TARGET_FILE.split(".")[0]}.exe",f"{TARGET_FILE.split(".")[0]}_{osname}.exe")
+            print(f"Renamed output file to {TARGET_FILE.split(".")[0]}_{osname}.exe")
+        else:
+            os.rename(f"{TARGET_FILE.split(".")[0]}.bin",f"{TARGET_FILE.split(".")[0]}_{osname}.bin")
+            print(f"Renamed output file to {TARGET_FILE.split(".")[0]}_{osname}.bin")
+    except FileNotFoundError as E:
+        print("Attempted to rename output file but could not locate it (possible unexpected file exception or Nuitka error)")
+        print(f"Full error: {E}")
 
 
 if __name__ == "__main__":
