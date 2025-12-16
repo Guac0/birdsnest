@@ -1,0 +1,14 @@
+{
+  "HOST": "{{ host }}",
+  "PORT": {{ port }},
+  "PUBLIC_URL": "{{ public_url }}",
+  "LOGFILE": "{{ logfile }}",
+  "SAVEFILE": "{{ savefile }}",
+  "SAVE_INTERVAL": {{ save_interval }},
+  "STALE_TIME": {{ stale_time }},
+  "DEFAULT_WEBHOOK_SLEEP_TIME": {{ default_webhook_sleep_time }},
+  "MAX_WEBHOOK_MSG_PER_MINUTE": {{ max_webhook_msg_per_minute }},
+  "WEBHOOK_URL": "{{ webhook_url }}",
+  "AGENT_AUTH_TOKENS": {{ agent_auth_tokens | to_json }},
+  "WEBGUI_USERS": {{ webgui_users | to_json }}
+}

