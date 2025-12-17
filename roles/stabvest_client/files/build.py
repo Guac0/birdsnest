@@ -97,16 +97,16 @@ def main():
 
     try:
         if platform.system() == "Windows":
-            dest = f"{TARGET_FILE.split(".")[0]}_{osname}.exe"
+            dest = f"{TARGET_FILE.split('.')[0]}_{osname}.exe"
             if os.path.exists(dest):
                 os.remove(dest)
-            os.rename(f"{TARGET_FILE.split(".")[0]}.exe",dest)
+            os.rename(f"{TARGET_FILE.split('.')[0]}.exe",dest)
             print(f"Renamed output file to {dest}")
         else:
-            dest = f"{TARGET_FILE.split(".")[0]}_{osname}.bin"
+            dest = f"{TARGET_FILE.split('.')[0]}_{osname}.bin"
             if os.path.exists(dest):
                 os.remove(dest)
-            os.rename(f"{TARGET_FILE.split(".")[0]}.bin",dest)
+            os.rename(f"{TARGET_FILE.split('.')[0]}.bin",dest)
             print(f"Renamed output file to {dest}")
     except FileNotFoundError as E:
         print("Attempted to rename output file but could not locate it (possible unexpected file exception or Nuitka error)")

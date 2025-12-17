@@ -1729,7 +1729,7 @@ def firewall_policy_audit_windows(direction):
     for p in profiles:
         if (p[f"Default{direction}Action"] == "Block"):
             # We don't actually care about specific profile but may as well record it
-            issues.append([f"Default firewall policy on profile {p["Name"]} for direction {direction} is set to BLOCK."])
+            issues.append([f"Default firewall policy on profile {p['Name']} for direction {direction} is set to BLOCK."])
         
     if issues:
         return True, False, issues
@@ -3151,8 +3151,8 @@ def test_network():
     #print(f"interface_mtu(): {interface_mtu()}")
     #print(f"interface_ttl(): {interface_ttl()}")
     print_debug(f"interface_main({interface,ip_address,prefix,gateway}): {interface_main(interface,ip_address,prefix,gateway)}")
-    #print(f"firewall_rules_audit_windows('81'): {firewall_rules_audit_windows("81")}")
-    print_debug(f"firewall_main(['81','82']): {firewall_main(["81","82"])}")
+    #print(f"firewall_rules_audit_windows('81'): {firewall_rules_audit_windows('81')}")
+    print_debug(f"firewall_main(['81','82']): {firewall_main(['81','82'])}")
 
 def test_service():
     service = "AxInstSV"
