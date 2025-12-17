@@ -223,6 +223,44 @@
         </div>
 
         <div class="form-section">
+            <h2>Stabvest Agent Deployment Settings</h2>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="stabvest_deploy_dir_win">Deploy Folder [Windows] (stabvest_deploy_dir_win):</label>
+                    <input type="text" id="stabvest_deploy_dir_win" value="C:\\stabvest" required>
+                </div>
+                <div class="form-field">
+                    <label for="stabvest_deploy_dir_unix">Deploy Folder [Unix] (stabvest_deploy_dir_unix):</label>
+                    <input type="text" id="stabvest_deploy_dir_unix" value="/stabvest" required>
+                </div>
+                <div class="form-field">
+                    <label for="stabvest_agent_executable">Agent Executable:</label>
+                    <input type="text" id="stabvest_agent_executable" value="agent_Windows_10.exe" required>
+                </div>
+                <div class="form-field">
+                    <label for="stabvest_tester_executable">Tester Executable:</label>
+                    <input type="text" id="stabvest_tester_executable" value="agent_tester_Windows_10.exe" required>
+                </div>
+                <div class="form-field">
+                    <label for="stabvest_task_name">Task/Cron Name:</label>
+                    <input type="text" id="stabvest_task_name" value="stabvest" required>
+                </div>
+                <div class="form-field">
+                    <label for="stabvest_task_interval">Task Interval (seconds) [must be /60 for cron]:</label>
+                    <input type="number" id="stabvest_task_interval" value="60" step="1" required>
+                </div>
+                <div class="form-field checkbox-container">
+                    <input type="checkbox" id="stabvest_task_create" checked>
+                    <label for="stabvest_task_create">Create Scheduled Task</label>
+                </div>
+                <div class="form-field checkbox-container">
+                    <input type="checkbox" id="stabvest_include_tester" checked>
+                    <label for="stabvest_include_tester">Include Tester Executable</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
             <h2>Stabvest Agent Core Settings</h2>
             <div class="form-grid">
                 <div class="form-field">
@@ -348,6 +386,16 @@ const FIELDS_MAP = {
     'ansible_password': 'ansible_password',
     'ansible_become_password': 'ansible_become_password',
     'ssh_port': 'ssh_port',
+
+    // Deployment Settings
+    'stabvest_deploy_dir_win': 'stabvest_deploy_dir_win',
+    'stabvest_deploy_dir_unix': 'stabvest_deploy_dir_unix',
+    'stabvest_task_create': 'stabvest_task_create',
+    'stabvest_task_name': 'stabvest_task_name',
+    'stabvest_task_interval': 'stabvest_task_interval',
+    'stabvest_agent_executable': 'stabvest_agent_executable',
+    'stabvest_tester_executable': 'stabvest_tester_executable',
+    'stabvest_include_tester': 'stabvest_include_tester',
 
     // Stabvest Functionality Settings
     'stabvest_disarm': 'stabvest_disarm', 
