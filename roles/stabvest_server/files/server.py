@@ -813,7 +813,7 @@ def periodic_stale(interval=60):
                         criteria = {
                             "agent_id": agent.agent_id,
                             "tag": ('New', 'Active'),
-                            "message": f"Agent - Agent {agent.agent_name} on {agent.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime("%Y-%m-%d_%H-%M-%S")}."
+                            "message": f"Agent - Agent {agent.agent_name} on {agent.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime('%Y-%m-%d_%H-%M-%S')}."
                         }
 
                         incident_id = find_incident_db(criteria, newest=True)
@@ -848,7 +848,7 @@ def periodic_stale(interval=60):
                             "agent_id": agent.agent_id,
                             "oldStatus": agent.lastStatus,
                             "newStatus": False,
-                            "message": f"Agent - Agent {agent.agent_name} on {agent.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime("%Y-%m-%d_%H-%M-%S")}.",
+                            "message": f"Agent - Agent {agent.agent_name} on {agent.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime('%Y-%m-%d_%H-%M-%S')}.",
                             "sla": 0
                         }
                         create_incident(incident_data)

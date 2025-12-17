@@ -6,6 +6,10 @@ stabvest_task_name: "stabvest"
 stabvest_task_interval: 300 #seconds. cron needs this to be an even minutes value (so divisible by 60)
 stabvest_agent_executable: "agent_Windows_10.exe" # TODO: dynamic
 stabvest_tester_executable: "agent_tester_Windows_10.exe" # TODO: dynamic
+#stabvest_agent_executable: "agent_ubuntu_24.04_Ubuntu.bin" # TODO: dynamic
+#stabvest_tester_executable: "agent_tester_ubuntu_24.04_Ubuntu.bin" # TODO: dynamic
+#stabvest_agent_executable: "agent_rocky_9.7_Rocky_Linux_9.7_(Blue_Onyx).bin" # TODO: dynamic
+#stabvest_tester_executable: "agent_rocky_9.7_Rocky_Linux_9.7_(Blue_Onyx)" # TODO: dynamic
 stabvest_include_tester: true
 
 
@@ -21,18 +25,34 @@ stabvest_linux_default_ttl: 64
 stabvest_agent_name: "test1"
 stabvest_auth_token: "testtoken"
 stabvest_agent_type: "stabvest"
-stabvest_server_url: "https://192.168.1.37:8080/beacon"
+stabvest_server_url: "https://192.168.1.18:8080/beacon"
 stabvest_server_timeout: 5
-stabvest_sleeptime: 60
+stabvest_sleeptime: 15
 stabvest_ports:
-  - 81
+  - 80
 stabvest_services:
-  - "AxInstSV"
+  - "iis"
+#  - "apache2"
+#  - "httpd"
 stabvest_packages:
-  - ""
+  - "iis"
+#  - "apache2"
+#  - "httpd"
 stabvest_service_backups:
   PathName: "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup"
   StartName: "LocalSystem"
   Dependencies: null
   DisplayName: "ActiveX Installer (AxInstSV)"
   StartType: "Manual"
+#stabvest_service_backups:
+#  PathName: "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup"
+#  StartName: "LocalSystem"
+#  Dependencies: null
+#  DisplayName: "ActiveX Installer (AxInstSV)"
+#  StartType: "Manual"
+#stabvest_service_backups:
+#  PathName: "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup"
+#  StartName: "LocalSystem"
+#  Dependencies: null
+#  DisplayName: "ActiveX Installer (AxInstSV)"
+#  StartType: "Manual"

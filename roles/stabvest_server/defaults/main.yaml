@@ -4,23 +4,23 @@ stabvest_deploy_dir_unix: "/stabvest_server"
 stabvest_task_create: true
 stabvest_task_name: "stabvest_server"
 stabvest_task_interval: 300 #seconds. cron needs this to be an even minutes value (so divisible by 60)
-stabvest_agent_executable: "server_Windows_10.exe" # TODO: dynamic
+stabvest_agent_executable: "server_ubunut_24.04_Ubuntu.bin" # TODO: dynamic
 
 
 
-host: "127.0.0.1"
+host: "192.168.1.18"
 port: 8080
 
 # Derived values can still be overridden if needed
 public_url: "https://{{ host }}:{{ port }}"
-logfile: "log_{{ timestamp }}.txt"
-savefile: "save_{{ timestamp }}.db"
+logfile: "log.txt"
+savefile: "save.db"
 
 save_interval: 60
 stale_time: 300
 default_webhook_sleep_time: 0.25
 max_webhook_msg_per_minute: 50
-webhook_url: "https://discord.com/api/webhooks/1446624965817274602/IxfnZJjmb1EdeBLv6zfIi-3hK1eQYYAqwRtggbOSoWbehJW3kgXWC4gHJazFkxgsiC13"
+webhook_url: "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
 agent_auth_tokens:
   testtoken:
     added_by: "default"
