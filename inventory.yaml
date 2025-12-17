@@ -1,0 +1,29 @@
+all:
+  children:
+    windows:
+      vars:
+        ansible_connection: winrm
+        ansible_winrm_server_cert_validation: ignore
+        ansible_winrm_port: 5985
+        ansible_winrm_transport: ntlm
+        ansible_user: "Administrator"
+        ansible_password: "Password-123456"
+        ansible_become: yes
+        ansible_become_method: runas
+        ansible_become_user: System
+      children:
+        iis-winserv22:
+          hosts:
+            192.168.1.36:
+    linux:
+      vars:
+        ansible_user: "ccdc"
+        ansible_password: "ccdc"
+        ansible_become: yes 
+        ansible_become_method: sudo
+        ansible_become_user: root
+        ansible_become_pass: "ccdc"
+      children:
+        ubuntu-real-infra:
+          hosts:
+            192.168.1.61:
