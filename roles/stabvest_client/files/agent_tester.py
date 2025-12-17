@@ -14,7 +14,7 @@ LOGFILE = ""
 LINE_SIZE = 75
 SYSTEM = platform.system()
 OPTIONS = {
-    "- Firewall": f"{"-"*(round((LINE_SIZE - 13)/1))}",
+    "- Firewall": f"{'-'*(round((LINE_SIZE - 13)/1))}",
     "w0": "Firewall test - run all",
     "w1": "Firewall test - run scored service block rule inbound",
     "w2": "Firewall test - run scored service block rule outbound",
@@ -24,7 +24,7 @@ OPTIONS = {
     "w6": "Firewall test - block all outbound without allow for scored service",
     "w7": "Firewall test - block all inbound with allow for scored service",
     "w8": "Firewall test - block all outbound with allow for scored service",
-    "- Interface": f"{"-"*(round((LINE_SIZE - 14)/1))}",
+    "- Interface": f"{'-'*(round((LINE_SIZE - 14)/1))}",
     "i0": "Interface test - run all",
     "i1": "Interface test - interface down",
     "i2": "Interface test - too low MTU",
@@ -34,7 +34,7 @@ OPTIONS = {
     "i6": "Interface test - non-default subnet",
     "i7": "Interface test - non-default gateway",
     "i8": "Interface test - set to DHCP",
-    "- Service": f"{"-"*(round((LINE_SIZE - 12)/1))}",
+    "- Service": f"{'-'*(round((LINE_SIZE - 12)/1))}",
     "s0": "Service test - run all",
     "s1": "Service test - service stop",
     "s2": "Service test - service failed",
@@ -42,22 +42,22 @@ OPTIONS = {
     "s4": "Service test - service integrity (executable)",
     "s5": "Service test - service deleted",
     "s6": "Service test - package deleted",
-    "- File": f"{"-"*(round((LINE_SIZE - 9)/1))}",
+    "- File": f"{'-'*(round((LINE_SIZE - 9)/1))}",
     "f0": "File test - run all",
     "f1": "File test - delete file/folder",
     "f2": "File test - modify file contents",
     "f3": "File test - modify file/folder permissions",
     "f4": "File test - modify file/folder last modified time",
     "f5": "File test - make file/folder immutable",
-    "- Unique Service": f"{"-"*(round((LINE_SIZE - 19)/1))}",
+    "- Unique Service": f"{'-'*(round((LINE_SIZE - 19)/1))}",
     "u0": "Unique Service test - run all",
     "u1": "Unique Service test - mysql",
-    "- Agent": f"{"-"*(round((LINE_SIZE - 10)/1))}",
+    "- Agent": f"{'-'*(round((LINE_SIZE - 10)/1))}",
     "a0": "Agent test - run all",
     "a1": "Agent test - re-register",
     "a2": "Agent test - pause",
     "a3": "Agent test - resume (early)",
-    "": f"{"-"*(LINE_SIZE - 3)}"
+    "": f"{'-'*(LINE_SIZE - 3)}"
 }
 
 
