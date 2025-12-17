@@ -20,6 +20,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import class_mapper
+import subprocess
 
 CONFIG_DEFAULTS = {
     "HOST": "0.0.0.0",
@@ -152,6 +153,8 @@ start_time = time.time()
 last_save_time=0
 webhook_queue = deque()
 webhook_queue_cond = threading.Condition()
+ansible_queue = deque()
+ansible_queue_cond = threading.Condition()
 db = SQLAlchemy(app) # Initialize SQLAlchemy
 TTYD_PROCESS = None
 class User(UserMixin):
@@ -266,6 +269,26 @@ class WebUser(db.Model):
 
     def __repr__(self):
         return f"<WebUser {self.username} (Role: {self.role})>"
+
+class AnsibleResult(db.Model):
+    __tablename__ = 'ansible_results'
+    
+    task = db.Column(db.Integer, primary_key=True, nullable=False)
+    
+    returncode = db.Column(db.Integer, nullable=False)
+    result = db.Column(db.String(4096), nullable=False) 
+    def __repr__(self):
+        return f"<Ansible Task {self.task} (ReturnCode: {self.returncode}, Result: {self.result})>"
+    def to_dict(self):
+        """
+        Converts the ORM object into a dictionary, making it ready for JSON serialization.
+        """
+        data = {
+            'task': self.task,
+            'returncode': self.returncode,
+            'result': self.result,
+        }
+        return data
 
 # =================================
 # ======= UTILITY FUNCTIONS =======
@@ -451,7 +474,7 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
             agent = db.session.get(Agent,agent_id)
             
             if agent:
-                pattern = r'(\d+)\s*(?=seconds\b)'
+                pattern = r'(\\d+)\\s*(?=seconds\\b)' # remove extra slashes if this is uncommented
                 match = re.search(pattern, new_incident.message)
                 
                 if match:
@@ -842,6 +865,56 @@ def periodic_stale(interval=60):
                     logger.info(f"periodic_stale(): Database error during stale update: {e}")
             else:
                 logger.info("periodic_stale(): No changes.")
+
+def periodic_ansible(interval=5):
+    # Handles the ansible queue
+    # We could further unblock this by moving the subprocess execution to another worker, but it's not really intended for multiple agents to be deployed at once for now. As such, this is fine.
+
+    while True:
+        # -----------------------------
+        # BLOCKING dequeue (popleft)
+        # -----------------------------
+        with ansible_queue_cond:
+            while not ansible_queue:
+                ansible_queue_cond.wait()
+            item = ansible_queue.popleft()
+
+        task = item["task"]
+        host = item["data"]["host"]
+        ansible_folder = item["data"]["ansible_folder"]
+        extra_vars = item["data"]["extra_vars"]
+        playbook_name = item["data"]["playbook_name"]
+        inventory_name = item["data"]["inventory_name"]
+        venv = item["data"]["venv"]
+        if venv:
+            command = f"source {venv} && cd {ansible_folder} && ansible-playbook {playbook_name} -i {inventory_name} -l {host} -t stabvest_client_auto {extra_vars}"
+        else:
+            command = f"cd {ansible_folder} && ansible-playbook {playbook_name} -i {inventory_name} -l {host} -t stabvest_client_auto {extra_vars}"
+
+        logger.info(f"periodic_ansible(): starting subprocess for task {task}. command: {command}")
+        
+        result = subprocess.run(
+            command,
+            #"whoami",
+            shell=True,
+            capture_output=True, 
+            text=True, 
+            check=False
+        )
+
+        logger.info(f"periodic_ansible(): finished subprocess for task {task} and logging result to database. Returncode: {result.returncode}")
+
+        with app.app_context():
+            newResult = AnsibleResult(
+                task = task,
+                returncode = result.returncode,
+                result = f"STDOUT: {result.stdout.strip()} ||| STDERR: {result.stderr.strip()}"
+            )
+
+            db.session.add(newResult)
+            db.session.commit()
+        
+        time.sleep(interval) # interval isnt really needed i think
 
 def find_incident(incidents, criteria, newest=False):
     """
@@ -1441,7 +1514,7 @@ def handle_beacon():
                 db.session.commit()
 
             # 5b. Find and Close Incident
-            pattern = r'(\d+)\s*seconds\b'
+            pattern = r'(\\d+)\\s*seconds\\b' # remove extra slashes if this is uncommented
             match = re.search(pattern, message)
             
             if match:
@@ -1488,6 +1561,13 @@ def handle_beacon():
     return "ok", 200
 
 # === FRONTEND DISPLAY ===
+
+@login_required
+@app.route("/ping_login", methods=["POST"])
+def ping_login():
+    # Provides an endpoint for the client to check that they can reach the server fine. Does not check auth.
+    logger.info(f"/ping_login - Successful connection from {current_user.id} at {request.remote_addr}")
+    return "ok", 200
 
 @app.route("/list_users", methods=["POST"])
 @login_required
@@ -1621,6 +1701,41 @@ def list_logfile(filepath=LOGFILE,lines=50):
     except FileNotFoundError:
         logger.error(f"/list_logfile - Successful connection from {current_user.id} at {request.remote_addr}")
         return f"FileNotFound {filepath}", 400
+
+@app.route("/list_ansibleresult", methods=["POST"])
+@login_required
+@analyst_required
+def list_ansibleresult():
+    try:
+        data = request.json
+        taskID = data.get("taskID")
+        if not all([taskID]): # just the required string
+            logger.warning(f"/list_ansibleresult - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[taskID]}")
+            return "Missing data", 400
+        
+        taskResult_obj = AnsibleResult.query.filter_by(task=taskID).one_or_none() 
+        
+        if taskResult_obj is None:
+            # Task not found in the database. 
+            # This is the expected behavior if the task is running or the ID is invalid.
+            logger.info(f"/list_ansibleresult - Failed connection from {current_user.id} at {request.remote_addr} - taskID is not available (not found/is pending). Full details: {[taskID]}")
+            
+            # Return a non-OK status code (e.g., 404 or 202) to signal "not ready/not found"
+            return jsonify({"status": "pending", "message": "Task not complete or ID invalid"}), 404
+        
+        # Task was found and result object exists
+        # NOTE: You will need a .to_dict() or Marshmallow serializer to correctly
+        # convert the ORM object (taskResult_obj) to a dictionary for jsonify.
+        
+        # Assuming you have a .to_dict() method on your AnsibleResult model:
+        task_data = taskResult_obj.to_dict() 
+        
+        logger.info(f"/list_ansibleresult - Successful connection from {current_user.id} at {request.remote_addr} for taskID {taskID}")
+        return jsonify(task_data), 200
+        
+    except Exception as e:
+        logger.error(f"/list_ansibleresult - Database or serialization error: {e}")
+        return jsonify({"error": "Failed to retrieve result details"}), 500
 
 @app.route("/save_export", methods=["POST"])
 @login_required
@@ -1987,6 +2102,42 @@ def update_incident_sla():
         logger.warning(f"/update_incident_sla - Successful connection from {current_user.id} at {request.remote_addr}. No incident found with id {incident_id}")
         return "Invalid incident ID", 400
 
+@app.route("/add_ansible", methods=["POST"])
+@login_required
+@analyst_required
+def add_ansible():
+    data = request.json
+    ansible_folder = data.get("ansible_folder")
+    playbook_name = data.get("playbook_name")
+    inventory_name = data.get("inventory_name")
+    host = data.get("host")
+    venv = data.get("venv","")
+    extra_vars = data.get("extra_vars")
+
+    if not all([ansible_folder,playbook_name,inventory_name,host,extra_vars]):
+        logger.warning(f"/add_ansible - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[ansible_folder,playbook_name,inventory_name,host,extra_vars]}")
+        return "Missing data", 400
+    
+    logger.warning(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr}. Waiting for ansible_queue_cond. Full details: {[ansible_folder,playbook_name,inventory_name,host,extra_vars]}")
+    
+    record_count = db.session.query(AnsibleResult).count()
+    taskID = record_count + 1
+    
+    with ansible_queue_cond: # Might lead to minor sleep but nothing major
+        ansible_queue.append(
+            {
+                "task": taskID,
+                "data": {
+                    "ansible_folder": ansible_folder, "extra_vars": extra_vars,"playbook_name":playbook_name,"inventory_name":inventory_name,"host":host,"venv":venv
+                }
+            }
+        )
+        ansible_queue_cond.notify() 
+
+    logger.info(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr}. Full details: {[ansible_folder,playbook_name,inventory_name,host,extra_vars]}")
+    
+    return jsonify({"status": "ok","task": taskID}), 200
+
 @app.route("/save_manual", methods=["POST"])
 @login_required
 @analyst_required
@@ -2026,6 +2177,7 @@ if __name__ == "__main__":
     threading.Thread(target=periodic_autosave, daemon=True).start()
     threading.Thread(target=webhook_main, daemon=True).start()
     threading.Thread(target=periodic_stale, daemon=True).start()
+    threading.Thread(target=periodic_ansible, daemon=True).start()
 
     # Test data
     #with app.app_context():

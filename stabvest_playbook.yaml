@@ -14,3 +14,10 @@
   tags:
     - stabvest
     - stabvest_client
+
+- name: Deploy Stabvest Client Automated (do not touch)
+  hosts: all
+  roles:
+    - stabvest_client
+  tags:
+    - stabvest_client_auto
