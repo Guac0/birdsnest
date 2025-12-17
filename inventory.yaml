@@ -24,6 +24,12 @@ all:
         ansible_become_user: root
         ansible_become_pass: "ccdc"
       children:
+        ansible-controller:
+          hosts:
+            192.168.1.18:
         ubuntu-real-infra:
           hosts:
             192.168.1.61:
+        john-test-rocky:
+          hosts:
+            192.168.1.72:
