@@ -186,6 +186,7 @@ class Agent(db.Model):
 
     # Agent details
     agent_name = db.Column(db.String(128))
+    agent_type = db.Column(db.String(24))
     hostname = db.Column(db.String(128))
     ip = db.Column(db.String(45)) # IPv4 or IPv6
     os = db.Column(db.String(64))
@@ -643,7 +644,7 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
         payload = json.dumps({
         "embeds": [
             {
-            "title": "Stabvest Alert - {} Incident Created on {} for {}".format(incident["message"].split('-')[0].strip(),agent.hostname,agent.agent_name),
+            "title": "Alert - {} Incident Created on {} for {}".format(incident["message"].split('-')[0].strip(),agent.hostname,agent.agent_name),
             "color": int(color,16),
             "description": "{}".format(incident["message"]),
             #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
@@ -687,7 +688,7 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
         payload = json.dumps({
         "embeds": [
             {
-            "title": "Stabvest Alert - Custom {} Incident Created".format(incident["message"].split('-')[0].strip()),
+            "title": "Alert - Custom {} Incident Created".format(incident["message"].split('-')[0].strip()),
             "color": int(color,16),
             "description": "{}".format(incident["message"]),
             #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
@@ -718,7 +719,7 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
         payload = json.dumps({
         "embeds": [
             {
-            "title": "Stabvest Alert - Custom Generic Incident Created",
+            "title": "Alert - Custom Generic Incident Created",
             "color": int(color,16),
             "description": "{}".format(incident["message"]),
             #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
@@ -1145,6 +1146,7 @@ def add_test_data_agents(num=5):
     try:
         for i in range(1,num + 1):
             agent_name = random.choice(["apache2","iis","smb","mysql","vsftpd"])
+            agent_type = random.choice(["stabvest","owlet"])
             hostname = random.choice(["webserver1","webserver2","fileshare1","fileshare2","dc01"])
             ip = random.choice(["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5"])
             os = random.choice(["Windows 10","Windows 2016Server","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8"])
@@ -1404,6 +1406,7 @@ def handle_beacon():
     data = request.json
 
     agent_name = data.get("name","")
+    agent_type = data.get("type","")
     hostname = data.get("hostname","")
     ip = data.get("ip","")
     os_name = data.get("os","")
@@ -1416,7 +1419,7 @@ def handle_beacon():
     message = data.get("message","")
     
     #if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
-    if not all([agent_name, hostname, ip, os_name, auth, beacon_type, message]): # required data only
+    if not all([agent_name, agent_type, hostname, ip, os_name, auth, beacon_type, message]): # required data only
         logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
         return "Missing data", 400
     
@@ -2180,11 +2183,11 @@ if __name__ == "__main__":
     threading.Thread(target=periodic_ansible, daemon=True).start()
 
     # Test data
-    #with app.app_context():
-        #add_test_data_agents(5)
-        #add_test_data_messages(10)
-        #add_test_data_incidents_custom(5)
-        #add_test_data_incidents(10)
+    with app.app_context():
+        add_test_data_agents(5)
+        add_test_data_messages(10)
+        add_test_data_incidents_custom(5)
+        add_test_data_incidents(10)
         #add_test_data_comp(0)
         #add_test_data_cmds()
 

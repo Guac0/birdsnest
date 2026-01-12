@@ -381,6 +381,7 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
     # Prep payload
     payload = {
         "name": AGENT_NAME,
+        "type": "stabvest",
         "hostname": systemInfo["hostname"],
         "ip": systemInfo["ipadd"],
         "os": systemInfo["os"],
