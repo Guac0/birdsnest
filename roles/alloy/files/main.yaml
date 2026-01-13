@@ -1,0 +1,15 @@
+---
+- name: Install Alloy
+  ansible.builtin.include_role:
+    name: grafana.grafana.alloy
+  vars:
+    alloy_config: |
+      prometheus.scrape "default" {
+        targets = [{"__address__" = "{{ alloy_ipaddress }}:{{ alloy_port }}"}]
+        forward_to = [prometheus.remote_write.prom.receiver]
+      }
+      prometheus.remote_write "prom" {
+        endpoint {
+            url = "{{ alloy_prometheus_push_endpoint }}"
+        }
+      }
