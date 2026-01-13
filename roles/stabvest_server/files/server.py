@@ -1157,6 +1157,7 @@ def add_test_data_agents(num=5):
             new_agent = Agent(
                 agent_id=computed_agent_id,
                 agent_name=agent_name,
+                agent_type=agent_type,
                 hostname=hostname,
                 ip=ip,
                 os=os,
