@@ -197,11 +197,10 @@ class Agent(db.Model):
     lastSeenTime = db.Column(db.Integer, default=lambda: int(time.time())) # Epoch time (int)
     lastStatus = db.Column(db.Boolean, default=True) # True for OK, False for issue
     stale = db.Column(db.Boolean, default=False)
-    pausedUntil = db.Column(db.Integer, default=0) # Epoch time (int)
+    pausedUntil = db.Column(db.String(32), default=0) # Epoch time in python style (str). 0 for default/natural expiry, 1 for manual resume
 
     messages = db.relationship('Message', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == Message.agent_id")
     incidents = db.relationship('Incident', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == Incident.agent_id")
-
 
     def __repr__(self):
         return f"<Agent {self.agent_name} ({'Online' if self.lastStatus else 'Down'})>"
@@ -1166,7 +1165,7 @@ def add_test_data_agents(num=5):
                 lastSeenTime=time.time() - ((num - i) * 100),
                 lastStatus=random.choice([True, False]),
                 stale=random.choice([True, False]),
-                pausedUntil=0
+                pausedUntil=random.choice([str(0),str(0),str(1),str(time.time()),str(time.time() + 180), str(time.time() + 600)])
             )
             db.session.add(new_agent)
         db.session.commit()
@@ -1462,7 +1461,7 @@ def handle_beacon():
                 lastSeenTime=time.time(),
                 lastStatus=newStatus,
                 # stale field is typically derived, but if stored: stale=False,
-                pausedUntil=0
+                pausedUntil=str(0)
             )
             db.session.add(new_agent)
             
@@ -1563,6 +1562,41 @@ def handle_beacon():
         create_incident(incident_data)
 
     return "ok", 200
+
+@app.route("/get_pause", methods=["POST"])
+def get_pause():
+    data = request.json
+
+    agent_name = data.get("name","")
+    agent_type = data.get("type","")
+    hostname = data.get("hostname","")
+    ip = data.get("ip","")
+    os_name = data.get("os","")
+    executionUser = data.get("executionUser","")
+    executionAdmin = data.get("executionAdmin","")
+    auth = data.get("auth","")
+    beacon_type = data.get("beacon_type","")
+    
+    #if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
+    if not all([agent_name, agent_type, hostname, ip, os_name, auth, beacon_type]): # required data only
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
+        return "Missing data", 400
+    
+    # Auth check
+    auth_token_record = AuthToken.query.filter_by(token=auth).first()
+    if not auth_token_record:
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
+        return "Unauthorized", 403
+
+    # Get agent identity
+    agent_id = hash_id(agent_name, hostname, ip, os_name)
+
+    agent = db.session.get(Agent,agent_id)
+
+    if not agent:
+        return "Unauthorized", 403
+    
+    return float(agent.pausedUntil), 200
 
 # === FRONTEND DISPLAY ===
 
@@ -1770,6 +1804,56 @@ def save_export(filepath=SAVEFILE):
 
 # === FRONTEND INTERACTION ===
 
+@app.route("/agent_pause", methods=["POST"])
+@login_required
+@analyst_required
+def agent_pause():
+    data = request.json
+    agent_id = data.get("agent_id")
+    seconds = data.get("seconds")
+    if not all([agent_id,seconds]):
+        logger.warning(f"/agent_pause - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[agent_id,seconds]}")
+        return "Missing data", 400
+    agent = Agent.query.filter_by(agent_id=agent_id).first()
+    if not agent:
+        logger.warning(f"/agent_pause - Failed connection from {current_user.id} at {request.remote_addr} - bad agent_id value, agent_id does not exist. Full details: {[agent_id,seconds]}")
+        return "Agent with specified ID does not exist", 400
+    try:
+        # Allow pausing for longer so don't error check that
+        agent.pausedUntil = str(time.time() + seconds)
+        db.session.commit()
+        logger.info(f"/agent_pause - Successful connection from {current_user.id} at {request.remote_addr}. Pausing agent {agent_id} for {seconds} seconds.")
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/agent_pause - Database error: {e}")
+        return jsonify({"error": f"Database error: {e}"}), 500
+
+@app.route("/agent_resume", methods=["POST"])
+@login_required
+@analyst_required
+def agent_resume():
+    data = request.json
+    agent_id = data.get("agent_id")
+    if not all([agent_id]):
+        logger.warning(f"/agent_resume - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[agent_id]}")
+        return "Missing data", 400
+    agent = Agent.query.filter_by(agent_id=agent_id).first()
+    if not agent:
+        logger.warning(f"/agent_resume - Failed connection from {current_user.id} at {request.remote_addr} - bad agent_id value, agent_id does not exist. Full details: {[agent_id]}")
+        return "Agent with specified ID ", 400
+    try:
+        if (int(agent.pausedUntil) == 0) or (int(agent.pausedUntil) == 1):
+            return "Agent is already in ACTIVE state", 400
+        agent.pausedUntil = str(1)
+        db.session.commit()
+        logger.info(f"/agent_resume - Successful connection from {current_user.id} at {request.remote_addr}. Resuming agent {agent_id}.")
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/agent_resume - Database error: {e}")
+        return jsonify({"error": f"Database error: {e}"}), 500
+    
 @app.route("/add_incident", methods=["POST"])
 @login_required
 @analyst_required

@@ -31,6 +31,7 @@ CONFIG_DEFAULTS = {
     "DEBUG_PRINT": True,
     "BACKUPDIR": "",
     "LOGFILE": "log.txt",
+    "STATUSFILE": "status.txt",
     "MTU_MIN": 1200,
     "MTU_DEFAULT": 1300,
     "MTU_MAX": 1514,
@@ -38,7 +39,7 @@ CONFIG_DEFAULTS = {
     "AGENT_NAME": "test",
     "AUTH_TOKEN": "testtoken",
     "AGENT_TYPE": "stabvest",
-    "SERVER_URL": "https://127.0.0.1:8080/beacon",
+    "SERVER_URL": "https://127.0.0.1:8080/",
     "SERVER_TIMEOUT": 5,
     "SLEEPTIME": 60,
     "PORTS": [],
@@ -92,6 +93,7 @@ DISARM = CONFIG["DISARM"]
 DEBUG_PRINT = CONFIG["DEBUG_PRINT"]
 BACKUPDIR = CONFIG["BACKUPDIR"]
 LOGFILE = CONFIG["LOGFILE"]
+STATUSFILE = CONFIG["STATUSFILE"]
 MTU_MIN = CONFIG["MTU_MIN"]
 MTU_DEFAULT = CONFIG["MTU_DEFAULT"]
 MTU_MAX = CONFIG["MTU_MAX"]
@@ -107,6 +109,9 @@ PORTS = CONFIG["PORTS"]
 SERVICES = CONFIG["SERVICES"]
 PACKAGES = CONFIG["PACKAGES"]
 SERVICE_BACKUPS = CONFIG["SERVICE_BACKUPS"]
+
+PAUSED = False
+LASTPAUSETIME = int(time.time())
 
 #REGISTRY_HIVE = winreg.HKEY_LOCAL_MACHINE
 #SERVICE_PATH = r"SYSTEM\\CurrentControlSet\\Services\\service_name" #replace with actual service name
@@ -361,6 +366,51 @@ def audit_command(command,package="",packageManager="apt"):
     """
     return True, True
 
+def get_pause_status(file=STATUSFILE):
+    """
+    Evaluates the contents of STATUSFUL and modifies pause attributes accordingly.
+    """
+    global LASTPAUSETIME
+    try:
+        with open(file,"r+") as f:
+            firstline = f.readline().strip()
+            if len(firstline) < 1:
+                return False,False,0
+            preferServer = firstline == "true"
+            pausedUntilEpoch = f.readline().strip()
+            if pausedUntilEpoch != 0:
+                if pausedUntilEpoch > time.time():
+                    # Sleep has not elapsed
+                    return preferServer, True, pausedUntilEpoch
+                else:
+                    # Sleep has elapsed
+                    f.seek(0)
+                    f.write(str(preferServer))
+                    f.write(str(pausedUntilEpoch))
+                    f.truncate()
+                    return preferServer, False, 0
+            else:
+                return preferServer, False, 0
+    except FileNotFoundError:
+        with open(file,"w"):
+            f.write("false")
+            f.write("0")
+        return False, False, 0
+    except ValueError:
+        # Failed conversion to int
+        with open(file,"w") as f:
+            f.write("false")
+            f.write("0")
+        return False, False, 0
+    except Exception as E:
+        print_debug(f"get_pause_status(): unknown error - {E}")
+        with open(file,"w") as f:
+            f.write("false")
+            f.write("0")
+        return False, False, 0
+        
+
+
 #endregion###############
 ## Server Comms Funcs ###
 #region##################
@@ -377,6 +427,7 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
         # Server comms are intentionally disabled
         # Maybe redirect to print_debug instead?
         return True
+    url = SERVER_URL + "beacon"
 
     # Prep payload
     payload = {
@@ -400,7 +451,7 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
 
         # Build request
         req = urllib.request.Request(
-            SERVER_URL,
+            url,
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST"
@@ -413,7 +464,7 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
                 #response_body = response.read().decode("utf-8")
                 #result = json.loads(response_body)
                 print_debug(f"send_message(): sent msg to server: [{oldStatus,newStatus,message}]")
-                return True
+                return response.read()
             else:
                 print_debug(f"send_message(): Server error: {response.getcode()}")
 
@@ -426,6 +477,67 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
         # Various requests errors - networking failure or 4xx/5xx code from server
         print_debug(f"send_message(): Beacon error: {e}")
     return False
+
+def get_pause_state_server(systemInfo=get_system_details()):
+    """
+    Gets pause state from server
+
+    Returns: pauseTimeEpoch (int), -1 for failure
+    """
+    if not SERVER_URL:
+        # Server comms are intentionally disabled
+        # Maybe redirect to print_debug instead?
+        return True
+    
+    url = SERVER_URL + "get_pause"
+
+    # Prep payload
+    payload = {
+        "name": AGENT_NAME,
+        "type": "stabvest",
+        "hostname": systemInfo["hostname"],
+        "ip": systemInfo["ipadd"],
+        "os": systemInfo["os"],
+        "executionUser": systemInfo["executionUser"],
+        "executionAdmin": systemInfo["executionAdmin"],
+        "auth": AUTH_TOKEN,
+        "beacon_type": AGENT_TYPE
+    }
+
+    try:
+        # Prepare data
+        data = json.dumps(payload).encode("utf-8")
+
+        # Build request
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        # Send payload
+        with urllib.request.urlopen(req, timeout=SERVER_TIMEOUT, context=CTX) as response:
+            if response.getcode() == 200:
+                response_body = response.read().decode("utf-8")
+                #result = json.loads(response_body)
+                timeInt = int(response_body)
+                print_debug(f"get_pause_state_server(): sent msg to server with response {response_body}")
+                return timeInt
+            else:
+                print_debug(f"get_pause_state_server(): Server error: {response.getcode()}")
+
+    # Error handling
+    except urllib.error.HTTPError as e:
+        print_debug(f"get_pause_state_server(): HTTP error: {e.code} {e.reason}")
+    except urllib.error.URLError as e:
+        print_debug(f"get_pause_state_server(): URL error: {e.reason}")
+    except ValueError:
+        print_debug(f"get_pause_state_server(): could not convert received value to int")
+    except Exception as e:
+        # Various requests errors - networking failure or 4xx/5xx code from server
+        print_debug(f"get_pause_state_server(): Beacon error: {e}")
+    return -1
 
 #endregion###############
 # Network Protect Funcs #
@@ -3165,7 +3277,7 @@ def test_main():
     test_service()
 
 def main(stop_event=None):
-    paused = False
+    global PAUSED
     ip_address,prefix,gateway = init_int_vars() # TODO
 
     #test_main()
@@ -3185,80 +3297,125 @@ def main(stop_event=None):
 
     print_debug(f"main(): System details - {get_system_details()}")
 
-    while not paused:
+    while True:
+
+        pausedEpochServer = get_pause_state_server()
+
+        pausePreferServer, pausedStatus, pausedEpochLocal = get_pause_status()
+
+        if pausedEpochServer == 0:
+            # Server thinks client should be active but doesn't really care
+            if pausePreferServer:
+                with open(STATUSFILE,"w") as f:
+                    f.write("true")
+                    f.write("0")
+                pausedStatus = False
+                pausedEpochLocal = 0
+        else:
+            if pausedEpochServer == 1:
+                # Force resume
+                with open(STATUSFILE,"w") as f:
+                    f.write(str(pausePreferServer))
+                    f.write("0")
+                pausedStatus = False
+                pausedEpochLocal = 0
+            else:
+                # Server thinks client should be in a paused state until pausedEpochServer epoch time
+                # This does hold a binding effect as otherwise the server PAUSE function doesnt work
+                with open(STATUSFILE,"w") as f:
+                    f.write(str(pausePreferServer))
+                    f.write(str(pausedEpochServer))
+                pausedStatus = True
+                pausedEpochLocal = pausedEpochServer
 
         sent_msg = False
         suppressed_send = False
-
-        # Firewall
-        print_debug(f"main(): running firewall checks")
-        result_oldStatus, result_newStatus, result_issues = firewall_main(PORTS)
-        if not result_oldStatus:
-            oldStatus = False
-        if not result_newStatus:
-            newStatus = False
-        for issue in result_issues:
-            newIssues.append(f"Firewall - {issue}")
-
-            print_debug(newIssues[-1])
-            if newIssues[-1] not in oldIssues:
-                send_message(result_oldStatus,result_newStatus,newIssues[-1])
-                sent_msg = True
-            else:
-                suppressed_send = True
-
-        # Interface
-        print_debug(f"main(): running interface checks")
-        result_oldStatus, result_newStatus, result_issues = interface_main(interface_get_primary(),ip_address,prefix,gateway)
-        if not result_oldStatus:
-            oldStatus = False
-        if not result_newStatus:
-            newStatus = False
-        for issue in result_issues:
-            newIssues.append(f"Interface - {issue}")
-
-            print_debug(newIssues[-1])
-            if newIssues[-1] not in oldIssues:
-                send_message(result_oldStatus,result_newStatus,newIssues[-1])
-                sent_msg = True
-            else:
-                suppressed_send = True
-
-        # Service
-        print_debug(f"main(): running service checks")
-        result_oldStatus, result_newStatus, result_issues = service_main(SERVICES,PACKAGES,SERVICE_BACKUPS)
-        if not result_oldStatus:
-            oldStatus = False
-        if not result_newStatus:
-            newStatus = False
-        for issue in result_issues:
-            newIssues.append(f"Service - {issue}")
-
-            print_debug(newIssues[-1])
-            if newIssues[-1] not in oldIssues:
-                send_message(result_oldStatus,result_newStatus,newIssues[-1])
-                sent_msg = True
-            else:
-                suppressed_send = True
-
-        if not sent_msg:
-            if suppressed_send:
-                send_message(True,True,"no new issues; at least one prior issue still exists but suppressing redundant alert")
-            else:
-                send_message(True,True,"all good")
-
-        # Finish up
-        print_debug(f"main(): oldStatus - {oldStatus}")
-        print_debug(f"main(): newStatus - {newStatus}")
-        #for issue in issues:
-            #print_debug(f"main(): issue - {issue}")
-            #send_message(oldStatus,newStatus,issue)
         
-        print_debug(f"main(): sleeping for {SLEEPTIME} seconds")
-        print_debug(f"")
+        if PAUSED != pausedStatus:
+            PAUSED = pausedStatus
+            
+            if PAUSED:
+                # Send alert if agent is freshly moving into PAUSED state
+                suppressed_send = True
+                send_message(False,False,f"Agent moved into PAUSE status for {int(pausedEpochLocal - time.time())} seconds")
+            else:
+                send_message(True,True,f"Agent moved into ACTIVE status (from PAUSE)")
 
-        oldIssues = newIssues
-        newIssues = []
+        if not PAUSED:
+
+            # Firewall
+            print_debug(f"main(): running firewall checks")
+            result_oldStatus, result_newStatus, result_issues = firewall_main(PORTS)
+            if not result_oldStatus:
+                oldStatus = False
+            if not result_newStatus:
+                newStatus = False
+            for issue in result_issues:
+                newIssues.append(f"Firewall - {issue}")
+
+                print_debug(newIssues[-1])
+                if newIssues[-1] not in oldIssues:
+                    send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                    sent_msg = True
+                else:
+                    suppressed_send = True
+
+            # Interface
+            print_debug(f"main(): running interface checks")
+            result_oldStatus, result_newStatus, result_issues = interface_main(interface_get_primary(),ip_address,prefix,gateway)
+            if not result_oldStatus:
+                oldStatus = False
+            if not result_newStatus:
+                newStatus = False
+            for issue in result_issues:
+                newIssues.append(f"Interface - {issue}")
+
+                print_debug(newIssues[-1])
+                if newIssues[-1] not in oldIssues:
+                    send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                    sent_msg = True
+                else:
+                    suppressed_send = True
+
+            # Service
+            print_debug(f"main(): running service checks")
+            result_oldStatus, result_newStatus, result_issues = service_main(SERVICES,PACKAGES,SERVICE_BACKUPS)
+            if not result_oldStatus:
+                oldStatus = False
+            if not result_newStatus:
+                newStatus = False
+            for issue in result_issues:
+                newIssues.append(f"Service - {issue}")
+
+                print_debug(newIssues[-1])
+                if newIssues[-1] not in oldIssues:
+                    send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                    sent_msg = True
+                else:
+                    suppressed_send = True
+
+            if not sent_msg:
+                if suppressed_send:
+                    send_message(True,True,"no new issues; at least one prior issue still exists but suppressing redundant alert")
+                else:
+                    send_message(True,True,"all good")
+
+            # Finish up
+            print_debug(f"main(): oldStatus - {oldStatus}")
+            print_debug(f"main(): newStatus - {newStatus}")
+            #for issue in issues:
+                #print_debug(f"main(): issue - {issue}")
+                #send_message(oldStatus,newStatus,issue)
+            
+            print_debug(f"main(): sleeping for {SLEEPTIME} seconds")
+            print_debug(f"")
+
+            oldIssues = newIssues
+            newIssues = []
+        else:
+            if not suppressed_send:
+                # Do not trigger alert
+                send_message(True,False,f"Agent still in PAUSE status for {int(pausedEpochLocal - time.time())} seconds remaining")
         
         # SERVICE-SAFE SLEEP for windows service
         """

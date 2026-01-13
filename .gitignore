@@ -3,3 +3,4 @@ server/instance/*
 log*
 server/log*
 venv/
+alloy-scenarios
