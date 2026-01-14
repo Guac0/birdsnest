@@ -1,0 +1,9 @@
+subnet,ip,hostname,os,services
+192.168.0.0/24,192.168.0.1,web,Windows 10,IIS
+192.168.0.0/24,192.168.0.2,dc,Windows Server 2016,Active Directory
+192.168.0.0/24,192.168.0.3,lamp,Ubuntu 22.04,"MySQL, Apache2"
+192.168.0.0/24,192.168.0.4,teleport,Rocky Linux,Teleport
+10.0.0.0/24,10.0.0.1,web,Windows 10,IIS
+10.0.0.0/24,10.0.0.2,dc,Windows Server 2016,Active Directory
+10.0.0.0/24,10.0.0.3,lamp,Ubuntu 22.04,"MySQL, Apache2"
+10.0.0.0/24,10.0.0.4,teleport,Rocky Linux,Teleport
