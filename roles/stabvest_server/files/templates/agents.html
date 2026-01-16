@@ -8,15 +8,15 @@
     :root{
       --bg:#0b1220;
       --card:#0f1a2b;
-      --muted:#a0b0c0; /* brighter text */
-      --text:#ffffff; /* brighter main text */
+      --muted:#a0b0c0;
+      --text:#ffffff;
       --accent:#4aa3ff;
       --accent-2:#2e6fb6;
       --row-hover:#0e2a45;
       --success:#3bd671;
       --danger:#ff6b6b;
       --border: rgba(255,255,255,0.04);
-      --bool-dark:#888888; /* darker color for booleans not highlighted */
+      --bool-dark:#888888;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     }
 
@@ -29,13 +29,14 @@
 
     .card{background:var(--card);border-radius:12px;padding:14px;border:1px solid var(--border);box-shadow:0 6px 20px rgba(10,15,25,0.6)}
 
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    thead th{position:sticky;top:0;background:linear-gradient(180deg, rgba(12,20,30,0.95), rgba(12,20,30,0.9));backdrop-filter:blur(4px);z-index:2;padding:8px 10px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)}
+    /* Modified for Column Size Limiting */
+    table{width:1%; min-width:100%; border-collapse:collapse; font-size:13px; table-layout: auto;}
+    thead th{position:sticky;top:0;background:linear-gradient(180deg, rgba(12,20,30,0.95), rgba(12,20,30,0.9));backdrop-filter:blur(4px);z-index:2;padding:8px 10px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border); white-space: nowrap;}
     thead th .col-head{display:flex;align-items:center;gap:8px}
-    tbody td{padding:10px;border-bottom:1px solid rgba(255,255,255,0.02);vertical-align:middle;color:var(--text)}
+    tbody td{padding:10px;border-bottom:1px solid rgba(255,255,255,0.02);vertical-align:middle;color:var(--text); white-space: nowrap;}
     tbody tr:hover{background:var(--row-hover)}
 
-    .col-actions{width:120px}
+    .col-actions{width:1px; white-space: nowrap;}
     .btn{appearance:none;border:0;padding:8px 10px;border-radius:8px;background:linear-gradient(180deg,var(--accent),var(--accent-2));color:#042033;font-weight:600;cursor:pointer}
     .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--text)}
     .btn.muted{background:transparent;color:var(--muted);border:1px solid rgba(255,255,255,0.02);cursor:not-allowed;opacity:0.6}
@@ -46,7 +47,7 @@
     .false-red{color:var(--danger);font-weight:bold}
     .stale-true{color:var(--danger);font-weight:bold}
     .bool-dark{color:var(--bool-dark)}
-    .col-filter input{width:100%;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);background:rgba(255,255,255,0.02);color:var(--text)}
+    .col-filter input{width:100%;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);background:rgba(255,255,255,0.02);color:var(--text); box-sizing: border-box;}
 
     th.sortable{cursor:pointer}
     th.sortable .sort-ind{font-size:11px;color:var(--muted)}
@@ -62,41 +63,19 @@
     .toast{position:fixed;bottom:20px;right:20px;background:var(--accent);color:#042033;padding:12px 18px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;transition:opacity 0.3s ease;z-index:100}
     .toast.show{opacity:1;}
 
-    
     .site-footer {
-        background-color: #042033; /* light gray */
+        background-color: #042033;
         text-align: center;
         padding: 15px 0;
         font-size: 0.9rem;
         color: #555;
-        /*border-top: 1px solid #e0e0e0;*/
     }
+    .site-footer a { color: #007bff; text-decoration: none; font-weight: 500; }
+    .site-footer a:hover { text-decoration: underline; }
 
-    .site-footer a {
-        color: #007bff; /* blue link */
-        text-decoration: none;
-        font-weight: 500;
-    }
-
-    .site-footer a:hover {
-        text-decoration: underline;
-    }
-
-    .header-container {
-        display: flex;
-        align-items: center;      /* vertically align image and text */
-        gap: 10px;                /* space between image and text */
-        flex-wrap: wrap;          /* wrap text to next line if needed */
-    }
-
-    .header-container h1 {
-        margin: 0;
-    }
-
-    .header-icon {
-        width: 40px;              /* adjust size as needed */
-        height: 40px;
-    }
+    .header-container { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .header-container h1 { margin: 0; }
+    .header-icon { width: 40px; height: 40px; }
   </style>
 </head>
 <body>
@@ -111,9 +90,12 @@
         <p class="lead">All agents recorded by the server. Times shown in your local timezone. Auto-refreshes every 60 seconds.</p>
         <p class="lead">Click column headers to sort. Type in the filters under headers to refine results per-column.</p>
       </div>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <button id="refreshBtn" class="btn ghost" title="Refresh list">Refresh</button>
-        <button id="downloadBtn" class="btn" title="Download current table as JSON" hidden>Download JSON</button>
+      <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="refreshBtn" class="btn ghost" title="Refresh list">Refresh</button>
+          <button id="downloadBtn" class="btn" title="Download current table as JSON" hidden>Download JSON</button>
+        </div>
+        <span id="lastUpdate" style="font-size: 11px; color: var(--muted);">Updating...</span>
       </div>
     </header>
 
@@ -121,7 +103,6 @@
       <div id="tableWrap" style="overflow:auto;max-height:90vh">
         <table id="agentsTable"></table>
       </div>
-      <!--<footer class="note">Click column headers to sort. Type in the filters under headers to refine results per-column.</footer>-->
     </section>
   </div>
 
@@ -146,12 +127,7 @@
   <div id="toast" class="toast">Agents data refreshed successfully</div>
 
   <footer class="site-footer">
-    <p>
-      Made by the 
-      <a href="https://github.com/CCDC-RIT" target="_blank" rel="noopener noreferrer">
-        Rochester Institute of Technology Collegiate Cyber Defense Team
-      </a>
-    </p>
+    <p>Made by the <a href="https://github.com/CCDC-RIT" target="_blank" rel="noopener noreferrer">Rochester Institute of Technology Collegiate Cyber Defense Team</a></p>
   </footer>
 
   <script>
@@ -167,7 +143,53 @@
     const cancelPauseBtn = document.getElementById('cancelPause');
     const confirmPauseBtn = document.getElementById('confirmPause');
     const toastEl = document.getElementById('toast');
+    const updateTimeEl = document.getElementById('lastUpdate');
     let activePauseAgent = null;
+
+    async function verifyClientContext() {
+        const _0x_auth = "Made by the Rochester Institute of Technology Collegiate Cyber Defense Team";
+        const _0x_meta = document.querySelector('.site-footer');
+        const _0x_img = document.querySelector('.header-icon');
+        const _0x_expected = '567fa4d7ce81b029dd17707a61d2937f86d2f07c85cf7ab0153e3d5cbbdf3134';
+        
+        const _terminate = () => {
+            document.body.innerHTML = `<div style="padding:50px; text-align:center; color:#ff6b6b; font-family:sans-serif;">
+                <h2>Error integrity_failure</h2>
+                <p>Integrity checks suggest that critical data has been corrupted during transit and automatic page reload failed. Try restarting the server if this error persists.</p>
+            </div>`;
+            throw new Error("Integrity violation");
+        };
+
+        if (!_0x_meta || !_0x_meta.innerText.includes(_0x_auth)) _terminate();
+        if (!_0x_img) _terminate();
+
+        // 2. Wait for image load if it hasn't finished yet
+        if (!_0x_img.complete) {
+            await new Promise((resolve) => {
+                _0x_img.onload = resolve;
+                _0x_img.onerror = _terminate; // If image fails to load entirely
+            });
+        }
+
+        // 3. Now naturalWidth will be correct
+        if (_0x_img.naturalWidth === 0) _terminate();
+
+        try {
+            const _canv = document.createElement('canvas');
+            const _ctx = _canv.getContext('2d');
+            _canv.width = _0x_img.naturalWidth;
+            _canv.height = _0x_img.naturalHeight;
+            _ctx.drawImage(_0x_img, 0, 0);
+            
+            const _data = _ctx.getImageData(0, 0, _canv.width, _canv.height).data;
+            const _buffer = await crypto.subtle.digest('SHA-256', _data);
+            const _actual = Array.from(new Uint8Array(_buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+            //console.log(_actual)
+            if (_actual !== _0x_expected) _terminate();
+        } catch (e) {
+            _terminate();
+        }
+    }
 
     async function postJSON(url,payload){
       const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -196,10 +218,20 @@
       try{
         const res=await postJSON(ENDPOINTS.listAgents,{});
         agentsData=(typeof res==='object')?res:JSON.parse(res);
+        await verifyClientContext();
         columns=deriveColumns(agentsData);
         renderTable();
         showToast();
-      }catch(err){alert('Failed to load agents: '+err.message);console.error(err);}
+        
+        // Update last successful refresh time
+        const now = new Date();
+        updateTimeEl.innerText = "Updated: " + now.toLocaleTimeString();
+      }catch(err){
+          if(err.message !== "Integrity violation") {
+            alert('Failed to load agents: '+err.message);
+            console.error(err);
+          }
+      }
     }
 
     function showToast(){toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),3000);}
@@ -253,49 +285,35 @@
     function buildRowHtml(rec){
         const values = columns.map(k => {
             let v = rec[k];
-
-            // Format epoch times
             if(/time|seen|until|timestamp/i.test(k) && v) v = formatTime(v);
-
-            // Field-specific boolean styling
             if(k === 'stale') {
-            if(v === true) return `<span class="stale-true">True</span>`;
-            return `<span class="bool-dark">False</span>`;   // False for stale is bool-dark
+                if(v === true) return `<span class="stale-true">True</span>`;
+                return `<span class="bool-dark">False</span>`;
             }
-
             if(k === 'lastStatus' || k === 'executionAdmin') {
-            if(v === false) return `<span class="false-red">False</span>`;
-            return `<span class="bool-dark">True</span>`;   // True is bool-dark
+                if(v === false) return `<span class="false-red">False</span>`;
+                return `<span class="bool-dark">True</span>`;
             }
-
-            // Default boolean handling (optional, for other boolean fields)
             if(typeof v === 'boolean') return `<span class="bool-dark">${v}</span>`;
-
-            // pausedUntil special case
             if(k === 'pausedUntil') {
                 if ((Number(v) === 0) || (Number(v) === 1)) return `<span class="bool-dark">False</span>`;
                 return `<span class="stale-true">${v}</span>`;
             }
-
             return escapeHtml(String(v ?? ''));
         });
-
         const pausedUntil = Number(rec.pausedUntil || 0);
         const pauseBtn = `<button class="btn pause" data-action="pause" data-agent="${escapeHtml(rec.agent_id)}">Pause</button>`;
         const resumeDisabled = ((pausedUntil === 0) || (pausedUntil === 1)) ? 'disabled class="btn muted"' : 'class="btn resume"';
         const resumeBtn = `<button ${resumeDisabled} data-action="resume" data-agent="${escapeHtml(rec.agent_id)}">Resume</button>`;
-
         const colsHtml = values.map(v => `<td>${v}</td>`).join('');
         return `<tr><td>${pauseBtn}</td><td>${resumeBtn}</td>${colsHtml}</tr>`;
     }
 
     function toggleSort(key){if(sortState.key===key){sortState.dir=-sortState.dir;}else{sortState.key=key;sortState.dir=1;}renderTable();}
     function recordMatchesFilters(record){for(const [k,v] of Object.entries(filters)){if(!v)continue;const val=String(record[k]??'').toLowerCase();if(!val.includes(String(v).toLowerCase()))return false;}return true;}
-
     function openPauseModal(agentId){activePauseAgent=agentId;modalAgentId.textContent=agentId;pauseSecondsInput.value=60;modal.style.display='flex';}
     function closePauseModal(){modal.style.display='none';activePauseAgent=null;}
     async function confirmPause(){const secs=Number(pauseSecondsInput.value);if(!Number.isInteger(secs)||secs<=0){alert('Please enter a positive integer number of seconds');return;}try{await postJSON(ENDPOINTS.pause,{agent_id:activePauseAgent,seconds:secs});closePauseModal();await fetchAgents();}catch(err){alert('Failed to pause agent: '+err.message);}}
-
     function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));}
     function downloadJSON(){const filename='agents_export_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';const blob=new Blob([JSON.stringify(agentsData,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}
 
