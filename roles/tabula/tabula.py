@@ -102,7 +102,8 @@ def get_os_string(full_os_str):
         # too small:
         #return "https://miro.medium.com/v2/resize:fit:640/format:webp/1*WzXKURvs7JRfRKtO-xskgw.png"
         # text:
-        return "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR8WeEeItEdbZe1SaJPalHrs_LrUaWNkN0ENQ&s"
+        #return "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR8WeEeItEdbZe1SaJPalHrs_LrUaWNkN0ENQ&s"
+        return "https://icon2.cleanpng.com/20180817/vog/8968d0640f2c4053333ce7334314ef83.webp"
     if "suse" in full_os_str:
         # text:
         #return "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/OpenSUSE_Logo.svg/1200px-OpenSUSE_Logo.svg.png"
@@ -227,7 +228,7 @@ def draw_main(hosts,file_path,file_name,max_host_per_row = 4):
         page=page,
         width=image_size,
         height=image_size,
-        position=(parent_container_width+center_spacing,143)
+        position=(parent_container_width+center_spacing,140)
     )
     router.text_format = textrouter
     stylestring = (
@@ -346,7 +347,7 @@ def draw_main(hosts,file_path,file_name,max_host_per_row = 4):
             connection="link" #line
         )
         #parent_container.position = (0, container_y_start)
-        parent_container.height += 30 # text spacing
+        parent_container.height += 25 # text spacing
         if use_two_columns:
             # Subnets up to and including the split_index go left
             current_col = 0 if current_subnet_idx <= split_index else 1
