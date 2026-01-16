@@ -1,9 +1,34 @@
 subnet,ip,hostname,os,services
+2001::/64,2001::1111,web,Windows 10,IIS
+2001::/64,2001::2222,dc,Windows Server 2016,Active Directory
+2001::/64,2001::3333,lamp,Ubuntu 22.04,"MySQL, Apache2"
+2001::/64,2001::4444,teleport,Rocky Linux,Teleport
 192.168.0.0/24,192.168.0.1,web,Windows 10,IIS
 192.168.0.0/24,192.168.0.2,dc,Windows Server 2016,Active Directory
 192.168.0.0/24,192.168.0.3,lamp,Ubuntu 22.04,"MySQL, Apache2"
 192.168.0.0/24,192.168.0.4,teleport,Rocky Linux,Teleport
+192.168.0.0/24,192.168.0.5,web,Windows 10,IIS
+192.168.0.0/24,192.168.0.6,dc,Windows Server 2016,Active Directory
+192.168.0.0/24,192.168.0.7,lamp,Ubuntu 22.04,"MySQL, Apache2"
+192.168.0.0/24,192.168.0.8,teleport,Rocky Linux,Teleport
 10.0.0.0/24,10.0.0.1,web,Windows 10,IIS
 10.0.0.0/24,10.0.0.2,dc,Windows Server 2016,Active Directory
 10.0.0.0/24,10.0.0.3,lamp,Ubuntu 22.04,"MySQL, Apache2"
 10.0.0.0/24,10.0.0.4,teleport,Rocky Linux,Teleport
+10.0.0.0/24,10.0.0.5,wkst,Amazon Linux,Workstation
+10.0.0.0/24,10.0.0.6,grafana,RHEL,Grafana
+10.0.0.0/24,10.0.0.7,web2,Fedora,NGINX
+10.0.0.0/24,10.0.0.8,db,Debian,MongoDB
+10.0.0.0/24,10.0.0.9,lamp2,Alpine,"Database, Web"
+10.0.0.0/24,10.0.0.10,tickets,OpenSuse,Ticketing
+10.0.0.0/24,10.0.0.11,special,TempleOS,special
+192.168.1.0/24,192.168.1.1,web,Windows 10,IIS
+192.168.2.0/24,192.168.2.1,web,Windows 10,IIS
+192.168.2.0/24,192.168.2.2,dc,Windows Server 2016,Active Directory
+192.168.3.0/24,192.168.3.1,web,Windows 10,IIS
+192.168.3.0/24,192.168.3.2,dc,Windows Server 2016,Active Directory
+192.168.3.0/24,192.168.3.3,lamp,Ubuntu 22.04,"MySQL, Apache2"
+192.168.4.0/24,192.168.4.1,web,Windows 10,IIS
+192.168.4.0/24,192.168.4.2,dc,Windows Server 2016,Active Directory
+192.168.4.0/24,192.168.4.3,lamp,Ubuntu 22.04,"MySQL, Apache2"
+192.168.4.0/24,192.168.4.4,teleport,Rocky Linux,Teleport

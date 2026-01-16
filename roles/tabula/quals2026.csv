@@ -1,0 +1,10 @@
+subnet,ip,hostname,os,services
+10.0.1.0/25,10.0.1.1,dc,Windows Server,AD
+10.0.1.0/25,10.0.1.2,server1,Windows Server,Server
+10.0.1.0/25,10.0.1.3,grafana,Debian,Grafana
+10.0.1.0/25,10.0.1.4,falco,Alpine,Falco
+10.0.1.0/25,10.0.1.5,server2,RHEL,Nginx
+10.0.1.128/26,10.0.1.129,teleport,RHEL,Teleport
+10.0.1.128/26,10.0.1.129,wordpress,Debian,Wordpress
+2001::/64,2001::1111,kiosk,Alpine,Kiosk
+2001::/64,2001::2222,server3,Windows Server,Server

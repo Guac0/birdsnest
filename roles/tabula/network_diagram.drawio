@@ -1,62 +1,161 @@
-<mxfile host="Drawpyo" modified="2026-01-14T11:58:55" agent="Python 3.12, Drawpyo 0.01" version="21.6.5" type="device">
-  <diagram name="Page-1" id="2499177980384">
-    <mxGraphModel dx="2037" dy="830" grid="1" gridSize="10" guides="1" toolTips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+<mxfile host="Drawpyo" modified="2026-01-15T21:15:22" agent="Python 3.12, Drawpyo 0.01" version="21.6.5" type="device">
+  <diagram name="Page-1" id="3017063922816">
+    <mxGraphModel dx="2037" dy="830" grid="1" gridSize="10" guides="1" toolTips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="2499177980576" value="web
-10.0.0.1
-Windows 10
-IIS" style="whiteSpace=wrap;rounded=0;dashed=0;shape=image;image=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBVcGxvYWRlZCB0bzogU1ZHIFJlcG8sIHd3dy5zdmdyZXBvLmNvbSwgR2VuZXJhdG9yOiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4NCjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+DQo8c3ZnIGZpbGw9IiMwMDAwMDAiIHZlcnNpb249IjEuMSIgaWQ9IkNhcGFfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgDQoJIHdpZHRoPSI4MDBweCIgaGVpZ2h0PSI4MDBweCIgdmlld0JveD0iMCAwIDMxLjM1NyAzMS4zNTciDQoJIHhtbDpzcGFjZT0icHJlc2VydmUiPg0KPGc+DQoJPHBhdGggZD0iTTE1LjI1NSwwYzUuNDI0LDAsMTAuNzY0LDIuNDk4LDEwLjc2NCw4LjQ3M2MwLDUuNTEtNi4zMTQsNy42MjktNy42Nyw5LjYyYy0xLjAxOCwxLjQ4MS0wLjY3OCwzLjU2Mi0zLjQ3NSwzLjU2Mg0KCQljLTEuODIyLDAtMi43MTItMS40ODItMi43MTItMi44MzhjMC01LjA0Niw3LjQxNC02LjE4OCw3LjQxNC0xMC4zNDNjMC0yLjI4Ny0xLjUyMi0zLjY0My00LjA2Ni0zLjY0Mw0KCQljLTUuNDI0LDAtMy4zMDYsNS41OTItNy40MTQsNS41OTJjLTEuNDgzLDAtMi43NTYtMC44OS0yLjc1Ni0yLjU4NEM1LjMzOSwzLjY4MywxMC4wODQsMCwxNS4yNTUsMHogTTE1LjA0NCwyNC40MDYNCgkJYzEuOTA0LDAsMy40NzUsMS41NjYsMy40NzUsMy40NzZjMCwxLjkxLTEuNTY4LDMuNDc2LTMuNDc1LDMuNDc2Yy0xLjkwNywwLTMuNDc2LTEuNTY0LTMuNDc2LTMuNDc2DQoJCUMxMS41NjgsMjUuOTczLDEzLjEzNywyNC40MDYsMTUuMDQ0LDI0LjQwNnoiLz4NCjwvZz4NCjwvc3ZnPg==;fontFamily=Helvetica;fontSize=12;fontColor=#000000;labelPosition=center;spacingBottom=-35;align=center;verticalAlign=bottom;horizontal=1;" vertex="1" parent="2499177980624">
-  <mxGeometry x="25" y="25" width="100" height="50" as="geometry" />
+        <mxCell id="3017063920320" value="Company&lt;br/&gt;Location&lt;br/&gt;FQDN" style="whiteSpace=nowrap;rounded=0;dashed=0;html=1;image=;fontFamily=Helvetica;fontStyle=1;fontSize=20;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="1">
+  <mxGeometry x="775" y="35" width="75" height="75" as="geometry" />
 </mxCell>
-        <mxCell id="2499177980720" value="dc
-10.0.0.2
-Windows Server 2016
-Active Directory" style="whiteSpace=wrap;rounded=0;dashed=0;shape=image;image=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBVcGxvYWRlZCB0bzogU1ZHIFJlcG8sIHd3dy5zdmdyZXBvLmNvbSwgR2VuZXJhdG9yOiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4NCjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+DQo8c3ZnIGZpbGw9IiMwMDAwMDAiIHZlcnNpb249IjEuMSIgaWQ9IkNhcGFfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgDQoJIHdpZHRoPSI4MDBweCIgaGVpZ2h0PSI4MDBweCIgdmlld0JveD0iMCAwIDMxLjM1NyAzMS4zNTciDQoJIHhtbDpzcGFjZT0icHJlc2VydmUiPg0KPGc+DQoJPHBhdGggZD0iTTE1LjI1NSwwYzUuNDI0LDAsMTAuNzY0LDIuNDk4LDEwLjc2NCw4LjQ3M2MwLDUuNTEtNi4zMTQsNy42MjktNy42Nyw5LjYyYy0xLjAxOCwxLjQ4MS0wLjY3OCwzLjU2Mi0zLjQ3NSwzLjU2Mg0KCQljLTEuODIyLDAtMi43MTItMS40ODItMi43MTItMi44MzhjMC01LjA0Niw3LjQxNC02LjE4OCw3LjQxNC0xMC4zNDNjMC0yLjI4Ny0xLjUyMi0zLjY0My00LjA2Ni0zLjY0Mw0KCQljLTUuNDI0LDAtMy4zMDYsNS41OTItNy40MTQsNS41OTJjLTEuNDgzLDAtMi43NTYtMC44OS0yLjc1Ni0yLjU4NEM1LjMzOSwzLjY4MywxMC4wODQsMCwxNS4yNTUsMHogTTE1LjA0NCwyNC40MDYNCgkJYzEuOTA0LDAsMy40NzUsMS41NjYsMy40NzUsMy40NzZjMCwxLjkxLTEuNTY4LDMuNDc2LTMuNDc1LDMuNDc2Yy0xLjkwNywwLTMuNDc2LTEuNTY0LTMuNDc2LTMuNDc2DQoJCUMxMS41NjgsMjUuOTczLDEzLjEzNywyNC40MDYsMTUuMDQ0LDI0LjQwNnoiLz4NCjwvZz4NCjwvc3ZnPg==;fontFamily=Helvetica;fontSize=12;fontColor=#000000;labelPosition=center;spacingBottom=-35;align=center;verticalAlign=bottom;horizontal=1;" vertex="1" parent="2499177980624">
-  <mxGeometry x="125" y="25" width="100" height="50" as="geometry" />
+        <mxCell id="3017063920176" value="Router&lt;br/&gt;127.0.0.1&lt;br/&gt;PfSense" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://symbols.getvecta.com/stencil_240/204_router.7b208c1133.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="1">
+  <mxGeometry x="775" y="150" width="75" height="75" as="geometry" />
 </mxCell>
-        <mxCell id="2499177980816" value="lamp
-10.0.0.3
-Ubuntu 22.04
-MySQL, Apache2" style="whiteSpace=wrap;rounded=0;dashed=0;shape=image;image=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBVcGxvYWRlZCB0bzogU1ZHIFJlcG8sIHd3dy5zdmdyZXBvLmNvbSwgR2VuZXJhdG9yOiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4NCjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+DQo8c3ZnIGZpbGw9IiMwMDAwMDAiIHZlcnNpb249IjEuMSIgaWQ9IkNhcGFfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgDQoJIHdpZHRoPSI4MDBweCIgaGVpZ2h0PSI4MDBweCIgdmlld0JveD0iMCAwIDMxLjM1NyAzMS4zNTciDQoJIHhtbDpzcGFjZT0icHJlc2VydmUiPg0KPGc+DQoJPHBhdGggZD0iTTE1LjI1NSwwYzUuNDI0LDAsMTAuNzY0LDIuNDk4LDEwLjc2NCw4LjQ3M2MwLDUuNTEtNi4zMTQsNy42MjktNy42Nyw5LjYyYy0xLjAxOCwxLjQ4MS0wLjY3OCwzLjU2Mi0zLjQ3NSwzLjU2Mg0KCQljLTEuODIyLDAtMi43MTItMS40ODItMi43MTItMi44MzhjMC01LjA0Niw3LjQxNC02LjE4OCw3LjQxNC0xMC4zNDNjMC0yLjI4Ny0xLjUyMi0zLjY0My00LjA2Ni0zLjY0Mw0KCQljLTUuNDI0LDAtMy4zMDYsNS41OTItNy40MTQsNS41OTJjLTEuNDgzLDAtMi43NTYtMC44OS0yLjc1Ni0yLjU4NEM1LjMzOSwzLjY4MywxMC4wODQsMCwxNS4yNTUsMHogTTE1LjA0NCwyNC40MDYNCgkJYzEuOTA0LDAsMy40NzUsMS41NjYsMy40NzUsMy40NzZjMCwxLjkxLTEuNTY4LDMuNDc2LTMuNDc1LDMuNDc2Yy0xLjkwNywwLTMuNDc2LTEuNTY0LTMuNDc2LTMuNDc2DQoJCUMxMS41NjgsMjUuOTczLDEzLjEzNywyNC40MDYsMTUuMDQ0LDI0LjQwNnoiLz4NCjwvZz4NCjwvc3ZnPg==;fontFamily=Helvetica;fontSize=12;fontColor=#000000;labelPosition=center;spacingBottom=-35;align=center;verticalAlign=bottom;horizontal=1;" vertex="1" parent="2499177980624">
-  <mxGeometry x="225" y="25" width="100" height="50" as="geometry" />
+        <mxCell id="3017063920032" value="Internet" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://symbols.getvecta.com/stencil_62/4_cloud.377dbc86e9.jpg;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="1">
+  <mxGeometry x="775" y="300" width="75" height="75" as="geometry" />
 </mxCell>
-        <mxCell id="2499177980912" value="teleport
-10.0.0.4
-Rocky Linux
-Teleport" style="whiteSpace=wrap;rounded=0;dashed=0;shape=image;image=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBVcGxvYWRlZCB0bzogU1ZHIFJlcG8sIHd3dy5zdmdyZXBvLmNvbSwgR2VuZXJhdG9yOiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4NCjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+DQo8c3ZnIGZpbGw9IiMwMDAwMDAiIHZlcnNpb249IjEuMSIgaWQ9IkNhcGFfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgDQoJIHdpZHRoPSI4MDBweCIgaGVpZ2h0PSI4MDBweCIgdmlld0JveD0iMCAwIDMxLjM1NyAzMS4zNTciDQoJIHhtbDpzcGFjZT0icHJlc2VydmUiPg0KPGc+DQoJPHBhdGggZD0iTTE1LjI1NSwwYzUuNDI0LDAsMTAuNzY0LDIuNDk4LDEwLjc2NCw4LjQ3M2MwLDUuNTEtNi4zMTQsNy42MjktNy42Nyw5LjYyYy0xLjAxOCwxLjQ4MS0wLjY3OCwzLjU2Mi0zLjQ3NSwzLjU2Mg0KCQljLTEuODIyLDAtMi43MTItMS40ODItMi43MTItMi44MzhjMC01LjA0Niw3LjQxNC02LjE4OCw3LjQxNC0xMC4zNDNjMC0yLjI4Ny0xLjUyMi0zLjY0My00LjA2Ni0zLjY0Mw0KCQljLTUuNDI0LDAtMy4zMDYsNS41OTItNy40MTQsNS41OTJjLTEuNDgzLDAtMi43NTYtMC44OS0yLjc1Ni0yLjU4NEM1LjMzOSwzLjY4MywxMC4wODQsMCwxNS4yNTUsMHogTTE1LjA0NCwyNC40MDYNCgkJYzEuOTA0LDAsMy40NzUsMS41NjYsMy40NzUsMy40NzZjMCwxLjkxLTEuNTY4LDMuNDc2LTMuNDc1LDMuNDc2Yy0xLjkwNywwLTMuNDc2LTEuNTY0LTMuNDc2LTMuNDc2DQoJCUMxMS41NjgsMjUuOTczLDEzLjEzNywyNC40MDYsMTUuMDQ0LDI0LjQwNnoiLz4NCjwvZz4NCjwvc3ZnPg==;fontFamily=Helvetica;fontSize=12;fontColor=#000000;labelPosition=center;spacingBottom=-35;align=center;verticalAlign=bottom;horizontal=1;" vertex="1" parent="2499177980624">
-  <mxGeometry x="325" y="25" width="100" height="50" as="geometry" />
+        <mxCell id="3017063919600" value="web&lt;br/&gt;10.0.0.1&lt;br/&gt;Windows 10&lt;br/&gt;IIS" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Windows_logo_-_2012_%28dark_blue%29.svg/250px-Windows_logo_-_2012_%28dark_blue%29.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="50" y="50.0" width="75" height="75" as="geometry" />
 </mxCell>
-        <mxCell id="2499177980624" value="10.0.0.0/24" style="whiteSpace=wrap;rounded=0;fillColor=#E6F6F7;strokeColor=#00A4A6;dashed=0;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;" vertex="1" parent="1">
-  <mxGeometry x="0" y="0" width="450" height="105" as="geometry" />
+        <mxCell id="3017063920128" value="dc&lt;br/&gt;10.0.0.2&lt;br/&gt;Windows Server 2016&lt;br/&gt;Active Directory" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Windows_logo_-_2021.svg/960px-Windows_logo_-_2021.svg.png?20220927154043;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="175" y="50.0" width="75" height="75" as="geometry" />
 </mxCell>
-        <mxCell id="2499177981008" value="web
-192.168.0.1
-Windows 10
-IIS" style="whiteSpace=wrap;rounded=0;dashed=0;shape=image;image=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBVcGxvYWRlZCB0bzogU1ZHIFJlcG8sIHd3dy5zdmdyZXBvLmNvbSwgR2VuZXJhdG9yOiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4NCjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+DQo8c3ZnIGZpbGw9IiMwMDAwMDAiIHZlcnNpb249IjEuMSIgaWQ9IkNhcGFfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgDQoJIHdpZHRoPSI4MDBweCIgaGVpZ2h0PSI4MDBweCIgdmlld0JveD0iMCAwIDMxLjM1NyAzMS4zNTciDQoJIHhtbDpzcGFjZT0icHJlc2VydmUiPg0KPGc+DQoJPHBhdGggZD0iTTE1LjI1NSwwYzUuNDI0LDAsMTAuNzY0LDIuNDk4LDEwLjc2NCw4LjQ3M2MwLDUuNTEtNi4zMTQsNy42MjktNy42Nyw5LjYyYy0xLjAxOCwxLjQ4MS0wLjY3OCwzLjU2Mi0zLjQ3NSwzLjU2Mg0KCQljLTEuODIyLDAtMi43MTItMS40ODItMi43MTItMi44MzhjMC01LjA0Niw3LjQxNC02LjE4OCw3LjQxNC0xMC4zNDNjMC0yLjI4Ny0xLjUyMi0zLjY0My00LjA2Ni0zLjY0Mw0KCQljLTUuNDI0LDAtMy4zMDYsNS41OTItNy40MTQsNS41OTJjLTEuNDgzLDAtMi43NTYtMC44OS0yLjc1Ni0yLjU4NEM1LjMzOSwzLjY4MywxMC4wODQsMCwxNS4yNTUsMHogTTE1LjA0NCwyNC40MDYNCgkJYzEuOTA0LDAsMy40NzUsMS41NjYsMy40NzUsMy40NzZjMCwxLjkxLTEuNTY4LDMuNDc2LTMuNDc1LDMuNDc2Yy0xLjkwNywwLTMuNDc2LTEuNTY0LTMuNDc2LTMuNDc2DQoJCUMxMS41NjgsMjUuOTczLDEzLjEzNywyNC40MDYsMTUuMDQ0LDI0LjQwNnoiLz4NCjwvZz4NCjwvc3ZnPg==;fontFamily=Helvetica;fontSize=12;fontColor=#000000;labelPosition=center;spacingBottom=-35;align=center;verticalAlign=bottom;horizontal=1;" vertex="1" parent="2499177981632">
-  <mxGeometry x="25" y="25" width="100" height="50" as="geometry" />
+        <mxCell id="3017063919120" value="lamp&lt;br/&gt;10.0.0.3&lt;br/&gt;Ubuntu 22.04&lt;br/&gt;MySQL, Apache2" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/UbuntuCoF.svg/1200px-UbuntuCoF.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="300" y="50.0" width="75" height="75" as="geometry" />
 </mxCell>
-        <mxCell id="2499177981728" value="dc
-192.168.0.2
-Windows Server 2016
-Active Directory" style="whiteSpace=wrap;rounded=0;dashed=0;shape=image;image=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBVcGxvYWRlZCB0bzogU1ZHIFJlcG8sIHd3dy5zdmdyZXBvLmNvbSwgR2VuZXJhdG9yOiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4NCjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+DQo8c3ZnIGZpbGw9IiMwMDAwMDAiIHZlcnNpb249IjEuMSIgaWQ9IkNhcGFfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgDQoJIHdpZHRoPSI4MDBweCIgaGVpZ2h0PSI4MDBweCIgdmlld0JveD0iMCAwIDMxLjM1NyAzMS4zNTciDQoJIHhtbDpzcGFjZT0icHJlc2VydmUiPg0KPGc+DQoJPHBhdGggZD0iTTE1LjI1NSwwYzUuNDI0LDAsMTAuNzY0LDIuNDk4LDEwLjc2NCw4LjQ3M2MwLDUuNTEtNi4zMTQsNy42MjktNy42Nyw5LjYyYy0xLjAxOCwxLjQ4MS0wLjY3OCwzLjU2Mi0zLjQ3NSwzLjU2Mg0KCQljLTEuODIyLDAtMi43MTItMS40ODItMi43MTItMi44MzhjMC01LjA0Niw3LjQxNC02LjE4OCw3LjQxNC0xMC4zNDNjMC0yLjI4Ny0xLjUyMi0zLjY0My00LjA2Ni0zLjY0Mw0KCQljLTUuNDI0LDAtMy4zMDYsNS41OTItNy40MTQsNS41OTJjLTEuNDgzLDAtMi43NTYtMC44OS0yLjc1Ni0yLjU4NEM1LjMzOSwzLjY4MywxMC4wODQsMCwxNS4yNTUsMHogTTE1LjA0NCwyNC40MDYNCgkJYzEuOTA0LDAsMy40NzUsMS41NjYsMy40NzUsMy40NzZjMCwxLjkxLTEuNTY4LDMuNDc2LTMuNDc1LDMuNDc2Yy0xLjkwNywwLTMuNDc2LTEuNTY0LTMuNDc2LTMuNDc2DQoJCUMxMS41NjgsMjUuOTczLDEzLjEzNywyNC40MDYsMTUuMDQ0LDI0LjQwNnoiLz4NCjwvZz4NCjwvc3ZnPg==;fontFamily=Helvetica;fontSize=12;fontColor=#000000;labelPosition=center;spacingBottom=-35;align=center;verticalAlign=bottom;horizontal=1;" vertex="1" parent="2499177981632">
-  <mxGeometry x="125" y="25" width="100" height="50" as="geometry" />
+        <mxCell id="3017063922336" value="teleport&lt;br/&gt;10.0.0.4&lt;br/&gt;Rocky Linux&lt;br/&gt;Teleport" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/7/77/Rocky_Linux_logo.svg;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="425" y="50.0" width="75" height="75" as="geometry" />
 </mxCell>
-        <mxCell id="2499177981824" value="lamp
-192.168.0.3
-Ubuntu 22.04
-MySQL, Apache2" style="whiteSpace=wrap;rounded=0;dashed=0;shape=image;image=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBVcGxvYWRlZCB0bzogU1ZHIFJlcG8sIHd3dy5zdmdyZXBvLmNvbSwgR2VuZXJhdG9yOiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4NCjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+DQo8c3ZnIGZpbGw9IiMwMDAwMDAiIHZlcnNpb249IjEuMSIgaWQ9IkNhcGFfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgDQoJIHdpZHRoPSI4MDBweCIgaGVpZ2h0PSI4MDBweCIgdmlld0JveD0iMCAwIDMxLjM1NyAzMS4zNTciDQoJIHhtbDpzcGFjZT0icHJlc2VydmUiPg0KPGc+DQoJPHBhdGggZD0iTTE1LjI1NSwwYzUuNDI0LDAsMTAuNzY0LDIuNDk4LDEwLjc2NCw4LjQ3M2MwLDUuNTEtNi4zMTQsNy42MjktNy42Nyw5LjYyYy0xLjAxOCwxLjQ4MS0wLjY3OCwzLjU2Mi0zLjQ3NSwzLjU2Mg0KCQljLTEuODIyLDAtMi43MTItMS40ODItMi43MTItMi44MzhjMC01LjA0Niw3LjQxNC02LjE4OCw3LjQxNC0xMC4zNDNjMC0yLjI4Ny0xLjUyMi0zLjY0My00LjA2Ni0zLjY0Mw0KCQljLTUuNDI0LDAtMy4zMDYsNS41OTItNy40MTQsNS41OTJjLTEuNDgzLDAtMi43NTYtMC44OS0yLjc1Ni0yLjU4NEM1LjMzOSwzLjY4MywxMC4wODQsMCwxNS4yNTUsMHogTTE1LjA0NCwyNC40MDYNCgkJYzEuOTA0LDAsMy40NzUsMS41NjYsMy40NzUsMy40NzZjMCwxLjkxLTEuNTY4LDMuNDc2LTMuNDc1LDMuNDc2Yy0xLjkwNywwLTMuNDc2LTEuNTY0LTMuNDc2LTMuNDc2DQoJCUMxMS41NjgsMjUuOTczLDEzLjEzNywyNC40MDYsMTUuMDQ0LDI0LjQwNnoiLz4NCjwvZz4NCjwvc3ZnPg==;fontFamily=Helvetica;fontSize=12;fontColor=#000000;labelPosition=center;spacingBottom=-35;align=center;verticalAlign=bottom;horizontal=1;" vertex="1" parent="2499177981632">
-  <mxGeometry x="225" y="25" width="100" height="50" as="geometry" />
+        <mxCell id="3017063922528" value="wkst&lt;br/&gt;10.0.0.5&lt;br/&gt;Amazon Linux&lt;br/&gt;Workstation" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR8WeEeItEdbZe1SaJPalHrs_LrUaWNkN0ENQ&amp;s;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="550" y="50.0" width="75" height="75" as="geometry" />
 </mxCell>
-        <mxCell id="2499177981920" value="teleport
-192.168.0.4
-Rocky Linux
-Teleport" style="whiteSpace=wrap;rounded=0;dashed=0;shape=image;image=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBVcGxvYWRlZCB0bzogU1ZHIFJlcG8sIHd3dy5zdmdyZXBvLmNvbSwgR2VuZXJhdG9yOiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4NCjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+DQo8c3ZnIGZpbGw9IiMwMDAwMDAiIHZlcnNpb249IjEuMSIgaWQ9IkNhcGFfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgDQoJIHdpZHRoPSI4MDBweCIgaGVpZ2h0PSI4MDBweCIgdmlld0JveD0iMCAwIDMxLjM1NyAzMS4zNTciDQoJIHhtbDpzcGFjZT0icHJlc2VydmUiPg0KPGc+DQoJPHBhdGggZD0iTTE1LjI1NSwwYzUuNDI0LDAsMTAuNzY0LDIuNDk4LDEwLjc2NCw4LjQ3M2MwLDUuNTEtNi4zMTQsNy42MjktNy42Nyw5LjYyYy0xLjAxOCwxLjQ4MS0wLjY3OCwzLjU2Mi0zLjQ3NSwzLjU2Mg0KCQljLTEuODIyLDAtMi43MTItMS40ODItMi43MTItMi44MzhjMC01LjA0Niw3LjQxNC02LjE4OCw3LjQxNC0xMC4zNDNjMC0yLjI4Ny0xLjUyMi0zLjY0My00LjA2Ni0zLjY0Mw0KCQljLTUuNDI0LDAtMy4zMDYsNS41OTItNy40MTQsNS41OTJjLTEuNDgzLDAtMi43NTYtMC44OS0yLjc1Ni0yLjU4NEM1LjMzOSwzLjY4MywxMC4wODQsMCwxNS4yNTUsMHogTTE1LjA0NCwyNC40MDYNCgkJYzEuOTA0LDAsMy40NzUsMS41NjYsMy40NzUsMy40NzZjMCwxLjkxLTEuNTY4LDMuNDc2LTMuNDc1LDMuNDc2Yy0xLjkwNywwLTMuNDc2LTEuNTY0LTMuNDc2LTMuNDc2DQoJCUMxMS41NjgsMjUuOTczLDEzLjEzNywyNC40MDYsMTUuMDQ0LDI0LjQwNnoiLz4NCjwvZz4NCjwvc3ZnPg==;fontFamily=Helvetica;fontSize=12;fontColor=#000000;labelPosition=center;spacingBottom=-35;align=center;verticalAlign=bottom;horizontal=1;" vertex="1" parent="2499177981632">
-  <mxGeometry x="325" y="25" width="100" height="50" as="geometry" />
+        <mxCell id="3017063922384" value="grafana&lt;br/&gt;10.0.0.6&lt;br/&gt;RHEL&lt;br/&gt;Grafana" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Red_Hat_logo.svg/960px-Red_Hat_logo.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="50" y="206.25" width="75" height="75" as="geometry" />
 </mxCell>
-        <mxCell id="2499177981632" value="192.168.0.0/24" style="whiteSpace=wrap;rounded=0;fillColor=#E6F6F7;strokeColor=#00A4A6;dashed=0;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;" vertex="1" parent="1">
-  <mxGeometry x="0" y="200" width="450" height="105" as="geometry" />
+        <mxCell id="3017063922096" value="web2&lt;br/&gt;10.0.0.7&lt;br/&gt;Fedora&lt;br/&gt;NGINX" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Fedora_icon_%282021%29.svg/1280px-Fedora_icon_%282021%29.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="175" y="206.25" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063922192" value="db&lt;br/&gt;10.0.0.8&lt;br/&gt;Debian&lt;br/&gt;MongoDB" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/Openlogo-debianV2.svg/640px-Openlogo-debianV2.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="300" y="206.25" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063921904" value="lamp2&lt;br/&gt;10.0.0.9&lt;br/&gt;Alpine&lt;br/&gt;Database, Web" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/2/2c/Alpine_Linux_logo.png?20150706141851;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="425" y="206.25" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063922000" value="tickets&lt;br/&gt;10.0.0.10&lt;br/&gt;OpenSuse&lt;br/&gt;Ticketing" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/OpenSUSE_Button.svg/640px-OpenSUSE_Button.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="550" y="206.25" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063921712" value="special&lt;br/&gt;10.0.0.11&lt;br/&gt;TempleOS&lt;br/&gt;special" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://symbols.getvecta.com/stencil_240/79_fileserver.c500813aaa.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920272">
+  <mxGeometry x="50" y="362.5" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063920272" value="10.0.0.0/24" style="whiteSpace=wrap;rounded=0;fillColor=#F0F9F4;strokeColor=#2D8A5B;dashed=0;html=1;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#144D3E;" vertex="1" parent="1">
+  <mxGeometry x="0" y="0" width="675" height="517.5" as="geometry" />
+</mxCell>
+        <mxCell id="3017063921664" style="shape=link;edgeStyle=elbowEdgeStyle;rounded=1;jettySize=auto;endSize=40;startSize=40;" edge="1" parent="1" source="3017063920272" target="3017063920176" value="127.0.0.1">
+  <mxGeometry x="-1" y="15" relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="3017063921136" value="web&lt;br/&gt;192.168.0.1&lt;br/&gt;Windows 10&lt;br/&gt;IIS" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Windows_logo_-_2012_%28dark_blue%29.svg/250px-Windows_logo_-_2012_%28dark_blue%29.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920992">
+  <mxGeometry x="50" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063920944" value="dc&lt;br/&gt;192.168.0.2&lt;br/&gt;Windows Server 2016&lt;br/&gt;Active Directory" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Windows_logo_-_2021.svg/960px-Windows_logo_-_2021.svg.png?20220927154043;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920992">
+  <mxGeometry x="175" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063920848" value="lamp&lt;br/&gt;192.168.0.3&lt;br/&gt;Ubuntu 22.04&lt;br/&gt;MySQL, Apache2" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/UbuntuCoF.svg/1200px-UbuntuCoF.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920992">
+  <mxGeometry x="300" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063972992" value="teleport&lt;br/&gt;192.168.0.4&lt;br/&gt;Rocky Linux&lt;br/&gt;Teleport" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/7/77/Rocky_Linux_logo.svg;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920992">
+  <mxGeometry x="425" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063973088" value="web&lt;br/&gt;192.168.0.5&lt;br/&gt;Windows 10&lt;br/&gt;IIS" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Windows_logo_-_2012_%28dark_blue%29.svg/250px-Windows_logo_-_2012_%28dark_blue%29.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920992">
+  <mxGeometry x="550" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063973184" value="dc&lt;br/&gt;192.168.0.6&lt;br/&gt;Windows Server 2016&lt;br/&gt;Active Directory" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Windows_logo_-_2021.svg/960px-Windows_logo_-_2021.svg.png?20220927154043;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920992">
+  <mxGeometry x="50" y="206.25" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063973280" value="lamp&lt;br/&gt;192.168.0.7&lt;br/&gt;Ubuntu 22.04&lt;br/&gt;MySQL, Apache2" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/UbuntuCoF.svg/1200px-UbuntuCoF.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920992">
+  <mxGeometry x="175" y="206.25" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063973376" value="teleport&lt;br/&gt;192.168.0.8&lt;br/&gt;Rocky Linux&lt;br/&gt;Teleport" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/7/77/Rocky_Linux_logo.svg;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063920992">
+  <mxGeometry x="300" y="206.25" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063920992" value="192.168.0.0/24" style="whiteSpace=wrap;rounded=0;fillColor=#F2F0FF;strokeColor=#7B61FF;dashed=0;html=1;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#4A3BB1;" vertex="1" parent="1">
+  <mxGeometry x="0" y="567.5" width="675" height="361.25" as="geometry" />
+</mxCell>
+        <mxCell id="3017063973616" style="shape=link;edgeStyle=elbowEdgeStyle;rounded=1;jettySize=auto;endSize=40;startSize=40;" edge="1" parent="1" source="3017063920992" target="3017063920176" value="127.0.0.1">
+  <mxGeometry x="-1" y="15" relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="3017063974192" value="web&lt;br/&gt;192.168.1.1&lt;br/&gt;Windows 10&lt;br/&gt;IIS" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Windows_logo_-_2012_%28dark_blue%29.svg/250px-Windows_logo_-_2012_%28dark_blue%29.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063974144">
+  <mxGeometry x="50" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063974144" value="192.168.1.0/24" style="whiteSpace=wrap;rounded=0;fillColor=#FFFBEB;strokeColor=#D97706;dashed=0;html=1;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#92400E;" vertex="1" parent="1">
+  <mxGeometry x="950" y="0" width="175" height="205.0" as="geometry" />
+</mxCell>
+        <mxCell id="3017063974432" style="shape=link;edgeStyle=elbowEdgeStyle;rounded=1;jettySize=auto;endSize=40;startSize=40;" edge="1" parent="1" source="3017063974144" target="3017063920176" value="127.0.0.1">
+  <mxGeometry x="-1" y="-15" relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="3017063975056" value="web&lt;br/&gt;192.168.2.1&lt;br/&gt;Windows 10&lt;br/&gt;IIS" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Windows_logo_-_2012_%28dark_blue%29.svg/250px-Windows_logo_-_2012_%28dark_blue%29.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063974960">
+  <mxGeometry x="50" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063975152" value="dc&lt;br/&gt;192.168.2.2&lt;br/&gt;Windows Server 2016&lt;br/&gt;Active Directory" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Windows_logo_-_2021.svg/960px-Windows_logo_-_2021.svg.png?20220927154043;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063974960">
+  <mxGeometry x="175" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063974960" value="192.168.2.0/24" style="whiteSpace=wrap;rounded=0;fillColor=#E6F6F7;strokeColor=#00A4A6;dashed=0;html=1;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;" vertex="1" parent="1">
+  <mxGeometry x="950" y="255.0" width="300" height="205.0" as="geometry" />
+</mxCell>
+        <mxCell id="3017063975392" style="shape=link;edgeStyle=elbowEdgeStyle;rounded=1;jettySize=auto;endSize=40;startSize=40;" edge="1" parent="1" source="3017063974960" target="3017063920176" value="127.0.0.1">
+  <mxGeometry x="-1" y="-15" relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="3017063976064" value="web&lt;br/&gt;192.168.3.1&lt;br/&gt;Windows 10&lt;br/&gt;IIS" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Windows_logo_-_2012_%28dark_blue%29.svg/250px-Windows_logo_-_2012_%28dark_blue%29.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063975968">
+  <mxGeometry x="50" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063976160" value="dc&lt;br/&gt;192.168.3.2&lt;br/&gt;Windows Server 2016&lt;br/&gt;Active Directory" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Windows_logo_-_2021.svg/960px-Windows_logo_-_2021.svg.png?20220927154043;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063975968">
+  <mxGeometry x="175" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063976256" value="lamp&lt;br/&gt;192.168.3.3&lt;br/&gt;Ubuntu 22.04&lt;br/&gt;MySQL, Apache2" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/UbuntuCoF.svg/1200px-UbuntuCoF.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063975968">
+  <mxGeometry x="300" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063975968" value="192.168.3.0/24" style="whiteSpace=wrap;rounded=0;fillColor=#FFF1F2;strokeColor=#E11D48;dashed=0;html=1;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#9F1239;" vertex="1" parent="1">
+  <mxGeometry x="950" y="510.0" width="425" height="205.0" as="geometry" />
+</mxCell>
+        <mxCell id="3017063976496" style="shape=link;edgeStyle=elbowEdgeStyle;rounded=1;jettySize=auto;endSize=40;startSize=40;" edge="1" parent="1" source="3017063975968" target="3017063920176" value="127.0.0.1">
+  <mxGeometry x="-1" y="-15" relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="3017063977120" value="web&lt;br/&gt;192.168.4.1&lt;br/&gt;Windows 10&lt;br/&gt;IIS" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Windows_logo_-_2012_%28dark_blue%29.svg/250px-Windows_logo_-_2012_%28dark_blue%29.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063976976">
+  <mxGeometry x="50" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063977216" value="dc&lt;br/&gt;192.168.4.2&lt;br/&gt;Windows Server 2016&lt;br/&gt;Active Directory" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Windows_logo_-_2021.svg/960px-Windows_logo_-_2021.svg.png?20220927154043;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063976976">
+  <mxGeometry x="175" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063977312" value="lamp&lt;br/&gt;192.168.4.3&lt;br/&gt;Ubuntu 22.04&lt;br/&gt;MySQL, Apache2" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/UbuntuCoF.svg/1200px-UbuntuCoF.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063976976">
+  <mxGeometry x="300" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063977408" value="teleport&lt;br/&gt;192.168.4.4&lt;br/&gt;Rocky Linux&lt;br/&gt;Teleport" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/7/77/Rocky_Linux_logo.svg;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063976976">
+  <mxGeometry x="425" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063976976" value="192.168.4.0/24" style="whiteSpace=wrap;rounded=0;fillColor=#F3F4F6;strokeColor=#4B5563;dashed=0;html=1;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#1F2937;" vertex="1" parent="1">
+  <mxGeometry x="950" y="765.0" width="550" height="205.0" as="geometry" />
+</mxCell>
+        <mxCell id="3017063977648" style="shape=link;edgeStyle=elbowEdgeStyle;rounded=1;jettySize=auto;endSize=40;startSize=40;" edge="1" parent="1" source="3017063976976" target="3017063920176" value="127.0.0.1">
+  <mxGeometry x="-1" y="-15" relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="3017063978272" value="web&lt;br/&gt;2001::1111&lt;br/&gt;Windows 10&lt;br/&gt;IIS" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Windows_logo_-_2012_%28dark_blue%29.svg/250px-Windows_logo_-_2012_%28dark_blue%29.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063978128">
+  <mxGeometry x="50" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063978368" value="dc&lt;br/&gt;2001::2222&lt;br/&gt;Windows Server 2016&lt;br/&gt;Active Directory" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Windows_logo_-_2021.svg/960px-Windows_logo_-_2021.svg.png?20220927154043;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063978128">
+  <mxGeometry x="175" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063978464" value="lamp&lt;br/&gt;2001::3333&lt;br/&gt;Ubuntu 22.04&lt;br/&gt;MySQL, Apache2" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/UbuntuCoF.svg/1200px-UbuntuCoF.svg.png;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063978128">
+  <mxGeometry x="300" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063978560" value="teleport&lt;br/&gt;2001::4444&lt;br/&gt;Rocky Linux&lt;br/&gt;Teleport" style="whiteSpace=nowrap;rounded=0;dashed=0;shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;html=1;image=https://upload.wikimedia.org/wikipedia/commons/7/77/Rocky_Linux_logo.svg;fontFamily=Helvetica;fontSize=10;fontColor=#000000;labelPosition=center;align=center;horizontal=1;" vertex="1" parent="3017063978128">
+  <mxGeometry x="425" y="50.0" width="75" height="75" as="geometry" />
+</mxCell>
+        <mxCell id="3017063978128" value="2001::/64" style="whiteSpace=wrap;rounded=0;fillColor=#F0F9F4;strokeColor=#2D8A5B;dashed=0;html=1;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;verticalAlign=top;align=left;spacingLeft=30;fontColor=#144D3E;" vertex="1" parent="1">
+  <mxGeometry x="950" y="1020.0" width="550" height="205.0" as="geometry" />
+</mxCell>
+        <mxCell id="3017063978800" style="shape=link;edgeStyle=elbowEdgeStyle;rounded=1;jettySize=auto;endSize=40;startSize=40;" edge="1" parent="1" source="3017063978128" target="3017063920176" value="127.0.0.1">
+  <mxGeometry x="-1" y="-15" relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="3017063979376" style="shape=link;edgeStyle=elbowEdgeStyle;rounded=1;jettySize=auto;endSize=30;startSize=30;" edge="1" parent="1" source="3017063920032" target="3017063920176">
+  <mxGeometry relative="1" as="geometry" />
 </mxCell>
       </root>
     </mxGraphModel>
