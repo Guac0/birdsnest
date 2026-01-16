@@ -1,4 +1,5 @@
 import drawpyo
+#import drawpyo_utils
 import csv
 import ipaddress
 import os
@@ -33,24 +34,25 @@ def parse_csv(file="input.csv"):
     with open(file, 'r') as file:
         reader = csv.reader(file, delimiter=',')
         # Parse each line and print or process the fields
-        rowindex = 0
+        rowindex = 1
         for row in reader:
             # Ensure the row has the correct number of fields
             #print(f"len(row): {len(row)}, len(headers): {len(headers)}")
-            if len(row) < len(headers):
-                raise ValueError("Provided input file does not have enough rows!")
-            if rowindex == 0:
-                for i in range(0,len(headers)):
-                    condition=False
-                    for match in headers_matches[i]:
-                        if match in row[i].lower():
-                            condition = True
-                    if not condition:
-                        print(f"Column {i} fails soft validity check, are you sure that your columns are set up correctly? Expected value relating to {headers[i]}")
-            else:
-                # Create a dictionary for easier field access (optional)
-                entry = dict(zip(headers, row[:5]))
-                hosts.append(entry)
+            if len(row) != 0:
+                if len(row) < len(headers):
+                    raise ValueError(f"Provided input file does not have enough columns on row {rowindex}!")
+                if rowindex == 1:
+                    for i in range(0,len(headers)):
+                        condition=False
+                        for match in headers_matches[i]:
+                            if match in row[i].lower():
+                                condition = True
+                        if not condition:
+                            print(f"Column {i} fails soft validity check, are you sure that your columns are set up correctly? Expected value relating to {headers[i]}")
+                else:
+                    # Create a dictionary for easier field access (optional)
+                    entry = dict(zip(headers, row[:5]))
+                    hosts.append(entry)
             rowindex += 1
     hosts.sort(key=sort_ip)
     return hosts
@@ -58,7 +60,10 @@ def parse_csv(file="input.csv"):
 def get_os_string(full_os_str):
     full_os_str = full_os_str.lower()
     if "internet" in full_os_str:
-        return "https://symbols.getvecta.com/stencil_62/4_cloud.377dbc86e9.jpg"
+        #return "https://symbols.getvecta.com/stencil_62/4_cloud.377dbc86e9.jpg"
+        #return "https://cdn-icons-png.freepik.com/256/6767/6767238.png?semt=ais_white_label" #lines
+        #return "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS6Lu2YFMt90ZOe8MeBYiVhvE1VCi7xYQdY1g&s"
+        return "https://static.wikia.nocookie.net/cloudss/images/9/94/The_Clouds_Wiki_Icon.png"
     if "router" in full_os_str:
         return "https://symbols.getvecta.com/stencil_240/204_router.7b208c1133.png"
     if "windows server" in full_os_str:
@@ -81,7 +86,9 @@ def get_os_string(full_os_str):
         # text:
         #return "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/New_Logo_Alpine_Linux.svg/640px-New_Logo_Alpine_Linux.svg.png"
         # no text:
-        return "https://upload.wikimedia.org/wikipedia/commons/2/2c/Alpine_Linux_logo.png?20150706141851"
+        #return "https://upload.wikimedia.org/wikipedia/commons/2/2c/Alpine_Linux_logo.png?20150706141851"
+        # transparent:
+        return "https://distrosea.com/distro-icons/alpine.svg"
     if "rocky" in full_os_str:
         # text:
         #return "https://samba.plus/fileadmin/_processed_/0/8/csm_Rocky_Linux_97c0115185.png"
@@ -107,21 +114,23 @@ def get_os_string(full_os_str):
 
 def draw_main(hosts,file_path,file_name,max_host_per_row = 4):
     # Draw Setup
-    custom_library = drawpyo.diagram.import_shape_database(
-        file_name='os.toml'
-    )
+    #custom_library = drawpyo.diagram.import_shape_database(
+    #    file_name='os.toml'
+    #)
     file = drawpyo.File()
     file.file_path = file_path
     file.file_name = file_name
-    page = drawpyo.Page(
-        file=file#,
+    page = drawpyo.Page("""file=file""")
         #width=100, # will auto expand
         #height=100
-    )
+    #)
+    page.grid = 0
+    #page.page_view = 0 # doesnt work
+    page.background = "#ffffff"
 
     text = drawpyo.diagram.text_format.TextFormat(
         fontColor='#000000',
-        fontFamily='Helvetica',
+        fontFamily='Helvetica', # go to helvetica, spiderman!
         fontSize=10,
         align='center',
         direction='horizontal',
@@ -133,7 +142,7 @@ def draw_main(hosts,file_path,file_name,max_host_per_row = 4):
     texttitle = drawpyo.diagram.text_format.TextFormat(
         fontColor='#000000',
         fontFamily='Helvetica',
-        fontSize=20,
+        fontSize=16,
         align='center',
         direction='horizontal',
         labelPosition='center',
@@ -141,6 +150,28 @@ def draw_main(hosts,file_path,file_name,max_host_per_row = 4):
         # labelBackgroundColor='#ff2d00',
         #verticalAlign='bottom',
         #spacingBottom=-15
+    )
+    textrouter = drawpyo.diagram.text_format.TextFormat(
+        fontColor='#000000',
+        fontFamily='Helvetica',
+        fontSize=10,
+        align='center',
+        direction='horizontal',
+        labelPosition='center',
+        # labelBackgroundColor='#ff2d00',
+        verticalAlign='bottom',
+        spacingBottom=45
+    )
+    textinternet = drawpyo.diagram.text_format.TextFormat(
+        fontColor='#000000',
+        fontFamily='Helvetica',
+        fontSize=10,
+        align='center',
+        direction='horizontal',
+        labelPosition='center',
+        # labelBackgroundColor='#ff2d00',
+        verticalAlign='bottom',
+        spacingBottom=60
     )
 
     # Organize the data
@@ -169,60 +200,68 @@ def draw_main(hosts,file_path,file_name,max_host_per_row = 4):
 
     #full_style = ";".join(style_tags) + ";"
     parent_container_width = (50*2)+((host_spacing)*max_host_per_row)
-    textobj = drawpyo.diagram.object_from_library(
-        library=custom_library,
-        obj_name="none",
+    textobj = drawpyo.diagram.Object(
         text_format=texttitle,
         value=f'Company<br/>Location<br/>FQDN',
         page=page,
         width=image_size,
         height=image_size,
-        position=(parent_container_width+center_spacing,35),
+        position=(parent_container_width+center_spacing,20),
         html=1,
         whiteSpace="nowrap",
         image=""
     )
-    router = drawpyo.diagram.object_from_library(
-        library=custom_library,
-        obj_name="none",
-        text_format=text,
+    text_style = (
+        "text;"
+        "html=1;"
+        "strokeColor=none;"
+        "fillColor=none;"
+        #"align=center;"
+        #"verticalAlign=middle;"
+        "whiteSpace=nowrap;"
+    )
+    textobj.apply_style_string(text_style)
+    textobj.text_format = texttitle
+    router = drawpyo.diagram.Object(
         value=f'Router<br/>127.0.0.1<br/>PfSense',
         page=page,
         width=image_size,
         height=image_size,
-        position=(parent_container_width+center_spacing,150),
-        shape="image",
-        verticalLabelPosition="bottom",
-        verticalAlign="top",
-        imageAspect=0,
-        aspect="fixed",
-        html=1,
-        whiteSpace="nowrap",
-        #f"image={clean_b64}"
-        image=get_os_string("router")
+        position=(parent_container_width+center_spacing,143)
     )
-    internet = drawpyo.diagram.object_from_library(
-        library=custom_library,
-        obj_name="none",
-        text_format=text,
-        value=f'Internet',
+    router.text_format = textrouter
+    stylestring = (
+        "shape=image;"
+        "verticalLabelPosition=bottom;"
+        "verticalAlign=top;"
+        "imageAspect=0;"
+        "aspect=fixed;"
+        "html=1;"
+        "whiteSpace=nowrap;"
+        f"image={get_os_string('router')};"
+    )
+    router.apply_style_string(stylestring)
+    internet = drawpyo.diagram.Object(
+        value=f'Public Internet',
         page=page,
         width=image_size,
         height=image_size,
-        position=(parent_container_width+center_spacing,300),
-        shape="image",
-        verticalLabelPosition="bottom",
-        verticalAlign="top",
-        imageAspect=0,
-        aspect="fixed",
-        html=1,
-        whiteSpace="nowrap",
-        #f"image={clean_b64}"
-        image=get_os_string("internet")
+        position=(parent_container_width+center_spacing,330)
     )
+    stylestring = (
+        "shape=image;"
+        "verticalLabelPosition=bottom;"
+        "verticalAlign=top;"
+        "imageAspect=0;"
+        "aspect=fixed;"
+        "html=1;"
+        "whiteSpace=nowrap;"
+        f"image={get_os_string('internet')};"
+    )
+    internet.apply_style_string(stylestring)
+    internet.text_format = textinternet
     drawnSubnets = []
     num_subnets = len(subnets)
-    use_two_columns = num_subnets > 2
     col_y_starts = [0, 0]
 
     total_rows = 0
@@ -235,6 +274,8 @@ def draw_main(hosts,file_path,file_name,max_host_per_row = 4):
     half_rows = total_rows / 2
     cumulative_rows = 0
     split_index = 0
+    #use_two_columns = num_subnets > 2
+    use_two_columns = total_rows > 3
 
     # Find the index where we cross the 50% threshold
     for i, count in enumerate(row_counts):
@@ -249,24 +290,24 @@ def draw_main(hosts,file_path,file_name,max_host_per_row = 4):
         #print(subnet)
         drawnHosts = []
         for host in subnets[subnet]:
-            item = drawpyo.diagram.object_from_library(
-                library=custom_library,
-                #obj_name=get_os_string(host["os"]),
-                obj_name="none",
-                text_format=text,
+            item = drawpyo.diagram.Object(
                 value=f'{host["hostname"]}<br/>{host["ip"]}<br/>{host["os"]}<br/>{host["services"]}', #\n for new line
                 page=page,
                 width=image_size,
-                height=image_size,
-                shape="image",
-                verticalLabelPosition="bottom",
-                verticalAlign="top",
-                imageAspect=0,
-                aspect="fixed",
-                html=1,
-                whiteSpace="nowrap",
-                image=get_os_string(host["os"])
+                height=image_size
             )
+            stylestring = (
+                "shape=image;"
+                "verticalLabelPosition=bottom;"
+                "verticalAlign=top;"
+                "imageAspect=0;"
+                "aspect=fixed;"
+                "html=1;"
+                "whiteSpace=nowrap;"
+                f"image={get_os_string(host["os"])};"
+            )
+            item.apply_style_string(stylestring)
+            item.text_format = text
             drawnHosts.append(item)
 
         # must create parent container after icons in order to preserve position
@@ -334,6 +375,7 @@ def draw_main(hosts,file_path,file_name,max_host_per_row = 4):
         endSize=30,
         startSize=30,
         rounded=True,
+        targetPerimeterSpacing=33,
         waypoints="vertical", #orthogonal
         connection="link" #line
     )
