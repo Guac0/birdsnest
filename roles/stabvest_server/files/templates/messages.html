@@ -28,6 +28,7 @@ p.lead{margin:0;color:var(--muted);font-size:13px}
 
 .card{background:var(--card);border-radius:12px;padding:14px;border:1px solid var(--border);box-shadow:0 6px 20px rgba(10,15,25,0.6)}
 
+/* AGGRESSIVE SHRINK: table set to 1px to force content-based collapse */
 table{width:1px; min-width:100%; border-collapse:collapse; font-size:13px; table-layout: fixed;}
 thead th{position:sticky;top:0;background:linear-gradient(180deg, rgba(12,20,30,0.95), rgba(12,20,30,0.9));backdrop-filter:blur(4px);z-index:2;padding:8px 10px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
 thead th .col-head{display:flex;align-items:center;gap:8px; overflow: hidden;}
@@ -41,7 +42,8 @@ thead th .col-head{display:flex;align-items:center;gap:8px; overflow: hidden;}
 }
 .resizer:hover { background: var(--accent); }
 
-tbody td{padding:10px;border-bottom:1px solid rgba(255,255,255,0.02);vertical-align:middle;color:var(--text); overflow: hidden; text-overflow: ellipsis;}
+/* width: 1% forces cells to shrink to specified pixel widths, except for 'message' */
+tbody td{padding:10px;border-bottom:1px solid rgba(255,255,255,0.02);vertical-align:middle;color:var(--text); overflow: hidden; text-overflow: ellipsis; width: 1%;}
 tbody tr:hover{background:var(--row-hover)}
 
 .col-filter input{width:100%;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);background:rgba(255,255,255,0.02);color:var(--text); box-sizing: border-box;}
@@ -128,23 +130,36 @@ function deriveColumns(data){
   return Array.from(keys);
 }
 
-// QoL: Calculate ideal widths based on data density
+// AGGRESSIVE SHRINK LOGIC
 function calculateWidths(colKey = null) {
   const rows = Object.values(messagesData);
   const targetCols = colKey ? [colKey] : columns;
 
   targetCols.forEach(col => {
+    const colName = col.toLowerCase();
+    
+    // CASE: message column takes all remaining space
+    if (colName === 'message') {
+      columnWidths[col] = 'auto';
+      return;
+    }
+
+    // CASE: message_id column only fits title
+    if ((colName === 'message_id') || (colName === 'agent_id')) {
+      columnWidths[col] = Math.ceil(col.length * 8.2) + 10;
+      return;
+    }
+
+    // CASE: all other columns aggressive shrink to data
     let maxLength = col.length; 
     rows.forEach(rec => {
-      let val = rec[col];
+      let val = ((col === 'message_id') || (col === 'agent_id')) ? Object.keys(messagesData).find(key => messagesData[key] === rec) : rec[col];
       if (/time|timestamp/i.test(col) && val) val = formatTime(val);
       const len = String(val ?? '').length;
       if (len > maxLength) maxLength = len;
     });
 
-    let targetWidth = (maxLength * 8.5) + 35; // Character multiplier + padding/icons
-    if (col.toLowerCase() === 'message') targetWidth = Math.min(targetWidth, 450);
-    columnWidths[col] = Math.max(targetWidth, 60);
+    columnWidths[col] = Math.ceil(maxLength * 7) + 10;
   });
 }
 
@@ -155,7 +170,6 @@ async function fetchMessages(){
     await verifyClientContext();
     columns = deriveColumns(messagesData);
     
-    // Initial best-fit calculation
     if (Object.keys(columnWidths).length === 0) calculateWidths();
     
     renderTable();
@@ -169,8 +183,10 @@ function showToast(){toastEl.classList.add('show');setTimeout(()=>toastEl.classL
 function renderTable(){
   let thead = '<thead><tr>' + columns.map(k => {
     const sortMark = (sortState.key===k)?(sortState.dir===1?'▲':'▼'):'';
-    const width = columnWidths[k] ? `style="width:${columnWidths[k]}px"` : '';
-    return `<th class="sortable" data-key="${escapeHtml(k)}" ${width}>
+    const widthVal = columnWidths[k];
+    const widthAttr = widthVal === 'auto' ? '' : `style="width:${widthVal}px"`;
+    
+    return `<th class="sortable" data-key="${escapeHtml(k)}" ${widthAttr}>
               <div class="col-head"><span>${escapeHtml(k)}</span><span class="sort-ind">${sortMark}</span></div>
               <div class="resizer"></div>
             </th>`;
@@ -182,7 +198,6 @@ function renderTable(){
   const tbodyRows = buildFilteredSortedRows();
   tableEl.innerHTML = thead + '<tbody>' + tbodyRows.map(r => r.html).join('') + '</tbody>';
 
-  // Listeners
   tableEl.querySelectorAll('th.sortable').forEach(th => {
     th.addEventListener('click', e => { if(!e.target.classList.contains('resizer')) toggleSort(th.getAttribute('data-key')); });
   });
@@ -216,7 +231,10 @@ function buildRowHtml(rec){
     let v = rec[k];
     if(/time|timestamp/i.test(k) && v) v = formatTime(v);
     let content = typeof v === 'boolean' ? (v ? `<span class="bool-dark">True</span>` : `<span class="false-red">False</span>`) : escapeHtml(String(v ?? ''));
-    const wrapStyle = (k.toLowerCase() === 'message') ? 'style="white-space:normal; overflow-wrap:anywhere;"' : 'style="white-space:nowrap;"';
+    
+    // Fixed: Only 'message' column gets auto width, others use 1% to force pixel width compliance
+    const isMessage = k.toLowerCase() === 'message';
+    const wrapStyle = isMessage ? 'style="white-space:normal; overflow-wrap:anywhere; width:auto;"' : 'style="white-space:nowrap; width:1%;"';
     return `<td ${wrapStyle}>${content}</td>`;
   });
   return `<tr>${cells.join('')}</tr>`;
@@ -247,14 +265,17 @@ function toggleSort(key){ sortState.key === key ? sortState.dir *= -1 : (sortSta
 function recordMatchesFilters(record){ return Object.entries(filters).every(([k,v]) => !v || String(record[k]??'').toLowerCase().includes(v.toLowerCase())); }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
 
-// Resize & Auto-fit Logic
 tableEl.addEventListener('mousedown', e => {
   if (!e.target.classList.contains('resizer')) return;
   const th = e.target.parentElement;
   const key = th.getAttribute('data-key');
   const startX = e.pageX;
   const startWidth = th.offsetWidth;
-  const move = (ev) => { columnWidths[key] = Math.max(startWidth + (ev.pageX - startX), 50); th.style.width = columnWidths[key] + 'px'; };
+  const move = (ev) => { 
+    const newW = Math.max(startWidth + (ev.pageX - startX), 30);
+    columnWidths[key] = newW; 
+    th.style.width = newW + 'px'; 
+  };
   const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
   document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
 });
