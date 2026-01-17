@@ -386,15 +386,34 @@ def run_git(args, cwd):
     )
     return result
 
-def setup_git_agent(repo_dir,systemInfo=get_system_details()):
+def setup_git_agent(repo_dir,protected_folder,systemInfo=get_system_details()):
+    # TODO allow multiple folders
     """Initializes git config for the agent session."""
 
     try:
         if not os.path.exists(repo_dir):
-            run_git(["clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git"],repo_dir)
+            run_git(["clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git"],os.path.dirname(Path(__file__).resolve()))
         
         run_git(["config", "user.name", "Agent"],repo_dir)
         run_git(["config", "user.email", f"agent@{systemInfo["hostname"]}.local"],repo_dir)
+
+        # create good branch
+        run_git(["checkout", "-b", "good"], cwd=repo_dir)
+        sync_protected_to_repo(repo_dir, protected_folder)
+        run_git(["add", "."], cwd=repo_dir)
+        run_git(["commit", "-m", "Initial commit: Good state"], cwd=repo_dir)
+        run_git(["push", "-u", "origin", "good"], cwd=repo_dir)
+
+        # create bad branch
+        run_git(["checkout", "-b", "bad"], cwd=repo_dir)
+        sync_protected_to_repo(repo_dir, protected_folder)
+        run_git(["add", "."], cwd=repo_dir)
+        run_git(["commit", "-m", "Second commit: Bad state"], cwd=repo_dir)
+        run_git(["push", "-u", "origin", "bad"], cwd=repo_dir)
+
+        # Switch back to good as the default working state
+        run_git(["checkout", "good"], cwd=repo_dir)
+
         return True
     except Exception as E:
         print_debug(f"Critical error when running setup_git_agent: {E}")
@@ -564,7 +583,7 @@ def get_pause_state_server(systemInfo=get_system_details()):
             if response.getcode() == 200:
                 response_body = response.read().decode("utf-8")
                 #result = json.loads(response_body)
-                timeInt = int(response_body)
+                timeInt = float(response_body)
                 print_debug(f"get_pause_state_server(): sent msg to server with response {response_body}")
                 return timeInt
             else:
@@ -1926,7 +1945,7 @@ def firewall_policy_audit_linux(direction):
 
     # 3. Parse the policy
     # Expected output format: -P INPUT ACCEPT [0:0] or -P INPUT DROP [0:0]
-    policy_regex = re.compile(fr"^-P\s+{chain}\s+(?P<action>ACCEPT|DROP|REJECT)\s+\[\d+:\d+\]")
+    policy_regex = re.compile(fr"^-P\s+{chain}\s+(?P<action>ACCEPT|DROP|REJECT)(?:\s+\[\d+:\d+\])?")
     
     match = policy_regex.search(output)
     
@@ -3484,7 +3503,7 @@ def main(stop_event=None):
 
     send_message(True,True,f"Register")
     
-    setup_git_agent(repo_url)
+    setup_git_agent(repo_dir,PROTECTED_FOLDERS[0]) # todo works for multiple folders
 
     #test_main()
     #return
