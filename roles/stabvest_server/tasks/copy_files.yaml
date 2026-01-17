@@ -51,8 +51,8 @@
 
 - name: Create venv and install requirements
   ansible.builtin.pip:
-    requirements: "{{ ['{{ stabvest_deploy_dir }}', 'requirements.txt'] | path_join }}"
-    virtualenv: "{{ ['{{ stabvest_deploy_dir }}', 'venv'] | path_join }}"
+    requirements: "{{ [stabvest_deploy_dir, 'requirements.txt'] | path_join }}"
+    virtualenv: "{{ [stabvest_deploy_dir, 'venv'] | path_join }}"
     virtualenv_command: "{{ (ansible_os_family == 'Windows') | ternary('python -m venv', 'python3 -m venv') }}"
     state: present
   vars:
