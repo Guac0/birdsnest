@@ -34,6 +34,24 @@
     mode: '0755'
   when: ansible_facts.os_family != "Windows"
 
+- name: Copy web files to target 1
+  copy:
+    src: "files/templates"
+    dest: "{{ stabvest_deploy_dir }}/templates"
+    owner: root
+    group: root
+    mode: '0755'
+  when: ansible_facts.os_family != "Windows"
+
+- name: Copy web files to target 2
+  copy:
+    src: "files/static"
+    dest: "{{ stabvest_deploy_dir }}/templates"
+    owner: root
+    group: root
+    mode: '0755'
+  when: ansible_facts.os_family != "Windows"
+  
 - name: Copy requirements to target
   win_copy:
     src: "files/requirements.txt"
