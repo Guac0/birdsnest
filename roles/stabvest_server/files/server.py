@@ -2529,18 +2529,21 @@ if __name__ == "__main__":
 
     # Test data
     with app.app_context():
-        add_test_data_agents(5)
-        add_test_data_messages(10)
-        add_test_data_incidents_custom(5)
-        add_test_data_incidents(10)
+        #add_test_data_agents(5)
+        #add_test_data_messages(10)
+        #add_test_data_incidents_custom(5)
+        #add_test_data_incidents(10)
         #add_test_data_comp(0)
         #add_test_data_cmds()
 
-        new_ansiblevars = AnsibleVars(
-                id="main"
-            )
-        db.session.add(new_ansiblevars)
-        db.session.commit()
+        existing_vars = db.session.get(AnsibleVars,"main")
+        if not existing_vars:
+            new_ansiblevars = AnsibleVars(id="main")
+            db.session.add(new_ansiblevars)
+            db.session.commit()
+            logger.info("Initialized default AnsibleVars.")
+        else:
+            logger.info("AnsibleVars 'main' already exists, skipping initialization.")
 
     # Start main app. Do not put any code below this line
-    app.run(host=HOST, port=PORT, ssl_context='adhoc')
+    app.run(host=HOST, port=PORT, ssl_context='adhoc', use_reloader=True)
