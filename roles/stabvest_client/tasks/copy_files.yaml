@@ -55,15 +55,15 @@
   ansible.builtin.pip:
     requirements: "{{ [stabvest_deploy_dir, 'requirements.txt'] | path_join }}"
     virtualenv: "{{ [stabvest_deploy_dir, 'venv'] | path_join }}"
-    virtualenv_command: "{{ (ansible_os_family == 'Windows') | ternary('python -m venv --with-pip', 'python3 -m venv --with-pip') }}"
+    virtualenv_command: "{{ (ansible_os_family == 'Windows') | ternary('python -m venv', 'python3 -m venv') }}"
     state: present
   vars:
-    base_dir: "{{ (ansible_facts.os_family == 'Windows') | ternary(stabvest_deploy_dir_win, stabvest_deploy_dir_unix) }}"
+    base_dir: "{{ (ansible_facts.os_family == 'Windows') | ternary('python -m venv --with-pip', 'python3 -m venv --with-pip') }}"
 
 - name: Copy agent executable to target
   copy:
     src: "files/{{ stabvest_agent_executable }}"
-    dest: "{{ stabvest_deploy_dir }}/{{ stabvest_tester_executable }}
+    dest: "{{ stabvest_deploy_dir }}/{{ stabvest_tester_executable }}"
     owner: root
     group: root
     mode: '0755'
@@ -72,7 +72,7 @@
 - name: Copy tester executable to target
   copy:
     src: "files/{{ stabvest_tester_executable }}"
-    dest: "{{ stabvest_deploy_dir }}/{{ stabvest_tester_executable }}
+    dest: "{{ stabvest_deploy_dir }}/{{ stabvest_tester_executable }}"
     owner: root
     group: root
     mode: '0755'

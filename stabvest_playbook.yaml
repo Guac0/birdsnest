@@ -1,5 +1,5 @@
 ---
-# ansible stabvest_playbook.yaml -i inventory.yaml -t stabvest_server -vv
+# ansible-playbook stabvest_playbook.yaml -i inventory.yaml -t stabvest_server -vv
 - name: Deploy Stabvest Server
   hosts: ansible-controller
   roles:
