@@ -18,9 +18,9 @@
     "SERVICES": ["AxInstSV"],
     "PACKAGES": [""],
     "SERVICE_BACKUPS": {
-        "PathName": "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup",
+        "PathName": "C:\\\\Windows\\\\system32\\\\svchost.exe -k AxInstSVGroup",
         "StartName": "LocalSystem",
-        "Dependencies": null,
+        "Dependencies": [],
         "DisplayName": "ActiveX Installer (AxInstSV)",
         "StartType": "Manual"
     },

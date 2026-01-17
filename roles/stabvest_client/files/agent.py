@@ -17,6 +17,7 @@ import ssl
 import shutil
 import base64
 from pathlib import Path
+import ast
 #import winreg
 #import win32serviceutil
 #import win32service
@@ -2793,6 +2794,9 @@ def service_integrity_linux(service_name, backupDict):
     expected_exec_start = backupDict.get("ExecStart", "").strip()
     expected_user = backupDict.get("User", "").strip()
     # Normalize expected dependencies
+    expected_dependencies = backupDict.get("Dependencies", [])
+    if isinstance(expected_dependencies, str):
+        expected_dependencies = ast.literal_eval(expected_dependencies)
     expected_dependencies = sorted([d.lower() for d in backupDict.get("Dependencies", [])])
     
     
