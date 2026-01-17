@@ -1805,41 +1805,63 @@ def git_backend(repo_name, git_path):
         'REMOTE_ADDR': request.remote_addr,
     }
 
-    process = subprocess.Popen(
-        [GIT_BACKEND],
-        env=env,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
+    try:
+        # 1. Attempt to run the Git binary
+        process = subprocess.Popen(
+            [GIT_BACKEND],
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
 
-    stdout, stderr = process.communicate(input=request.data)
+        stdout, stderr = process.communicate(input=request.data)
 
-    # Parse headers and status from the CGI output
-    header_end = stdout.find(b'\r\n\r\n')
-    sep_len = 4
-    if header_end == -1:
-        header_end = stdout.find(b'\n\n')
-        sep_len = 2
+        # 2. Check if the binary itself crashed
+        if process.returncode != 0:
+            logger.error(f"GIT_BACKEND error (RC {process.returncode}): {stderr.decode('utf-8', 'ignore')}")
+            return "Internal Server Error: Git Backend Failed", 500
 
-    header_section = stdout[:header_end].decode('utf-8')
-    response_body = stdout[header_end + sep_len:]
+        # 3. Attempt to parse headers
+        header_end = stdout.find(b'\r\n\r\n')
+        sep_len = 4
+        if header_end == -1:
+            header_end = stdout.find(b'\n\n')
+            sep_len = 2
 
-    headers_dict = {}
-    status_code = 200
-    for line in header_section.splitlines():
-        if ':' in line:
-            key, value = line.split(':', 1)
-            k = key.strip().lower()
-            v = value.strip()
-            if k == 'status':
-                try: status_code = int(v.split(' ')[0])
-                except: pass
-            else:
-                headers_dict[key.strip()] = v
+        if header_end == -1:
+            logger.error(f"CGI Header Parse Error: No header separator found in binary output. Raw output start: {stdout[:50]}")
+            return "Internal Server Error: Invalid CGI Response", 500
 
-    # Returning the tuple (body, status, headers) fixes the Smart HTTP handshake
-    return response_body, status_code, headers_dict
+        header_section = stdout[:header_end].decode('utf-8')
+        response_body = stdout[header_end + sep_len:]
+
+        headers_dict = {}
+        status_code = 200
+        for line in header_section.splitlines():
+            if ':' in line:
+                key, value = line.split(':', 1)
+                k = key.strip().lower()
+                v = value.strip()
+                if k == 'status':
+                    try:
+                        status_code = int(v.split(' ')[0])
+                    except ValueError:
+                        logger.error(f"Malformed Status header: {v}")
+                else:
+                    headers_dict[key.strip()] = v
+
+        return response_body, status_code, headers_dict
+
+    except FileNotFoundError:
+        logger.error(f"GIT_BACKEND binary not found at: {GIT_BACKEND}")
+        return "Internal Server Error: Backend Binary Missing", 500
+    except PermissionError:
+        logger.error(f"Permission denied when executing GIT_BACKEND: {GIT_BACKEND}")
+        return "Internal Server Error: Backend Permission Denied", 500
+    except Exception as e:
+        logger.error(f"Unexpected error in git_backend: {str(e)}")
+        return "Internal Server Error", 500
 
 # === FRONTEND DISPLAY ===
 
