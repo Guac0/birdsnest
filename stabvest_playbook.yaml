@@ -1,6 +1,7 @@
 ---
+# ansible stabvest_playbook.yaml -i inventory.yaml -t stabvest_server -vv
 - name: Deploy Stabvest Server
-  hosts: host1
+  hosts: ansible-controller
   roles:
     - stabvest_server
   tags:
@@ -8,7 +9,8 @@
     - stabvest_server
 
 - name: Deploy Stabvest Client
-  hosts: host2
+  hosts: iis-winserv22
+  #hosts: testing-ubu24
   roles:
     - stabvest_client
   tags:

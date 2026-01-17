@@ -1,5 +1,5 @@
 ---
-stabvest_deploy_dir: "C:\\stabvest_server"
+stabvest_deploy_dir: "/stabvest_server"
 #stabvest_deploy_dir_win: "C:\\stabvest_server"
 #stabvest_deploy_dir_unix: "/stabvest_server"
 stabvest_task_create: true
