@@ -115,6 +115,8 @@ SERVICES = CONFIG["SERVICES"]
 PACKAGES = CONFIG["PACKAGES"]
 SERVICE_BACKUPS = CONFIG["SERVICE_BACKUPS"]
 PROTECTED_FOLDERS = CONFIG["PROTECTED_FOLDERS"]
+if isinstance(PROTECTED_FOLDERS, str):
+    expected_dependencies = ast.literal_eval(PROTECTED_FOLDERS)
 
 PAUSED = False
 LASTPAUSETIME = int(time.time())
@@ -3341,6 +3343,14 @@ class MyService(win32serviceutil.ServiceFramework):
 #region##################
 
 def init_int_vars(interface=interface_get_primary()):
+    system = platform.system()
+
+    if system == "Windows":
+        return init_int_vars_windows(interface)
+    else:
+        return init_int_vars_linux(interface)
+    
+def init_int_vars_windows(interface=interface_get_primary()):
     """
     Reads the current IPv4 address, prefix, and gateway for the interface.
     """
@@ -3398,6 +3408,47 @@ def init_int_vars(interface=interface_get_primary()):
         gateway = None
 
     print_debug(f"init_int_vars({interface}): {ip_address} {prefix} {gateway}")
+    return ip_address, prefix, gateway
+
+def init_int_vars_linux(interface):
+    """
+    Linux version: Reads current IPv4 address, prefix, and gateway for the interface.
+    Uses 'ip -j' to parse JSON directly.
+    """
+    ip_address = None
+    prefix = None
+    gateway = None
+
+    # 1. Get IP Address and Prefix
+    try:
+        # 'ip -j addr show' returns a list of dictionaries for each interface
+        cmd = ["ip", "-j", "addr", "show", interface]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        addr_data = json.loads(result.stdout)
+
+        if addr_data:
+            # Filter for IPv4 (inet) addresses
+            ipv4_infos = [addr for addr in addr_data[0].get("addr_info", []) if addr.get("family") == "inet"]
+            if ipv4_infos:
+                ip_address = ipv4_infos[0].get("local")
+                prefix = ipv4_infos[0].get("prefixlen")
+    except (subprocess.CalledProcessError, json.JSONDecodeError, IndexError) as e:
+        print_debug(f"init_int_vars_linux({interface}): Failed to query IP address. Error: {e}")
+
+    # 2. Get Default Gateway
+    try:
+        # 'ip -j route show default' shows the default gateway route
+        cmd = ["ip", "-j", "route", "show", "default", "dev", interface]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        route_data = json.loads(result.stdout)
+
+        if route_data:
+            # The gateway is the 'gateway' or 'via' field
+            gateway = route_data[0].get("gateway")
+    except (subprocess.CalledProcessError, json.JSONDecodeError, IndexError) as e:
+        print_debug(f"init_int_vars_linux({interface}): Failed to query gateway. Error: {e}")
+
+    print_debug(f"init_int_vars_linux({interface}): {ip_address} {prefix} {gateway}")
     return ip_address, prefix, gateway
 
 def test_network():

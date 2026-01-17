@@ -20,9 +20,9 @@
     "SERVICE_BACKUPS": {
         "PathName": "{{ stabvest_service_backups.PathName }}",
         "StartName": "{{ stabvest_service_backups.StartName }}",
-        "Dependencies": {{ stabvest_service_backups.Dependencies | default('null') }},
+        "Dependencies": "{{ stabvest_service_backups.Dependencies | default('[]') }}",
         "DisplayName": "{{ stabvest_service_backups.DisplayName }}",
         "StartType": "{{ stabvest_service_backups.StartType }}"
     },
-    "PROTECTED_FOLDERS": {{ stabvest_protected_folders }}
+    "PROTECTED_FOLDERS": "{{ stabvest_protected_folders }}"
 }
