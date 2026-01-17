@@ -61,6 +61,7 @@ stabvest_service_backups:
 #  Dependencies: null
 #  DisplayName: "ActiveX Installer (AxInstSV)"
 #  StartType: "Manual"
-stabvest_protected_folders: ["/var/www"]
-
-stabvest_deploy_dir: "/stabvest/{{ stabvest_agent_name }}/"
+#stabvest_protected_folders: ["/var/www"]
+stabvest_protected_folders: ["C:\\inetpub\\wwwroot"]
+stabvest_deploy_dir: "C:\\stabvest\\{{ stabvest_agent_name }}\\"
+#stabvest_deploy_dir: "/stabvest/{{ stabvest_agent_name }}/"
