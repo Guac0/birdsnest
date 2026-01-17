@@ -116,10 +116,9 @@ PACKAGES = CONFIG["PACKAGES"]
 SERVICE_BACKUPS = CONFIG["SERVICE_BACKUPS"]
 PROTECTED_FOLDERS = CONFIG["PROTECTED_FOLDERS"]
 if isinstance(PROTECTED_FOLDERS, str):
-    expected_dependencies = ast.literal_eval(PROTECTED_FOLDERS)
+    PROTECTED_FOLDERS = ast.literal_eval(PROTECTED_FOLDERS)
 
 PAUSED = False
-LASTPAUSETIME = int(time.time())
 
 #REGISTRY_HIVE = winreg.HKEY_LOCAL_MACHINE
 #SERVICE_PATH = r"SYSTEM\\CurrentControlSet\\Services\\service_name" #replace with actual service name
@@ -392,7 +391,7 @@ def setup_git_agent(repo_dir,protected_folder,systemInfo=get_system_details()):
 
     try:
         if not os.path.exists(repo_dir):
-            run_git(["clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git"],os.path.dirname(Path(__file__).resolve()))
+            run_git(["clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git",Path(repo_dir).name],os.path.dirname(Path(__file__).resolve()))
         
         run_git(["config", "user.name", "Agent"],repo_dir)
         run_git(["config", "user.email", f"agent@{systemInfo["hostname"]}.local"],repo_dir)
@@ -401,14 +400,14 @@ def setup_git_agent(repo_dir,protected_folder,systemInfo=get_system_details()):
         run_git(["checkout", "-b", "good"], cwd=repo_dir)
         sync_protected_to_repo(repo_dir, protected_folder)
         run_git(["add", "."], cwd=repo_dir)
-        run_git(["commit", "-m", "Initial commit: Good state"], cwd=repo_dir)
+        run_git(["commit", "-m", "initialCommitGood"], cwd=repo_dir)
         run_git(["push", "-u", "origin", "good"], cwd=repo_dir)
 
         # create bad branch
         run_git(["checkout", "-b", "bad"], cwd=repo_dir)
         sync_protected_to_repo(repo_dir, protected_folder)
         run_git(["add", "."], cwd=repo_dir)
-        run_git(["commit", "-m", "Second commit: Bad state"], cwd=repo_dir)
+        run_git(["commit", "-m", "initialCommitBad"], cwd=repo_dir)
         run_git(["push", "-u", "origin", "bad"], cwd=repo_dir)
 
         # Switch back to good as the default working state
@@ -432,43 +431,38 @@ def get_pause_status(file=STATUSFILE):
     """
     Evaluates the contents of STATUSFUL and modifies pause attributes accordingly.
     """
-    global LASTPAUSETIME
     try:
         with open(file,"r+") as f:
             firstline = f.readline().strip()
             if len(firstline) < 1:
                 return False,False,0
             preferServer = firstline == "true"
-            pausedUntilEpoch = f.readline().strip()
-            if pausedUntilEpoch != 0:
+            pausedUntilEpoch = float(f.readline().strip())
+            if round(pausedUntilEpoch) != 0:
                 if pausedUntilEpoch > time.time():
                     # Sleep has not elapsed
                     return preferServer, True, pausedUntilEpoch
                 else:
                     # Sleep has elapsed
                     f.seek(0)
-                    f.write(str(preferServer))
-                    f.write(str(pausedUntilEpoch))
+                    f.write(f"{preferServer}\n{pausedUntilEpoch}")
                     f.truncate()
                     return preferServer, False, 0
             else:
                 return preferServer, False, 0
     except FileNotFoundError:
         with open(file,"w") as f:
-            f.write("false")
-            f.write("0")
+            f.write("false\n0")
         return False, False, 0
     except ValueError:
         # Failed conversion to int
         with open(file,"w") as f:
-            f.write("false")
-            f.write("0")
+            f.write("false\n0")
         return False, False, 0
     except Exception as E:
         print_debug(f"get_pause_status(): unknown error - {E}")
         with open(file,"w") as f:
-            f.write("false")
-            f.write("0")
+            f.write("false\n0")
         return False, False, 0
         
 
@@ -3533,24 +3527,21 @@ def main(stop_event=None):
                 # Server thinks client should be active but doesn't really care
                 if pausePreferServer:
                     with open(STATUSFILE,"w") as f:
-                        f.write("true")
-                        f.write("0")
+                        f.write("true\n0")
                     pausedStatus = False
                     pausedEpochLocal = 0
             else:
                 if pausedEpochServer == 1:
                     # Force resume
                     with open(STATUSFILE,"w") as f:
-                        f.write(str(pausePreferServer))
-                        f.write("0")
+                        f.write(f"{pausePreferServer}\n0")
                     pausedStatus = False
                     pausedEpochLocal = 0
                 else:
                     # Server thinks client should be in a paused state until pausedEpochServer epoch time
                     # This does hold a binding effect as otherwise the server PAUSE function doesnt work
                     with open(STATUSFILE,"w") as f:
-                        f.write(str(pausePreferServer))
-                        f.write(str(pausedEpochServer))
+                        f.write(f"{pausePreferServer}\n{pausedEpochServer}")
                     pausedStatus = True
                     pausedEpochLocal = pausedEpochServer
 
