@@ -23,5 +23,6 @@
         "Dependencies": null,
         "DisplayName": "ActiveX Installer (AxInstSV)",
         "StartType": "Manual"
-    }
+    },
+    "PROTECTED_FOLDERS": ["var/www"]
 }

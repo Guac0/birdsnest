@@ -48,7 +48,8 @@ CONFIG_DEFAULTS = {
     "PORTS": [],
     "SERVICES": [""],
     "PACKAGES": [""],
-    "SERVICE_BACKUPS": {}
+    "SERVICE_BACKUPS": {},
+    "PROTECTED_FOLDERS": []
     #"SERVICE_BACKUPS": {
     #    "PathName": "C:\Windows\System32\svchost.exe -k LocalService",
     #    "StartName": "LocalSystem",
@@ -112,6 +113,7 @@ PORTS = CONFIG["PORTS"]
 SERVICES = CONFIG["SERVICES"]
 PACKAGES = CONFIG["PACKAGES"]
 SERVICE_BACKUPS = CONFIG["SERVICE_BACKUPS"]
+PROTECTED_FOLDERS = CONFIG["PROTECTED_FOLDERS"]
 
 PAUSED = False
 LASTPAUSETIME = int(time.time())
@@ -381,15 +383,15 @@ def run_git(args, cwd):
     )
     return result
 
-def setup_git_agent(REPO_DIR,systemInfo=get_system_details()):
+def setup_git_agent(repo_dir,systemInfo=get_system_details()):
     """Initializes git config for the agent session."""
 
     try:
-        if not os.path.exists(REPO_DIR):
-            run_git(["git", "clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git"],REPO_DIR)
+        if not os.path.exists(repo_dir):
+            run_git(["git", "clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git"],repo_dir)
         
-        run_git(["config", "user.name", "Agent"],REPO_DIR)
-        run_git(["config", "user.email", f"agent@{systemInfo["hostname"]}.local"],REPO_DIR)
+        run_git(["config", "user.name", "Agent"],repo_dir)
+        run_git(["config", "user.email", f"agent@{systemInfo["hostname"]}.local"],repo_dir)
         return True
     except Exception as E:
         print_debug(f"Critical error when running setup_git_agent: {E}")
@@ -2011,28 +2013,31 @@ def firewall_main(protectedPorts):
 ## File Protect Funcs ###
 #region##################
 
-def sync_protected_to_repo(REPO_DIR,PROTECTED_FOLDER):
+
+def sync_protected_to_repo(repo_dir,protected_folder):
     """Copies current protected files into the git directory."""
     # Define destination inside the repo
     # Note: Using os.path.join for cross-platform path compatibility
-    repo_protected_path = os.path.join(REPO_DIR, "protected_files")
-    
-    if os.path.exists(repo_protected_path):
-        shutil.rmtree(repo_protected_path)
-    
-    shutil.copytree(PROTECTED_FOLDER, repo_protected_path)
-    return repo_protected_path
 
-def restore_protected_from_repo(REPO_DIR,PROTECTED_FOLDER):
+    #if os.path.exists(repo_dir):
+    #    shutil.rmtree(repo_dir)
+    
+    shutil.copytree(protected_folder, repo_dir, dirs_exist_ok=True)
+    return repo_dir
+
+def restore_protected_from_repo(repo_dir,protected_folder):
     """Overwrites the protected folder with the 'good' version from the repo."""
-    repo_protected_path = os.path.join(REPO_DIR, "protected_files")
-    
-    if os.path.exists(PROTECTED_FOLDER):
-        shutil.rmtree(PROTECTED_FOLDER)
-    
-    shutil.copytree(repo_protected_path, PROTECTED_FOLDER)
+    #repo_protected_path = os.path.join(repo_dir, "protected_files")
 
-def get_latest_commit_stats(branch_name,REPO_DIR):
+    if DISARM:
+        return
+    else:
+        #if os.path.exists(protected_folder):
+        #    shutil.rmtree(protected_folder)
+        
+        shutil.copytree(repo_dir, protected_folder, dirs_exist_ok=True)
+
+def get_latest_commit_stats(branch_name,repo_dir):
     """
     Returns the number of changes and a list of file names for 
     the latest commit on the specified branch.
@@ -2041,7 +2046,7 @@ def get_latest_commit_stats(branch_name,REPO_DIR):
     # M path/to/file (Modified)
     # A path/to/file (Added/Created)
     # D path/to/file (Deleted)
-    result = run_git(["show", "--format=", "--name-status", branch_name],REPO_DIR)
+    result = run_git(["show", "--format=", "--name-status", branch_name],repo_dir)
     
     if result.returncode != 0 or not result.stdout.strip():
         return {"count": 0, "files": []}
@@ -2064,21 +2069,21 @@ def get_latest_commit_stats(branch_name,REPO_DIR):
         "files": files_info
     }
 
-def file_protect_main(REPO_DIR,PROTECTED_FOLDER):
+def file_protect_main(repo_dir,protected_folder):
     """Main logic for the agent sync loop."""
     try:
     
         # 1. Pull latest 'good' state from remote
-        run_git(["checkout", "good"],REPO_DIR)
-        run_git(["pull", "origin", "good"],REPO_DIR)
+        run_git(["checkout", "good"],repo_dir)
+        run_git(["pull", "origin", "good"],repo_dir)
         
         # 2. Sync protected folder to repo for comparison
-        sync_protected_to_repo(REPO_DIR,PROTECTED_FOLDER)
+        sync_protected_to_repo(repo_dir,protected_folder)
         
         # 3. Check for differences
         # 'git add' to track new/modified files, then check 'git diff'
-        run_git(["add", "."],REPO_DIR)
-        diff_check = run_git(["diff", "--cached", "--quiet"],REPO_DIR)
+        run_git(["add", "."],repo_dir)
+        diff_check = run_git(["diff", "--cached", "--quiet"],repo_dir)
 
         changes = {}
         
@@ -2086,28 +2091,28 @@ def file_protect_main(REPO_DIR,PROTECTED_FOLDER):
         if diff_check.returncode != 0:
             try:
                 # Stash changes, move to bad branch, and apply them
-                run_git(["stash"],REPO_DIR)
-                run_git(["checkout", "bad"],REPO_DIR)
-                run_git(["pull", "origin", "bad"],REPO_DIR)
+                run_git(["stash"],repo_dir)
+                run_git(["checkout", "bad"],repo_dir)
+                run_git(["pull", "origin", "bad"],repo_dir)
                 
                 # Apply stashed changes (the diffs)
-                stash_apply = run_git(["stash", "pop"],REPO_DIR)
+                stash_apply = run_git(["stash", "pop"],repo_dir)
                 
                 # Resolve conflicts by preferring "theirs" (the new content from protectedFolder)
                 if stash_apply.returncode != 0:
-                    run_git(["checkout", "--theirs", "."],REPO_DIR)
-                    run_git(["add", "."],REPO_DIR)
-                    run_git(["commit", "-m", f"auto-resolveconflict"],REPO_DIR)
+                    run_git(["checkout", "--theirs", "."],repo_dir)
+                    run_git(["add", "."],repo_dir)
+                    run_git(["commit", "-m", f"auto-resolveconflict"],repo_dir)
                 
                 # Commit and Push the 'bad' changes
-                run_git(["add", "."],REPO_DIR)
-                run_git(["commit", "-m", f"auto-malicious{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}"],REPO_DIR)
-                run_git(["push", "origin", "bad"],REPO_DIR)
-                changes = get_latest_commit_stats("bad",REPO_DIR)
+                run_git(["add", "."],repo_dir)
+                run_git(["commit", "-m", f"auto-malicious{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}"],repo_dir)
+                run_git(["push", "origin", "bad"],repo_dir)
+                changes = get_latest_commit_stats("bad",repo_dir)
                 
                 # Return to good branch for restoration
-                run_git(["checkout", "good"],REPO_DIR)
-                restore_protected_from_repo(REPO_DIR,PROTECTED_FOLDER)
+                run_git(["checkout", "good"],repo_dir)
+                restore_protected_from_repo(repo_dir,protected_folder)
                 return False, True, [f"File changes occurred and were successfully restored. Affected files {changes["count"]}: {changes["files"]}"]
             except Exception as E:
                 return False, False, [f"File changes occurred and failed to restore known good state: {E}"]
@@ -3418,12 +3423,11 @@ def main(stop_event=None):
     ip_address,prefix,gateway = init_int_vars() # TODO
 
     agent_id = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
-    REPO_URL = os.path.join(f"{SERVER_URL}git",f"{agent_id}.git")
+    repo_url = os.path.join(f"{SERVER_URL}git",f"{agent_id}.git")
     systemInfo = get_system_details()
-    REPO_DIR = f"{os.path.join(os.path.dirname(Path(__file__).resolve()),f"{agent_id}.git")}"
-    PROTECTED_FOLDER = "/var/www"
+    repo_dir = f"{os.path.join(os.path.dirname(Path(__file__).resolve()),f"{agent_id}.git")}"
 
-    setup_git_agent(REPO_URL)
+    setup_git_agent(repo_url)
 
     #test_main()
     #return
@@ -3539,12 +3543,16 @@ def main(stop_event=None):
 
             # Files
             print_debug(f"main(): running file checks")
-            result_oldStatus, result_newStatus, result_issues = file_protect_main(REPO_DIR,PROTECTED_FOLDER)
-            if not result_oldStatus:
-                oldStatus = False
-            if not result_newStatus:
-                newStatus = False
-            for issue in result_issues:
+            result_issues_main = []
+            for protected_folder in PROTECTED_FOLDERS:
+                result_oldStatus, result_newStatus, result_issues = file_protect_main(repo_dir,protected_folder)
+                if not result_oldStatus:
+                    oldStatus = False
+                if not result_newStatus:
+                    newStatus = False
+                for issue in result_issues:
+                    result_issues_main.append(f"{issue}")
+            for issue in result_issues_main:
                 newIssues.append(f"File - {issue}")
                 print_debug(newIssues[-1])
                 if newIssues[-1] not in oldIssues:
