@@ -38,7 +38,7 @@
 - name: Copy web files to target 1
   copy:
     src: "files/templates"
-    dest: "{{ stabvest_deploy_dir }}/templates"
+    dest: "{{ stabvest_deploy_dir }}"
     owner: root
     group: root
     mode: '0755'
@@ -47,7 +47,7 @@
 - name: Copy web files to target 2
   copy:
     src: "files/static"
-    dest: "{{ stabvest_deploy_dir }}/templates"
+    dest: "{{ stabvest_deploy_dir }}"
     owner: root
     group: root
     mode: '0755'
