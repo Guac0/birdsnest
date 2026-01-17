@@ -1785,25 +1785,23 @@ def get_pause():
     
     return str(float(agent.pausedUntil)), 200
 
-@app.route('/git/<repo_name>.git/<path:git_path>', methods=['GET', 'POST'])
+@app.route('/git/<repo_name>.git/<path:git_path>', methods=['GET', 'POST', 'PROPFIND'])
 def git_backend(repo_name, git_path):
 
     logger.info(f"/git - Connection from {request.remote_addr}.")
 
-    # Standardize the path for the backend binary
-    relative_path = f"{repo_name}.git/{git_path}"
-    
+    git_path = clean_and_join_path(git_path)
+    #print(f"repo_name: {repo_name}, git_path: {git_path}, git_project_root: {GIT_PROJECT_ROOT}, full_path: {os.path.join(GIT_PROJECT_ROOT,os.path.join(f"{repo_name}.git",git_path))}")
     env = {
         'REQUEST_METHOD': request.method,
         'GIT_PROJECT_ROOT': GIT_PROJECT_ROOT,
         'GIT_HTTP_EXPORT_ALL': '1',
-        'PATH_INFO': relative_path,
-        'QUERY_STRING': request.query_string.decode('utf-8') if request.query_string else '',
+        'PATH_INFO': os.path.join(f"{repo_name}.git",git_path),
+        'QUERY_STRING': request.query_string.decode('utf-8'),
         'CONTENT_TYPE': request.headers.get('Content-Type', ''),
-        'CONTENT_LENGTH': request.headers.get('Content-Length', ''),
-        'REMOTE_ADDR': request.remote_addr,
     }
 
+    # Call the git backend binary
     process = subprocess.Popen(
         [GIT_BACKEND],
         env=env,
@@ -1813,34 +1811,12 @@ def git_backend(repo_name, git_path):
     )
 
     stdout, stderr = process.communicate(input=request.data)
-
-    # Git-http-backend output includes headers, then two newlines, then the body
+    
+    # Split the headers from the body in the output
     header_end = stdout.find(b'\r\n\r\n')
-    if header_end == -1:
-        header_end = stdout.find(b'\n\n')
-        separator_len = 2
-    else:
-        separator_len = 4
-
-    header_section = stdout[:header_end].decode('utf-8')
-    response_body = stdout[header_end + separator_len:]
-
-    # Parse headers into a dictionary
-    headers_dict = {}
-    status_code = 200
-    for line in header_section.splitlines():
-        if ':' in line:
-            key, value = line.split(':', 1)
-            if key.strip().lower() == 'status':
-                # Git sometimes outputs 'Status: 401 Unauthorized'
-                try:
-                    status_code = int(value.strip().split(' ')[0])
-                except: pass
-            else:
-                headers_dict[key.strip()] = value.strip()
-
-    # Return the Flask-compatible tuple: (body, status, headers)
-    return response_body, status_code, headers_dict
+    response_body = stdout[header_end+4:]
+    
+    return response_body, 200
 
 # === FRONTEND DISPLAY ===
 
