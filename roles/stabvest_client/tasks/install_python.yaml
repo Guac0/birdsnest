@@ -21,11 +21,3 @@
     arguments: '/quiet InstallAllUsers=1 PrependPath=1'
     state: present
   when: ansible_os_family == "Windows"
-
-# --- CROSS-PLATFORM PIP SECTION ---
-- name: Install pyOpenSSL via Pip
-  ansible.builtin.pip:
-    name: pyopenssl
-    state: present
-    # Ensures we use the correct pip path depending on OS
-    executable: "{{ (ansible_os_family == 'Windows') | ternary('pip', 'pip3') }}"

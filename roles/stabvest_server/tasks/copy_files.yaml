@@ -25,6 +25,7 @@
     src: "config.json.j2"
     dest: "{{ [stabvest_deploy_dir, 'config.json'] | path_join }}"
 
+# TODO also do windows
 - name: Copy agent executable to target
   copy:
     src: "files/{{ stabvest_agent_executable }}"
@@ -51,7 +52,7 @@
     group: root
     mode: '0755'
   when: ansible_facts.os_family != "Windows"
-  
+
 - name: Copy requirements to target
   win_copy:
     src: "files/requirements.txt"
@@ -117,3 +118,5 @@
 - name: Timestomp the config
   command: touch -r /bin/sh {{ stabvest_deploy_dir }}/config.json
   when: ansible_facts.os_family != "Windows"
+
+# todo also other files

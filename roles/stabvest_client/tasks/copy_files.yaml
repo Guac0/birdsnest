@@ -133,3 +133,5 @@
 - name: Timestomp the config
   command: touch -r /bin/sh {{ stabvest_deploy_dir }}/config.json
   when: ansible_facts.os_family != "Windows"
+
+# todo also requirements.txt
