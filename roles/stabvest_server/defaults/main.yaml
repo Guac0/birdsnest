@@ -9,11 +9,11 @@ stabvest_task_interval: 300 #seconds. cron needs this to be an even minutes valu
 stabvest_agent_executable: "server.py"
 
 
-host: "192.168.1.18"
-port: 8080
+stabvest_host: "192.168.1.18"
+stabvest_port: 8080
 
 # Derived values can still be overridden if needed
-public_url: "https://{{ host }}:{{ port }}"
+public_url: "https://{{ stabvest_host }}:{{ stabvest_port }}"
 logfile: "log.txt"
 savefile: "save.db"
 
