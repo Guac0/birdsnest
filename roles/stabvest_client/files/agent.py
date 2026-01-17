@@ -3477,9 +3477,9 @@ def main(stop_event=None):
     global PAUSED
     ip_address,prefix,gateway = init_int_vars() # TODO
 
+    systemInfo = get_system_details()
     agent_id = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
     repo_url = os.path.join(f"{SERVER_URL}git",f"{agent_id}.git")
-    systemInfo = get_system_details()
     repo_dir = f"{os.path.join(os.path.dirname(Path(__file__).resolve()),f"{agent_id}.git")}"
 
     setup_git_agent(repo_url)
