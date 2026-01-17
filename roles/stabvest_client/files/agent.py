@@ -445,24 +445,24 @@ def get_pause_status(file=STATUSFILE):
                 else:
                     # Sleep has elapsed
                     f.seek(0)
-                    f.write(f"{preferServer}\n{pausedUntilEpoch}")
+                    f.write(f"{preferServer}\n{pausedUntilEpoch}\n")
                     f.truncate()
                     return preferServer, False, 0
             else:
                 return preferServer, False, 0
     except FileNotFoundError:
         with open(file,"w") as f:
-            f.write("false\n0")
+            f.write(f"false\n0\n")
         return False, False, 0
     except ValueError:
         # Failed conversion to int
         with open(file,"w") as f:
-            f.write("false\n0")
+            f.write(f"false\n0\n")
         return False, False, 0
     except Exception as E:
         print_debug(f"get_pause_status(): unknown error - {E}")
         with open(file,"w") as f:
-            f.write("false\n0")
+            f.write(f"false\n0\n")
         return False, False, 0
         
 
@@ -3527,21 +3527,21 @@ def main(stop_event=None):
                 # Server thinks client should be active but doesn't really care
                 if pausePreferServer:
                     with open(STATUSFILE,"w") as f:
-                        f.write("true\n0")
+                        f.write(f"true\n0\n")
                     pausedStatus = False
                     pausedEpochLocal = 0
             else:
                 if pausedEpochServer == 1:
                     # Force resume
                     with open(STATUSFILE,"w") as f:
-                        f.write(f"{pausePreferServer}\n0")
+                        f.write(f"{pausePreferServer}\n0\n")
                     pausedStatus = False
                     pausedEpochLocal = 0
                 else:
                     # Server thinks client should be in a paused state until pausedEpochServer epoch time
                     # This does hold a binding effect as otherwise the server PAUSE function doesnt work
                     with open(STATUSFILE,"w") as f:
-                        f.write(f"{pausePreferServer}\n{pausedEpochServer}")
+                        f.write(f"{pausePreferServer}\n{pausedEpochServer}\n")
                     pausedStatus = True
                     pausedEpochLocal = pausedEpochServer
 

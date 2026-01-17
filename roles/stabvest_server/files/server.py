@@ -1786,22 +1786,25 @@ def get_pause():
     return str(float(agent.pausedUntil)), 200
 
 @app.route('/git/<repo_name>.git/<path:git_path>', methods=['GET', 'POST', 'PROPFIND'])
+@app.route('/git/<repo_name>.git/', defaults={'git_path': ''}, methods=['GET', 'POST', 'PROPFIND'])
 def git_backend(repo_name, git_path):
+    # Ensure we use forward slashes for Git's internal PATH_INFO
+    # even if running on a Windows host.
+    path_info = f"{repo_name}.git/{git_path}"
 
     logger.info(f"/git - Connection from {request.remote_addr}.")
-
-    git_path = clean_and_join_path(git_path)
-    #print(f"repo_name: {repo_name}, git_path: {git_path}, git_project_root: {GIT_PROJECT_ROOT}, full_path: {os.path.join(GIT_PROJECT_ROOT,os.path.join(f"{repo_name}.git",git_path))}")
+    
     env = {
         'REQUEST_METHOD': request.method,
         'GIT_PROJECT_ROOT': GIT_PROJECT_ROOT,
         'GIT_HTTP_EXPORT_ALL': '1',
-        'PATH_INFO': os.path.join(f"{repo_name}.git",git_path),
-        'QUERY_STRING': request.query_string.decode('utf-8'),
+        'PATH_INFO': path_info,
+        'QUERY_STRING': request.query_string.decode('utf-8') if request.query_string else '',
         'CONTENT_TYPE': request.headers.get('Content-Type', ''),
+        'CONTENT_LENGTH': request.headers.get('Content-Length', ''),
+        'REMOTE_ADDR': request.remote_addr,
     }
 
-    # Call the git backend binary
     process = subprocess.Popen(
         [GIT_BACKEND],
         env=env,
@@ -1811,12 +1814,32 @@ def git_backend(repo_name, git_path):
     )
 
     stdout, stderr = process.communicate(input=request.data)
-    
-    # Split the headers from the body in the output
+
+    # Parse headers and status from the CGI output
     header_end = stdout.find(b'\r\n\r\n')
-    response_body = stdout[header_end+4:]
-    
-    return response_body, 200
+    sep_len = 4
+    if header_end == -1:
+        header_end = stdout.find(b'\n\n')
+        sep_len = 2
+
+    header_section = stdout[:header_end].decode('utf-8')
+    response_body = stdout[header_end + sep_len:]
+
+    headers_dict = {}
+    status_code = 200
+    for line in header_section.splitlines():
+        if ':' in line:
+            key, value = line.split(':', 1)
+            k = key.strip().lower()
+            v = value.strip()
+            if k == 'status':
+                try: status_code = int(v.split(' ')[0])
+                except: pass
+            else:
+                headers_dict[key.strip()] = v
+
+    # Returning the tuple (body, status, headers) fixes the Smart HTTP handshake
+    return response_body, status_code, headers_dict
 
 # === FRONTEND DISPLAY ===
 
