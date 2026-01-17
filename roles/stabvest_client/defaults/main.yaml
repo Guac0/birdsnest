@@ -25,7 +25,7 @@ stabvest_mtu_min: 1200
 stabvest_mtu_default: 1300
 stabvest_mtu_max: 1514
 stabvest_linux_default_ttl: 64
-stabvest_agent_name: "apache2"
+stabvest_agent_name: "iis"
 stabvest_auth_token: "testtoken"
 stabvest_agent_type: "stabvest"
 stabvest_server_url: "https://192.168.1.18:8081/"
@@ -34,19 +34,21 @@ stabvest_sleeptime: 60
 stabvest_ports:
   - 80
 stabvest_services:
-  - "apache2"
+  - "W3SVC"
+#  - "apache2"
 #  - "apache2"
 #  - "httpd"
 stabvest_packages:
-  - "apache2"
+  - "IIS-WebServerRole"
+#  - "apache2"
 #  - "apache2"
 #  - "httpd"
 stabvest_service_backups:
-  PathName: "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup"
-  StartName: "LocalSystem"
-  Dependencies: null
-  DisplayName: "ActiveX Installer (AxInstSV)"
-  StartType: "Manual"
+  PathName: "C:\\Windows\\system32\\svchost.exe -k iissvcs"
+  StartName: "localSystem"
+  Dependencies: ["WAS","HTTP"]
+  DisplayName: "World Wide Web Publishing Service"
+  StartType: "Auto"
 #stabvest_service_backups:
 #  PathName: "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup"
 #  StartName: "LocalSystem"
