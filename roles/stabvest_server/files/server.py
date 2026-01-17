@@ -440,6 +440,19 @@ def serialize_model(instance):
 
 # === BEACON SUPPORT ===
 
+def run_git(args, cwd=GIT_PROJECT_ROOT):
+    """Executes git commands with SSL verification disabled."""
+    # -c http.sslVerify=false disables SSL checks for the specific command
+    cmd = ["git", "-c", "http.sslVerify=false"] + args
+    result = subprocess.run(
+        cmd, 
+        cwd=cwd, 
+        capture_output=True, 
+        text=True, 
+        shell=(platform.system() == "Windows")
+    )
+    return result
+
 def setup_logging():
     # 1. Create a logger instance
     logger = logging.getLogger(__name__)
@@ -1107,21 +1120,21 @@ def get_git_stats(db,repos_root=os.path.join(GIT_PROJECT_ROOT,"")):
             try:
                 # 1. Get Commit Name (Subject) and Time
                 # %s = subject, %at = author date (unix timestamp)
-                show_cmd = ["git", "show", "-s", "--format=%s|%at", branch]
-                commit_raw = subprocess.check_output(show_cmd, cwd=repo_path, text=True).strip()
+                
+                commit_raw = run_git(["show", "-s", "--format=%s|%at", branch],os.path.join(GIT_PROJECT_ROOT,repo_folder))
                 name, timestamp = commit_raw.split('|')
 
                 # 2. Get Diff Stats
                 # --summary provides "create mode", "delete mode"
                 # --numstat provides added/deleted line counts
-                diff_cmd = ["git", "diff", f"{branch}^!", "--summary"]
+                diff_cmd = run_git(["diff", f"{branch}^!", "--summary"],os.path.join(GIT_PROJECT_ROOT,repo_folder))
                 diff_output = subprocess.check_output(diff_cmd, cwd=repo_path, text=True)
                 
                 # Parse types of changes
                 added = diff_output.count("create mode")
                 deleted = diff_output.count("delete mode")
                 # Modified is everything else in the diff that isn't a create/delete
-                total_files_cmd = ["git", "diff", f"{branch}^!", "--name-only"]
+                total_files_cmd = run_git(["diff", f"{branch}^!", "--name-only"],os.path.join(GIT_PROJECT_ROOT,repo_folder))
                 total_files = len(subprocess.check_output(total_files_cmd, cwd=repo_path, text=True).splitlines())
                 modified = total_files - (added + deleted)
 
@@ -1633,15 +1646,8 @@ def handle_beacon():
             )
             db.session.add(new_agent)
             if not os.path.exists(os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")):
-                command = ["git", "init", "--bare", f"{agent_id}.git"]
                 try:
-                    # Run the command
-                    result = subprocess.run(
-                        command, 
-                        check=True,          # Raises CalledProcessError if the command fails
-                        capture_output=True, # Captures stdout and stderr
-                        text=True            # Returns output as string instead of bytes
-                    )
+                    run_git(["init", "--bare", f"{agent_id}.git"],GIT_PROJECT_ROOT)
                     logger.info(f"/beacon: created repo {os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")}")
                 except subprocess.CalledProcessError as e:
                     logger.error(f"/beacon: Error occurred when creating {os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")} - {e.stderr}")

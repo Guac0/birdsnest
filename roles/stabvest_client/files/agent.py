@@ -391,7 +391,7 @@ def setup_git_agent(repo_dir,systemInfo=get_system_details()):
 
     try:
         if not os.path.exists(repo_dir):
-            run_git(["git", "clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git"],repo_dir)
+            run_git(["clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git"],repo_dir)
         
         run_git(["config", "user.name", "Agent"],repo_dir)
         run_git(["config", "user.email", f"agent@{systemInfo["hostname"]}.local"],repo_dir)
