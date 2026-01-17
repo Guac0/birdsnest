@@ -435,7 +435,7 @@ def get_pause_status(file=STATUSFILE):
             else:
                 return preferServer, False, 0
     except FileNotFoundError:
-        with open(file,"w"):
+        with open(file,"w") as f:
             f.write("false")
             f.write("0")
         return False, False, 0
@@ -596,11 +596,11 @@ def interface_get_primary():
     if system == "Windows":
         return interface_get_primary_windows(get_primary_ip())
     else:
-        return interface_get_primary_unix(get_primary_ip())
+        return interface_get_primary_linux(get_primary_ip())
 
 def interface_get_primary_windows(ip):
     """
-    Gets interface name on unix using "ip" or "ifconfig"
+    Gets interface name on linux using "ip" or "ifconfig"
     TODO: make this not be AI slop
     Returns: interface(String) or None
     """
@@ -622,9 +622,9 @@ def interface_get_primary_windows(ip):
 
     return None
 
-def interface_get_primary_unix(ip):
+def interface_get_primary_linux(ip):
     """
-    Gets interface name on unix using "ip" or "ifconfig"
+    Gets interface name on linux using "ip" or "ifconfig"
     TODO: make this not be AI slop
     Returns: interface(String) or None
     """
@@ -883,7 +883,7 @@ def interface_mtu(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maxi
     if system == "Windows":
         return interface_mtu_windows(interface,mtu_minimum,mtu_maximum,mtu_default)
     else:
-        return interface_mtu_windows(interface,mtu_minimum,mtu_maximum,mtu_default)
+        return interface_mtu_linux(interface,mtu_minimum,mtu_maximum,mtu_default)
         #return False, False, [f"interface_mtu(): not implemented for system {system}."] # TODO
 
 def interface_mtu_windows(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maximum=MTU_MAX,mtu_default=MTU_DEFAULT):
@@ -1441,7 +1441,7 @@ def firewall_rules_audit(port,direction="in",action="block"):
     if system == "Windows":
         return firewall_rules_audit_windows(port,direction,action)
     else:
-        return firewall_rules_audit_windows(port,direction,action)
+        return firewall_rules_audit_linux(port,direction,action)
         #return [f"firewall_rules_audit(): not implemented for system {system}."], dict() # TODO
 
 def firewall_rules_audit_windows(port,direction="in",action="block"):
@@ -1613,7 +1613,7 @@ def firewall_rules_delete(rules,port):
     if system == "Windows":
         return firewall_rules_delete_windows(rules,port)
     else:
-        return firewall_rules_delete_windows(rules)
+        return firewall_rules_delete_linux(rules)
         #return False, [f"firewall_rules_delete(): not implemented for system {system}."] # TODO
 
 def firewall_rules_delete_windows(rules,port):
