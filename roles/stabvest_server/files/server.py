@@ -396,7 +396,7 @@ def insert_initial_data():
 
 def create_db_tables():
 
-    db_exists = os.path.exists(SAVEFILE)
+    db_exists = os.path.exists(os.path.join("instances",SAVEFILE))
     # Use the application context to ensure Flask extensions are configured
     with app.app_context():
         # This checks the database file defined in SQLALCHEMY_DATABASE_URI.
@@ -1783,7 +1783,7 @@ def get_pause():
     if not agent:
         return "Unauthorized", 403
     
-    return float(agent.pausedUntil), 200
+    return str(float(agent.pausedUntil)), 200
 
 @app.route('/git/<repo_name>.git/<path:git_path>', methods=['GET', 'POST'])
 def git_backend(repo_name, git_path):
