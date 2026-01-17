@@ -14,6 +14,9 @@ import time
 import urllib.request
 import urllib.error
 import ssl
+import shutil
+import base64
+from pathlib import Path
 #import winreg
 #import win32serviceutil
 #import win32service
@@ -296,6 +299,14 @@ def create_backup_primary(path,backupDir=BACKUPDIR):
     """
     return True, ""
 
+def hash_id(*args):
+    # hash any number of args so that we have a single value to use as the id that remains unique if multiple items have similar fields
+    # Does not need to be secure
+    combined = "|".join(map(str, args))
+    encoded = base64.b64encode(combined.encode("utf-8")).decode("utf-8")
+    return encoded
+    #return hashlib.sha256(f"{ip}|{hostname}".encode()).hexdigest() #sha256 hash - too complex to use on frontend
+
 def run_powershell(cmd,noisy=True):
     """
     Run a PowerShell command and return stdout text.
@@ -356,6 +367,33 @@ def run_bash(cmd, noisy=True):
         return ""
         
     return result.stdout.strip()
+
+def run_git(args, cwd):
+    """Executes git commands with SSL verification disabled."""
+    # -c http.sslVerify=false disables SSL checks for the specific command
+    cmd = ["git", "-c", "http.sslVerify=false"] + args
+    result = subprocess.run(
+        cmd, 
+        cwd=cwd, 
+        capture_output=True, 
+        text=True, 
+        shell=(platform.system() == "Windows")
+    )
+    return result
+
+def setup_git_agent(REPO_DIR,systemInfo=get_system_details()):
+    """Initializes git config for the agent session."""
+
+    try:
+        if not os.path.exists(REPO_DIR):
+            run_git(["git", "clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git"],REPO_DIR)
+        
+        run_git(["config", "user.name", "Agent"],REPO_DIR)
+        run_git(["config", "user.email", f"agent@{systemInfo["hostname"]}.local"],REPO_DIR)
+        return True
+    except Exception as E:
+        print_debug(f"Critical error when running setup_git_agent: {E}")
+        return False
 
 def audit_command(command,package="",packageManager="apt"):
     """
@@ -1973,11 +2011,110 @@ def firewall_main(protectedPorts):
 ## File Protect Funcs ###
 #region##################
 
-def file_restore():
-    return True
+def sync_protected_to_repo(REPO_DIR,PROTECTED_FOLDER):
+    """Copies current protected files into the git directory."""
+    # Define destination inside the repo
+    # Note: Using os.path.join for cross-platform path compatibility
+    repo_protected_path = os.path.join(REPO_DIR, "protected_files")
+    
+    if os.path.exists(repo_protected_path):
+        shutil.rmtree(repo_protected_path)
+    
+    shutil.copytree(PROTECTED_FOLDER, repo_protected_path)
+    return repo_protected_path
 
-def file_diff():
-    return True
+def restore_protected_from_repo(REPO_DIR,PROTECTED_FOLDER):
+    """Overwrites the protected folder with the 'good' version from the repo."""
+    repo_protected_path = os.path.join(REPO_DIR, "protected_files")
+    
+    if os.path.exists(PROTECTED_FOLDER):
+        shutil.rmtree(PROTECTED_FOLDER)
+    
+    shutil.copytree(repo_protected_path, PROTECTED_FOLDER)
+
+def get_latest_commit_stats(branch_name,REPO_DIR):
+    """
+    Returns the number of changes and a list of file names for 
+    the latest commit on the specified branch.
+    """
+    # --name-status gives us: 
+    # M path/to/file (Modified)
+    # A path/to/file (Added/Created)
+    # D path/to/file (Deleted)
+    result = run_git(["show", "--format=", "--name-status", branch_name],REPO_DIR)
+    
+    if result.returncode != 0 or not result.stdout.strip():
+        return {"count": 0, "files": []}
+
+    lines = result.stdout.strip().split('\n')
+    files_info = []
+    
+    for line in lines:
+        if not line: continue
+        # Split status (M, A, D) from the path
+        parts = line.split(maxsplit=1)
+        if len(parts) == 2:
+            status, file_path = parts
+            status_map = {'M': 'Modified', 'A': 'Created', 'D': 'Deleted'}
+            friendly_status = status_map.get(status, status)
+            files_info.append(f"{friendly_status}: {file_path}")
+
+    return {
+        "count": len(files_info),
+        "files": files_info
+    }
+
+def file_protect_main(REPO_DIR,PROTECTED_FOLDER):
+    """Main logic for the agent sync loop."""
+    try:
+    
+        # 1. Pull latest 'good' state from remote
+        run_git(["checkout", "good"],REPO_DIR)
+        run_git(["pull", "origin", "good"],REPO_DIR)
+        
+        # 2. Sync protected folder to repo for comparison
+        sync_protected_to_repo(REPO_DIR,PROTECTED_FOLDER)
+        
+        # 3. Check for differences
+        # 'git add' to track new/modified files, then check 'git diff'
+        run_git(["add", "."],REPO_DIR)
+        diff_check = run_git(["diff", "--cached", "--quiet"],REPO_DIR)
+
+        changes = {}
+        
+        # exit_code 1 means there are changes
+        if diff_check.returncode != 0:
+            try:
+                # Stash changes, move to bad branch, and apply them
+                run_git(["stash"],REPO_DIR)
+                run_git(["checkout", "bad"],REPO_DIR)
+                run_git(["pull", "origin", "bad"],REPO_DIR)
+                
+                # Apply stashed changes (the diffs)
+                stash_apply = run_git(["stash", "pop"],REPO_DIR)
+                
+                # Resolve conflicts by preferring "theirs" (the new content from protectedFolder)
+                if stash_apply.returncode != 0:
+                    run_git(["checkout", "--theirs", "."],REPO_DIR)
+                    run_git(["add", "."],REPO_DIR)
+                    run_git(["commit", "-m", f"auto-resolveconflict"],REPO_DIR)
+                
+                # Commit and Push the 'bad' changes
+                run_git(["add", "."],REPO_DIR)
+                run_git(["commit", "-m", f"auto-malicious{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}"],REPO_DIR)
+                run_git(["push", "origin", "bad"],REPO_DIR)
+                changes = get_latest_commit_stats("bad",REPO_DIR)
+                
+                # Return to good branch for restoration
+                run_git(["checkout", "good"],REPO_DIR)
+                restore_protected_from_repo(REPO_DIR,PROTECTED_FOLDER)
+                return False, True, [f"File changes occurred and were successfully restored. Affected files {changes["count"]}: {changes["files"]}"]
+            except Exception as E:
+                return False, False, [f"File changes occurred and failed to restore known good state: {E}"]
+        else:
+            return True,True,[]
+    except Exception as E:
+        return False, False, [f"Unexpected error when attempting to check file integrity status: {E}"]
 
 #endregion###############
 # Service Protect Funcs #
@@ -3280,6 +3417,14 @@ def main(stop_event=None):
     global PAUSED
     ip_address,prefix,gateway = init_int_vars() # TODO
 
+    agent_id = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
+    REPO_URL = os.path.join(f"{SERVER_URL}git",f"{agent_id}.git")
+    systemInfo = get_system_details()
+    REPO_DIR = f"{os.path.join(os.path.dirname(Path(__file__).resolve()),f"{agent_id}.git")}"
+    PROTECTED_FOLDER = "/var/www"
+
+    setup_git_agent(REPO_URL)
+
     #test_main()
     #return
 
@@ -3353,7 +3498,6 @@ def main(stop_event=None):
                 newStatus = False
             for issue in result_issues:
                 newIssues.append(f"Firewall - {issue}")
-
                 print_debug(newIssues[-1])
                 if newIssues[-1] not in oldIssues:
                     send_message(result_oldStatus,result_newStatus,newIssues[-1])
@@ -3370,7 +3514,6 @@ def main(stop_event=None):
                 newStatus = False
             for issue in result_issues:
                 newIssues.append(f"Interface - {issue}")
-
                 print_debug(newIssues[-1])
                 if newIssues[-1] not in oldIssues:
                     send_message(result_oldStatus,result_newStatus,newIssues[-1])
@@ -3387,7 +3530,22 @@ def main(stop_event=None):
                 newStatus = False
             for issue in result_issues:
                 newIssues.append(f"Service - {issue}")
+                print_debug(newIssues[-1])
+                if newIssues[-1] not in oldIssues:
+                    send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                    sent_msg = True
+                else:
+                    suppressed_send = True
 
+            # Files
+            print_debug(f"main(): running file checks")
+            result_oldStatus, result_newStatus, result_issues = file_protect_main(REPO_DIR,PROTECTED_FOLDER)
+            if not result_oldStatus:
+                oldStatus = False
+            if not result_newStatus:
+                newStatus = False
+            for issue in result_issues:
+                newIssues.append(f"File - {issue}")
                 print_debug(newIssues[-1])
                 if newIssues[-1] not in oldIssues:
                     send_message(result_oldStatus,result_newStatus,newIssues[-1])
