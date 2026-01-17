@@ -40,7 +40,7 @@
 - name: Copy requirements to target
   copy:
     src: "files/requirements.txt"
-    dest: "{{ stabvest_deploy_dir }}/requitements.txt"
+    dest: "{{ stabvest_deploy_dir }}/requirements.txt"
     owner: root
     group: root
     mode: '0755'
