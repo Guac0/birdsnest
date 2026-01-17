@@ -3,6 +3,7 @@
     "DEBUG_PRINT": {{ stabvest_debug_print | lower }},
     "BACKUPDIR": "{{ stabvest_backupdir }}",
     "LOGFILE": "{{ stabvest_logfile }}",
+    "STATUSFILE": "{{ stabvest_statusfile }}",
     "MTU_MIN": {{ stabvest_mtu_min }},
     "MTU_DEFAULT": {{ stabvest_mtu_default }},
     "MTU_MAX": {{ stabvest_mtu_max }},
@@ -22,5 +23,6 @@
         "Dependencies": {{ stabvest_service_backups.Dependencies | default('null') }},
         "DisplayName": "{{ stabvest_service_backups.DisplayName }}",
         "StartType": "{{ stabvest_service_backups.StartType }}"
-    }
+    },
+    "PROTECTED_FOLDERS": {{ stabvest_protected_folders }}
 }

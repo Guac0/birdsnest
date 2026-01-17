@@ -1760,13 +1760,13 @@ def get_pause():
     
     #if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
     if not all([agent_name, agent_type, hostname, ip, os_name, auth, beacon_type]): # required data only
-        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type]}")
         return "Missing data", 400
     
     # Auth check
     auth_token_record = AuthToken.query.filter_by(token=auth).first()
     if not auth_token_record:
-        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type]}")
         return "Unauthorized", 403
 
     # Get agent identity
@@ -1779,10 +1779,13 @@ def get_pause():
     
     return float(agent.pausedUntil), 200
 
-@app.route('/<repo_name>.git/<path:git_path>', methods=['GET', 'POST'])
+@app.route('/git/<repo_name>.git/<path:git_path>', methods=['GET', 'POST'])
 def git_backend(repo_name, git_path):
+
+    logger.info(f"/git - Connection from {request.remote_addr}.")
+
     git_path = clean_and_join_path(git_path)
-    print(f"repo_name: {repo_name}, git_path: {git_path}, git_project_root: {GIT_PROJECT_ROOT}, full_path: {os.path.join(GIT_PROJECT_ROOT,os.path.join(f"{repo_name}.git",git_path))}")
+    #print(f"repo_name: {repo_name}, git_path: {git_path}, git_project_root: {GIT_PROJECT_ROOT}, full_path: {os.path.join(GIT_PROJECT_ROOT,os.path.join(f"{repo_name}.git",git_path))}")
     env = {
         'REQUEST_METHOD': request.method,
         'GIT_PROJECT_ROOT': GIT_PROJECT_ROOT,

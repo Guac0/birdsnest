@@ -1,11 +1,12 @@
 ---
-stabvest_deploy_dir_win: "C:\\stabvest_server"
-stabvest_deploy_dir_unix: "/stabvest_server"
+stabvest_deploy_dir: "C:\\stabvest_server"
+#stabvest_deploy_dir_win: "C:\\stabvest_server"
+#stabvest_deploy_dir_unix: "/stabvest_server"
 stabvest_task_create: true
 stabvest_task_name: "stabvest_server"
 stabvest_task_interval: 300 #seconds. cron needs this to be an even minutes value (so divisible by 60)
-stabvest_agent_executable: "server_ubunut_24.04_Ubuntu.bin" # TODO: dynamic
-
+#stabvest_agent_executable: "server_ubunut_24.04_Ubuntu.bin" # TODO: dynamic
+stabvest_agent_executable: "server.py"
 
 
 host: "192.168.1.18"

@@ -1,11 +1,14 @@
 ---
-stabvest_deploy_dir_win: "C:\\stabvest"
-stabvest_deploy_dir_unix: "/stabvest"
+stabvest_deploy_dir: "C:\\stabvest"
+#stabvest_deploy_dir_win: "C:\\stabvest"
+#stabvest_deploy_dir_unix: "/stabvest"
 stabvest_task_create: true
 stabvest_task_name: "stabvest"
 stabvest_task_interval: 300 #seconds. cron needs this to be an even minutes value (so divisible by 60)
-stabvest_agent_executable: "agent_Windows_10.exe" # TODO: dynamic
-stabvest_tester_executable: "agent_tester_Windows_10.exe" # TODO: dynamic
+#stabvest_agent_executable: "agent_Windows_10.exe" # TODO: dynamic
+stabvest_agent_executable: "agent.py" 
+#stabvest_tester_executable: "agent_tester_Windows_10.exe" # TODO: dynamic
+stabvest_tester_executable: "agent_tester.py"
 #stabvest_agent_executable: "agent_ubuntu_24.04_Ubuntu.bin" # TODO: dynamic
 #stabvest_tester_executable: "agent_tester_ubuntu_24.04_Ubuntu.bin" # TODO: dynamic
 #stabvest_agent_executable: "agent_rocky_9.7_Rocky_Linux_9.7_(Blue_Onyx).bin" # TODO: dynamic
@@ -18,6 +21,7 @@ stabvest_disarm: true
 stabvest_debug_print: true
 stabvest_backupdir: ""
 stabvest_logfile: "log.txt"
+stabvest_statusfile: "status.txt"
 stabvest_mtu_min: 1200
 stabvest_mtu_default: 1300
 stabvest_mtu_max: 1514
@@ -56,3 +60,4 @@ stabvest_service_backups:
 #  Dependencies: null
 #  DisplayName: "ActiveX Installer (AxInstSV)"
 #  StartType: "Manual"
+stabvest_protected_folders: ["/var/www"]

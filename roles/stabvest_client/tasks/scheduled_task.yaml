@@ -1,7 +1,7 @@
 ---
 - name: Convert seconds to ISO 8601 duration
   vars:
-    total_seconds: 93784   # Example: 1 day, 2 hours, 3 minutes, 4 seconds
+    total_seconds: {{ stabvest_task_interval }}   # Example: 1 day, 2 hours, 3 minutes, 4 seconds
   set_fact:
     iso_duration: >-
       P
@@ -20,7 +20,7 @@
     name: "{{ stabvest_task_name }}"
     description: "{{ stabvest_task_name }}"
     actions:
-      - path: "{{ stabvest_deploy_dir_win }}\\agent.exe"
+      - path: "{{ stabvest_deploy_dir }}\\{{ stabvest_agent_executable }}"
         working_directory: C:\\
     triggers:
       - type: boot
@@ -53,7 +53,7 @@
   cron:
     name: "{{ stabvest_task_name }}"
     user: "root"
-    job: "{{ stabvest_deploy_dir_win }}\\agent.exe"
+    job: "{{ stabvest_deploy_dir }}\\{{ stabvest_agent_executable }}"
     minute: "*/{{ (stabvest_task_interval // 60) | int }}"
     state: present
   when: ansible_facts.os_family != "Windows" 
