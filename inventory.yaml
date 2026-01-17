@@ -33,3 +33,6 @@ all:
         john-test-rocky:
           hosts:
             192.168.1.72:
+        testing-ubu24:
+          hosts:
+            192.168.1.31:
