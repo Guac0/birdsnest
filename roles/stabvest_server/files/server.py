@@ -21,6 +21,19 @@ from logging.handlers import RotatingFileHandler
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import class_mapper
 import subprocess
+from pathlib import Path
+import platform
+
+# Path to the git-http-backend executable
+# On Linux: /usr/lib/git-core/git-http-backend
+# On Windows: C:/Program Files/Git/mingw64/libexec/git-core/git-http-backend.exe
+if "windows" in platform.system().lower():
+    GIT_BACKEND = "C:/Program Files/Git/mingw64/libexec/git-core/git-http-backend.exe"
+else:
+    GIT_BACKEND = "/usr/lib/git-core/git-http-backend"
+GIT_PROJECT_ROOT = os.path.join(os.path.dirname(Path(__file__).resolve()),"repos")
+if not os.path.exists(GIT_PROJECT_ROOT):
+    os.mkdir(GIT_PROJECT_ROOT)
 
 CONFIG_DEFAULTS = {
     "HOST": "0.0.0.0",
@@ -1059,7 +1072,99 @@ def find_incident_db(criteria, newest=False):
         return selected_incident.incident_id
     else:
         return None
+
+def clean_and_join_path(path_string):
+    # 1. Split the string by either forward (/) or backward (\) slashes
+    # We use a regex character class [\\/] to match both.
+    path_parts = re.split(r'[\\/]', path_string)
     
+    # 2. Filter out empty strings (caused by leading/trailing or double slashes)
+    path_parts = [part for part in path_parts if part]
+    
+    # 3. Join the parts using the current operating system's separator
+    return os.path.join(*path_parts)
+
+def get_git_stats(db,repos_root=os.path.join(GIT_PROJECT_ROOT,"")):
+    results = []
+    
+    # Iterate through each folder in the repos directory
+    for repo_folder in os.listdir(repos_root):
+        repo_path = os.path.join(repos_root, repo_folder)
+        logger.info(f"handling repo folder {repo_folder} at {repo_path}")
+        
+        # Only process directories
+        if not os.path.isdir(repo_path):
+            continue
+
+        # Extract agent_id from repo name (e.g., "123.git" -> 123)
+        agent_id_str = repo_folder.replace(".git", "")
+        
+        # Query DB for agent metadata
+        agent = db.session.query(Agent).filter_by(agent_id=agent_id_str).first()
+
+        # Data points for both required branches
+        for branch in ["good", "bad"]:
+            try:
+                # 1. Get Commit Name (Subject) and Time
+                # %s = subject, %at = author date (unix timestamp)
+                show_cmd = ["git", "show", "-s", "--format=%s|%at", branch]
+                commit_raw = subprocess.check_output(show_cmd, cwd=repo_path, text=True).strip()
+                name, timestamp = commit_raw.split('|')
+
+                # 2. Get Diff Stats
+                # --summary provides "create mode", "delete mode"
+                # --numstat provides added/deleted line counts
+                diff_cmd = ["git", "diff", f"{branch}^!", "--summary"]
+                diff_output = subprocess.check_output(diff_cmd, cwd=repo_path, text=True)
+                
+                # Parse types of changes
+                added = diff_output.count("create mode")
+                deleted = diff_output.count("delete mode")
+                # Modified is everything else in the diff that isn't a create/delete
+                total_files_cmd = ["git", "diff", f"{branch}^!", "--name-only"]
+                total_files = len(subprocess.check_output(total_files_cmd, cwd=repo_path, text=True).splitlines())
+                modified = total_files - (added + deleted)
+
+                # Build the data point
+                if agent:
+                    results.append({
+                        "repo_name": repo_folder,
+                        "branch": branch,
+                        "agent_name": agent.agent_name,
+                        "hostname": agent.hostname,
+                        "ip": agent.ip,
+                        "latest_commit_name": name,
+                        "latest_commit_time": datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S'),
+                        "diffs": {
+                            "files_added": added,
+                            "files_deleted": deleted,
+                            "files_modified": modified
+                        }
+                    })
+                else:
+                    results.append({
+                        "repo_name": repo_folder,
+                        "branch": branch,
+                        "agent_name": "UNK",
+                        "hostname": "UNK",
+                        "ip": "UNK",
+                        "latest_commit_name": name,
+                        "latest_commit_time": datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S'),
+                        "diffs": {
+                            "files_added": added,
+                            "files_deleted": deleted,
+                            "files_modified": modified
+                        }
+                    })
+
+            except subprocess.CalledProcessError as E:
+                # Handle cases where a branch might not exist yet
+                logger.warning(f"subprocess info {E}")
+                continue
+
+    logger.info(f"returning {results}")
+    return results
+
 # === SAVE AND LOAD ===
 def save_state(filepath=SAVEFILE):
     return False
@@ -1197,9 +1302,15 @@ def add_test_data_agents(num=5):
         for i in range(1,num + 1):
             agent_name = random.choice(["apache2","iis","smb","mysql","vsftpd"])
             agent_type = random.choice(["stabvest","owlet"])
-            hostname = random.choice(["webserver1","webserver2","fileshare1","fileshare2","dc01"])
-            ip = random.choice(["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5"])
-            os = random.choice(["Windows 10","Windows 2016Server","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8"])
+            possible_hostnames = ["webserver1","webserver2","fileshare1","fileshare2","dc01"]
+            #hostname = random.choice(possible_hostnames)
+            hostname = possible_hostnames[i-1]
+            possible_ips = ["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5"]
+            #ip = random.choice(possible_ips)
+            ip = possible_ips[i-1]
+            possible_oses = ["Windows 10","Windows 2016Server","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8"]
+            #os = random.choice(possible_oses)
+            os = possible_oses[i-1]
 
             # The agent_id is computed but we use a unique prefix for test data to avoid collisions
             computed_agent_id = hash_id(f"test_agent_{i}", hostname, ip, os)
@@ -1371,6 +1482,12 @@ def page_messages():
     logger.info(f"/messages - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("messages.html")
 
+@app.route("/configmgmt")
+@login_required
+def page_configmgmt():
+    logger.info(f"/configmgmt - Successful connection from {current_user.id} at {request.remote_addr}")
+    return render_template("configmgmt.html")
+
 @app.route("/deployment")
 @login_required
 @analyst_required
@@ -1515,6 +1632,19 @@ def handle_beacon():
                 pausedUntil=str(0)
             )
             db.session.add(new_agent)
+            if not os.path.exists(os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")):
+                command = ["git", "init", "--bare", f"{agent_id}.git"]
+                try:
+                    # Run the command
+                    result = subprocess.run(
+                        command, 
+                        check=True,          # Raises CalledProcessError if the command fails
+                        capture_output=True, # Captures stdout and stderr
+                        text=True            # Returns output as string instead of bytes
+                    )
+                    logger.info(f"/beacon: created repo {os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")}")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"/beacon: Error occurred when creating {os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")} - {e.stderr}")
             
         else:
             # UPDATE EXISTING AGENT
@@ -1649,7 +1779,48 @@ def get_pause():
     
     return float(agent.pausedUntil), 200
 
+@app.route('/<repo_name>.git/<path:git_path>', methods=['GET', 'POST'])
+def git_backend(repo_name, git_path):
+    git_path = clean_and_join_path(git_path)
+    print(f"repo_name: {repo_name}, git_path: {git_path}, git_project_root: {GIT_PROJECT_ROOT}, full_path: {os.path.join(GIT_PROJECT_ROOT,os.path.join(f"{repo_name}.git",git_path))}")
+    env = {
+        'REQUEST_METHOD': request.method,
+        'GIT_PROJECT_ROOT': GIT_PROJECT_ROOT,
+        'GIT_HTTP_EXPORT_ALL': '1',
+        'PATH_INFO': os.path.join(f"{repo_name}.git",git_path),
+        'QUERY_STRING': request.query_string.decode('utf-8'),
+        'CONTENT_TYPE': request.headers.get('Content-Type', ''),
+    }
+
+    # Call the git backend binary
+    process = subprocess.Popen(
+        [GIT_BACKEND],
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+
+    stdout, stderr = process.communicate(input=request.data)
+    
+    # Split the headers from the body in the output
+    header_end = stdout.find(b'\r\n\r\n')
+    response_body = stdout[header_end+4:]
+    
+    return response_body, 200
+
 # === FRONTEND DISPLAY ===
+
+@login_required
+@app.route("/list_git_overall", methods=["POST"])
+def list_git_overall():
+    try:
+        returned_info = get_git_stats(db)
+        logger.info(f"/list_git_overall - Successful connection from {current_user.id} at {request.remote_addr}. returning info {returned_info}")
+        return jsonify(returned_info), 200
+    except Exception as E:
+        logger.warning(f"/list_git_overall - Failed connection from {current_user.id} at {request.remote_addr}. Exception: {E}")
+        return "",500
 
 @login_required
 @app.route("/ping_login", methods=["POST"])
@@ -2355,7 +2526,7 @@ if __name__ == "__main__":
 
     # Test data
     with app.app_context():
-        add_test_data_agents(15)
+        add_test_data_agents(5)
         add_test_data_messages(10)
         add_test_data_incidents_custom(5)
         add_test_data_incidents(10)
