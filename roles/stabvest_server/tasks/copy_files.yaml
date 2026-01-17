@@ -35,6 +35,7 @@
     mode: '0755'
   when: ansible_facts.os_family != "Windows"
 
+#todo update perms
 - name: Copy web files to target 1
   copy:
     src: "files/templates"

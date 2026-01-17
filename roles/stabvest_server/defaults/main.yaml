@@ -10,7 +10,7 @@ stabvest_agent_executable: "server.py"
 
 
 stabvest_host: "192.168.1.18"
-stabvest_port: 8080
+stabvest_port: 8081
 
 # Derived values can still be overridden if needed
 public_url: "https://{{ stabvest_host }}:{{ stabvest_port }}"
