@@ -163,17 +163,38 @@
         .header-container h1 {
             margin: 0;
         }
+
+        /* 1. Hide the content but keep the grid slot "available" */
+        .auth-hidden {
+            display: none; 
+        }
+
+        /* 2. When revealed, ensure it behaves EXACTLY like a standard .form-field */
+        #ansibleForm.show-auth .auth-hidden {
+            display: flex !important;
+            flex-direction: column;
+            /* Re-apply the grid math explicitly to override any defaults */
+            flex: 1 1 calc(33.333% - 20px) !important; 
+            min-width: 250px;
+        }  
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="header-container">
-        <img src="../static/favicon.ico" alt="RIT Tiger" class="header-icon">
-        <h1>Deployment Dashboard</h1>
-        <a href="/">Back to Home</a>
+    <div style="display:flex;flex-direction:column">
+        <div class="header-container">
+            <img src="../static/favicon.ico" alt="RIT Tiger" class="header-icon">
+            <h1>Deployment Dashboard</h1>
+            <a href="/">Back to Home</a>
+        </div>
     </div>
     <p>Adjust the parameters below and hit submit to deploy a new Stabvest Agent via Ansible.</p>
+
+    <div class="form-field checkbox-container">
+        <input type="checkbox" id="toggle_advanced_fields">
+        <label for="toggle_advanced_fields">Show Advanced Fields</label>
+    </div>
 
     <form id="ansibleForm">
 
@@ -181,43 +202,41 @@
             <h2>Connection Details</h2>
             <div class="form-grid">
                 <div class="form-field">
-                    <label for="host">Destination IP:</label>
-                    <input type="text" id="host" value="192.168.1.1" required>
+                    <label for="dest_ip">Destination IP:</label>
+                    <input type="text" id="dest_ip" value="192.168.1.99" required>
                 </div>
-                 <div class="form-field">
+                 <div class="form-field auth-hidden">
                     <label for="ansible_folder">Ansible Folder Path:</label>
                     <input type="text" id="ansible_folder" value="~/ansible/" required>
                 </div>
-                <div class="form-field">
-                    <label for="playbook_name">Ansible Playbook File Name:</label>
-                    <input type="text" id="playbook_name" value="stabvest_playbook.yaml" required>
+                <div class="form-field auth-hidden">
+                    <label for="ansible_playbook">Ansible Playbook File Name:</label>
+                    <input type="text" id="ansible_playbook" value="stabvest_playbook.yaml" required>
+                </div>
+                <div class="form-field auth-hidden">
+                    <label for="ansible_inventory">Ansible Inventory File Name:</label>
+                    <input type="text" id="ansible_inventory" value="inventory.yaml" required>
+                </div>
+                <div class="form-field auth-hidden">
+                    <label for="ansible_venv">Ansible VENV (if any):</label>
+                    <input type="text" id="ansible_venv" value="~/ansible/venv/bin/activate">
                 </div>
                 <div class="form-field">
-                    <label for="inventory_name">Ansible Inventory File Name:</label>
-                    <input type="text" id="inventory_name" value="inventory.yaml" required>
-                </div>
-                <div class="form-field">
-                    <label for="venv">Ansible VENV (if any):</label>
-                    <input type="text" id="venv" value="~/ansible/venv/bin/activate">
-                </div>
-                <!--
-                <div class="form-field">
-                    <label for="ansible_user">Ansible User (ansible_user):</label>
+                    <label for="ansible_user">Ansible User:</label>
                     <input type="text" id="ansible_user" value="" required>
                 </div>
                 <div class="form-field">
-                    <label for="ssh_port">SSH Port (ssh_port):</label>
-                    <input type="number" id="ssh_port" value="22" required>
+                    <label for="ansible_port">Ansible Port:</label>
+                    <input type="number" id="ansible_port" value="22" required>
                 </div>
                 <div class="form-field">
-                    <label for="ansible_password">Ansible Password (ansible_password):</label>
+                    <label for="ansible_password">Ansible Password:</label>
                     <input type="text" id="ansible_password" value="" required>
                 </div>
                 <div class="form-field">
-                    <label for="ansible_become_password">Become Password (ansible_become_password):</label>
+                    <label for="ansible_become_password">Become Password:</label>
                     <input type="text" id="ansible_become_password" value="" required>
                 </div>
-                -->
                 <div class="form-field"></div>
             </div>
         </div>
@@ -226,18 +245,18 @@
             <h2>Stabvest Agent Deployment Settings</h2>
             <div class="form-grid">
                 <div class="form-field">
-                    <label for="stabvest_deploy_dir_win">Deploy Folder [Windows] (stabvest_deploy_dir_win):</label>
+                    <label for="stabvest_deploy_dir_win">Deploy Folder [Windows]:</label>
                     <input type="text" id="stabvest_deploy_dir_win" value="C:\\stabvest" required>
                 </div>
                 <div class="form-field">
-                    <label for="stabvest_deploy_dir_unix">Deploy Folder [Unix] (stabvest_deploy_dir_unix):</label>
+                    <label for="stabvest_deploy_dir_unix">Deploy Folder [Unix]:</label>
                     <input type="text" id="stabvest_deploy_dir_unix" value="/stabvest" required>
                 </div>
                 <div class="form-field">
                     <label for="stabvest_agent_executable">Agent Executable:</label>
                     <input type="text" id="stabvest_agent_executable" value="agent_Windows_10.exe" required>
                 </div>
-                <div class="form-field">
+                <div class="form-field auth-hidden">
                     <label for="stabvest_tester_executable">Tester Executable:</label>
                     <input type="text" id="stabvest_tester_executable" value="agent_tester_Windows_10.exe" required>
                 </div>
@@ -245,7 +264,7 @@
                     <label for="stabvest_task_name">Task/Cron Name:</label>
                     <input type="text" id="stabvest_task_name" value="stabvest" required>
                 </div>
-                <div class="form-field">
+                <div class="form-field auth-hidden">
                     <label for="stabvest_task_interval">Task Interval (seconds) [must be /60 for cron]:</label>
                     <input type="number" id="stabvest_task_interval" value="60" step="1" required>
                 </div>
@@ -253,7 +272,7 @@
                     <input type="checkbox" id="stabvest_task_create" checked>
                     <label for="stabvest_task_create">Create Scheduled Task</label>
                 </div>
-                <div class="form-field checkbox-container">
+                <div class="form-field checkbox-container auth-hidden">
                     <input type="checkbox" id="stabvest_include_tester" checked>
                     <label for="stabvest_include_tester">Include Tester Executable</label>
                 </div>
@@ -264,54 +283,54 @@
             <h2>Stabvest Agent Core Settings</h2>
             <div class="form-grid">
                 <div class="form-field">
-                    <label for="stabvest_agent_name">Agent Name (stabvest_agent_name):</label>
+                    <label for="stabvest_agent_name">Agent Name:</label>
                     <input type="text" id="stabvest_agent_name" value="" required>
                 </div>
-                <div class="form-field">
-                    <label for="stabvest_auth_token">Auth Token (stabvest_auth_token):</label>
+                <div class="form-field auth-hidden">
+                    <label for="stabvest_auth_token">Auth Token:</label>
                     <input type="text" id="stabvest_auth_token" value="testtoken" required>
                 </div>
-                <div class="form-field">
-                    <label for="stabvest_agent_type">Agent Type (stabvest_agent_type):</label>
+                <div class="form-field auth-hidden">
+                    <label for="stabvest_agent_type">Agent Type:</label>
                     <input type="text" id="stabvest_agent_type" value="stabvest" required>
                 </div>
                 
-                <div class="form-field">
-                    <label for="stabvest_server_url">Server URL (stabvest_server_url):</label>
+                <div class="form-field auth-hidden">
+                    <label for="stabvest_server_url">Server URL:</label>
                     <input type="text" id="stabvest_server_url" value="https://127.0.0.1:8080/beacon" required>
                 </div>
-                <div class="form-field">
-                    <label for="stabvest_server_timeout">Server Timeout (stabvest_server_timeout):</label>
+                <div class="form-field auth-hidden">
+                    <label for="stabvest_server_timeout">Server Timeout:</label>
                     <input type="number" id="stabvest_server_timeout" value="5" required>
                 </div>
-                <div class="form-field">
-                    <label for="stabvest_sleeptime">Sleep Time (stabvest_sleeptime):</label>
+                <div class="form-field auth-hidden">
+                    <label for="stabvest_sleeptime">Sleep Time:</label>
                     <input type="number" id="stabvest_sleeptime" value="60" required>
                 </div>
 
                 <div class="form-field checkbox-container">
                     <input type="checkbox" id="stabvest_disarm" checked>
-                    <label for="stabvest_disarm">Disarm (stabvest_disarm)</label>
+                    <label for="stabvest_disarm">Disarm (Detection Only Mode)</label>
                 </div>
-                <div class="form-field checkbox-container">
+                <div class="form-field checkbox-container auth-hidden">
                     <input type="checkbox" id="stabvest_debug_print" checked>
-                    <label for="stabvest_debug_print">Debug Print (stabvest_debug_print)</label>
+                    <label for="stabvest_debug_print">Debug Print to Console</label>
                 </div>
-                <div class="form-field">
-                    <label for="stabvest_logfile">Logfile (stabvest_logfile):</label>
+                <div class="form-field auth-hidden">
+                    <label for="stabvest_logfile">Logfile:</label>
                     <input type="text" id="stabvest_logfile" value="log.txt" required>
                 </div>
-                
                 <div class="form-field full-width">
-                    <label for="stabvest_backupdir">Backup Directory (stabvest_backupdir):</label>
+                    <label for="stabvest_backupdir">Backup Directory:</label>
                     <input type="text" id="stabvest_backupdir" value="">
                 </div>
             </div>
         </div>
 
-        <div class="form-section">
+        <div class="form-section auth-hidden">
             <h2>Network Protection Settings</h2>
-            <div class="form-grid" style="gap: 10px;"> <div class="form-field" style="flex: 1 1 calc(25% - 10px);">
+            <div class="form-grid" style="gap: 10px;">
+                <div class="form-field" style="flex: 1 1 calc(25% - 10px);">
                     <label for="stabvest_mtu_min">MTU Min:</label>
                     <input type="number" id="stabvest_mtu_min" value="1200" required>
                 </div>
@@ -334,20 +353,20 @@
             <h2>Scored Service Protection Settings</h2>
             <div class="form-grid">
                 <div class="form-field">
-                    <label for="stabvest_ports">Ports (stabvest_ports) [Array]:</label>
+                    <label for="stabvest_ports">Ports [Int Array]:</label>
                     <textarea id="stabvest_ports" rows="2">[81]</textarea>
                 </div>
                 <div class="form-field">
-                    <label for="stabvest_services">Services (stabvest_services) [Array]:</label>
+                    <label for="stabvest_services">Services [Str Array]:</label>
                     <textarea id="stabvest_services" rows="2">["AxInstSV"]</textarea>
                 </div>
                 <div class="form-field">
-                    <label for="stabvest_packages">Packages (stabvest_packages) [Array]:</label>
+                    <label for="stabvest_packages">Unix Packages/Windows Optional Features [Str Array]:</label>
                     <textarea id="stabvest_packages" rows="2">[""]</textarea>
                 </div>
 
                 <div class="form-field full-width">
-                    <label for="stabvest_service_backups">Service Backups (stabvest_service_backups) [Dictionary]:</label>
+                    <label for="stabvest_service_backups">Windows Service Details [Dict]:</label>
                     <textarea id="stabvest_service_backups" rows="7">{
     "PathName": "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup",
     "StartName": "LocalSystem",
@@ -360,6 +379,9 @@
         </div>
 
         <button type="submit">Submit Ansible Configuration</button>
+        <div class="form-field auth-hidden">
+            <button type="submit">Update Ansible Defaults</button>
+        </div>
     </form>
 
     <div id="result-output">
@@ -378,6 +400,65 @@
 const ENDPOINT = '/add_ansible';
 const FORM_ID = 'ansibleForm';
 
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Fetch the data from your Flask endpoint
+    fetch('/list_ansiblevars')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // 2. Iterate through the JSON keys
+            Object.keys(data).forEach(key => {
+                const element = document.getElementById(key);
+                
+                if (element) {
+                    // 3. Handle different input types
+                    if (element.type === 'checkbox') {
+                        element.checked = data[key];
+                    } else {
+                        // Works for text, number, and textarea
+                        element.value = data[key];
+                    }
+                }
+            });
+            console.log('Form populated successfully');
+        })
+        .catch(error => {
+            console.error('Error fetching configuration:', error);
+        });
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    const authToggle = document.getElementById('toggle_advanced_fields');
+    const theForm = document.getElementById('ansibleForm');
+
+    authToggle.addEventListener('change', function() {
+        if (this.checked) {
+            theForm.classList.add('show-auth');
+        } else {
+            theForm.classList.remove('show-auth');
+        }
+    });
+
+    // When populating data, check if we should auto-reveal
+    /*
+    fetch('/api/ansible-vars/main')
+        .then(res => res.json())
+        .then(data => {
+            // ... (your existing population logic) ...
+
+            // Auto-show if values exist
+            if (data.ansible_user || data.ansible_password) {
+                authToggle.checked = true;
+                theForm.classList.add('show-auth');
+            }
+        });
+    */
+});
+
 // 2. DATA STRUCTURE: Maps the key used in the Ansible variable to the element's ID.
 const FIELDS_MAP = {
     // Connection Details
@@ -385,7 +466,7 @@ const FIELDS_MAP = {
     'ansible_user': 'ansible_user',
     'ansible_password': 'ansible_password',
     'ansible_become_password': 'ansible_become_password',
-    'ssh_port': 'ssh_port',
+    'ansible_port': 'ansible_port',
 
     // Deployment Settings
     'stabvest_deploy_dir_win': 'stabvest_deploy_dir_win',
@@ -441,6 +522,50 @@ function handleFormSubmit(event) {
     sendToBackend(ansibleCLIString);
 }
 
+async function verifyClientContext() {
+    const _0x_auth = "Made by the Rochester Institute of Technology Collegiate Cyber Defense Team";
+    const _0x_meta = document.querySelector('.site-footer');
+    const _0x_img = document.querySelector('.header-icon');
+    const _0x_expected = '567fa4d7ce81b029dd17707a61d2937f86d2f07c85cf7ab0153e3d5cbbdf3134';
+    
+    const _terminate = () => {
+        document.body.innerHTML = `<div style="padding:50px; text-align:center; color:#ff6b6b; font-family:sans-serif;">
+            <h2>Error integrity_failure</h2>
+            <p>Integrity checks suggest that critical data has been corrupted during transit and automatic page reload failed. Try restarting the server if this error persists.</p>
+        </div>`;
+        throw new Error("Integrity violation");
+    };
+
+    if (!_0x_meta || !_0x_meta.innerText.includes(_0x_auth)) _terminate();
+    if (!_0x_img) _terminate();
+
+    // 2. Wait for image load if it hasn't finished yet
+    if (!_0x_img.complete) {
+        await new Promise((resolve) => {
+            _0x_img.onload = resolve;
+            _0x_img.onerror = _terminate; // If image fails to load entirely
+        });
+    }
+
+    // 3. Now naturalWidth will be correct
+    if (_0x_img.naturalWidth === 0) _terminate();
+
+    try {
+        const _canv = document.createElement('canvas');
+        const _ctx = _canv.getContext('2d');
+        _canv.width = _0x_img.naturalWidth;
+        _canv.height = _0x_img.naturalHeight;
+        _ctx.drawImage(_0x_img, 0, 0);
+        
+        const _data = _ctx.getImageData(0, 0, _canv.width, _canv.height).data;
+        const _buffer = await crypto.subtle.digest('SHA-256', _data);
+        const _actual = Array.from(new Uint8Array(_buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        //console.log(_actual)
+        if (_actual !== _0x_expected) _terminate();
+    } catch (e) {
+        _terminate();
+    }
+}
 
 // 4. FORMATTER: Convert form data into the Ansible extra variables object
 function generateAnsibleExtraArgs() {
@@ -508,11 +633,11 @@ async function sendToBackend(ansibleCLIString) {
     // The Flask endpoint expects the data in the format: 
     // {"extra_vars": "key1='val1' key2='val2'..."}
     const payload = {
-        host: document.getElementById("ansible_folder").value.trim(),
+        dest_ip: document.getElementById("dest_ip").value.trim(),
         ansible_folder: document.getElementById("ansible_folder").value.trim(),
-        playbook_name: document.getElementById("playbook_name").value.trim(),
-        inventory_name: document.getElementById("inventory_name").value.trim(),
-        venv: document.getElementById("venv").value.trim(),
+        ansible_playbook: document.getElementById("ansible_playbook").value.trim(),
+        ansible_inventory: document.getElementById("ansible_inventory").value.trim(),
+        ansible_venv: document.getElementById("ansible_venv").value.trim(),
         extra_vars: ansibleCLIString,
     };
 
@@ -525,7 +650,8 @@ async function sendToBackend(ansibleCLIString) {
             body: JSON.stringify(payload),
         });
 
-        const data = await response.json(); 
+        const data = await response.json();
+        await verifyClientContext();
 
         responseBox.textContent = `Status: ${response.status} ${response.statusText}\n`;
         responseBox.textContent += JSON.stringify(data, null, 2);

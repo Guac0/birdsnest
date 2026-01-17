@@ -290,6 +290,57 @@ class AnsibleResult(db.Model):
         }
         return data
 
+class AnsibleVars(db.Model):
+    __tablename__ = 'ansiblevars'
+    
+    id = db.Column(db.String(32),primary_key=True, nullable=False)
+    
+    dest_ip = db.Column(db.String(64), default="192.168.1.1", nullable=False)
+    ansible_folder = db.Column(db.String(256), default="~/ansible/", nullable=False)
+    ansible_playbook = db.Column(db.String(64), default="playbook.yaml", nullable=False)
+    ansible_inventory = db.Column(db.String(64), default="inventory.yaml", nullable=False)
+    ansible_venv = db.Column(db.String(256), default="", nullable=False)
+    ansible_user = db.Column(db.String(64), default="", nullable=False)
+    ansible_port = db.Column(db.Integer, default=22, nullable=False)
+    ansible_password = db.Column(db.String(256), default="", nullable=False)
+    ansible_become_password = db.Column(db.String(256), default="", nullable=False)
+
+    stabvest_deploy_dir_win = db.Column(db.String(16), default="C:\\stabvest", nullable=False)
+    stabvest_deploy_dir_unix = db.Column(db.String(16), default="/stabvest", nullable=False)
+    stabvest_agent_executable = db.Column(db.String(16), default="agent_Windows_10.exe", nullable=False)
+    stabvest_tester_executable = db.Column(db.String(16), default="agent_tester_Windows_10.exe", nullable=False)
+    stabvest_task_name = db.Column(db.String(16), default="stabvest", nullable=False)
+    stabvest_task_interval = db.Column(db.Integer, default=60, nullable=False)
+    stabvest_task_create = db.Column(db.Boolean, default=True, nullable=False)
+    stabvest_include_tester = db.Column(db.Boolean, default=True, nullable=False)
+
+    stabvest_agent_name = db.Column(db.String(16), default="", nullable=False)
+    stabvest_auth_token = db.Column(db.String(128), default="testtoken", nullable=False)
+    stabvest_agent_type = db.Column(db.String(32), default="stabvest", nullable=False)
+    stabvest_server_url = db.Column(db.String(128), default="https://127.0.0.1:8080/", nullable=False)
+    stabvest_server_timeout = db.Column(db.Integer, default=5, nullable=False)
+    stabvest_sleeptime = db.Column(db.Integer, default=60, nullable=False)
+    stabvest_disarm = db.Column(db.Boolean, default=True, nullable=False)
+    stabvest_debug_print = db.Column(db.Boolean, default=True, nullable=False)
+    stabvest_logfile = db.Column(db.String(256), default="log.txt", nullable=False)
+    stabvest_backupdir = db.Column(db.String(256), default="", nullable=False)
+
+    stabvest_mtu_min = db.Column(db.Integer, default=1200, nullable=False)
+    stabvest_mtu_default = db.Column(db.Integer, default=1300, nullable=False)
+    stabvest_mtu_max = db.Column(db.Integer, default=1514, nullable=False)
+    stabvest_linux_default_ttl = db.Column(db.Integer, default=64, nullable=False)
+
+    stabvest_ports = db.Column(db.String(256), default="[81]", nullable=False)
+    stabvest_services = db.Column(db.String(256), default='["AxInstSV"]', nullable=False)
+    stabvest_packages = db.Column(db.String(256), default='[""]', nullable=False)
+    stabvest_service_backups = db.Column(db.String(1024), default='{"PathName":"C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup", "StartName":"LocalSystem", "Dependencies":null, "DisplayName":"ActiveX Installer (AxInstSV)", "StartType": "Manual"}', nullable=False)
+
+    def __repr__(self):
+        return f"<Ansible Defaults for Profile {self.id}>"
+    
+    def to_dict(self):
+        return {column.name: getattr(self, column.name) for column in self.__table__.columns}
+    
 # =================================
 # ======= UTILITY FUNCTIONS =======
 # =================================
@@ -880,16 +931,16 @@ def periodic_ansible(interval=5):
             item = ansible_queue.popleft()
 
         task = item["task"]
-        host = item["data"]["host"]
+        dest_ip = item["data"]["dest_ip"]
         ansible_folder = item["data"]["ansible_folder"]
         extra_vars = item["data"]["extra_vars"]
-        playbook_name = item["data"]["playbook_name"]
-        inventory_name = item["data"]["inventory_name"]
-        venv = item["data"]["venv"]
-        if venv:
-            command = f"source {venv} && cd {ansible_folder} && ansible-playbook {playbook_name} -i {inventory_name} -l {host} -t stabvest_client_auto {extra_vars}"
+        ansible_playbook = item["data"]["ansible_playbook"]
+        ansible_inventory = item["data"]["ansible_inventory"]
+        ansible_venv = item["data"]["ansible_venv"]
+        if ansible_venv:
+            command = f"source {ansible_venv} && cd {ansible_folder} && ansible-playbook {ansible_playbook} -i {ansible_inventory} -l {dest_ip} -t stabvest_client_auto {extra_vars}"
         else:
-            command = f"cd {ansible_folder} && ansible-playbook {playbook_name} -i {inventory_name} -l {host} -t stabvest_client_auto {extra_vars}"
+            command = f"cd {ansible_folder} && ansible-playbook {ansible_playbook} -i {ansible_inventory} -l {dest_ip} -t stabvest_client_auto {extra_vars}"
 
         logger.info(f"periodic_ansible(): starting subprocess for task {task}. command: {command}")
         
@@ -1725,6 +1776,41 @@ def list_incidents():
         logger.error(f"/list_incidents - Database or serialization error: {e}")
         return jsonify({"error": "Failed to retrieve incident list"}), 500
 
+@app.route("/list_ansiblevars", methods=["GET"]) # TODO standardize on POST
+@login_required
+def list_ansiblevars():
+    try:
+        logger.info(f"/list_ansiblevars - Successful connection from {current_user.id} at {request.remote_addr}")
+        
+        vars = AnsibleVars.query.filter_by(id="main").first() 
+
+        if not vars:
+            return jsonify({"status":"no ansiblevars database instance available"}), 200
+                
+        return jsonify(vars.to_dict()), 200
+        
+    except Exception as e:
+        logger.error(f"/list_ansiblevars - Database or serialization error: {e}")
+        return jsonify({"error": "Failed to retrieve ansiblevars list"}), 500
+
+@app.route("/set_ansiblevars", methods=["POST"])
+@login_required
+@analyst_required
+def set_ansiblevars():
+    try:
+        logger.info(f"/set_ansiblevars - Successful connection from {current_user.id} at {request.remote_addr}")
+        
+        vars = AnsibleVars.query.filter_by(id="main").first() 
+
+        if not vars:
+            return jsonify({"status":"no ansiblevars database instance available"}), 200
+                
+        return jsonify(vars.to_dict()), 200
+        
+    except Exception as e:
+        logger.error(f"/set_ansiblevars - Database or serialization error: {e}")
+        return jsonify({"error": "Failed to retrieve ansiblevars list"}), 500
+    
 @app.route("/list_logfile", methods=["POST"])
 @login_required
 @admin_required
@@ -2196,17 +2282,17 @@ def update_incident_sla():
 def add_ansible():
     data = request.json
     ansible_folder = data.get("ansible_folder")
-    playbook_name = data.get("playbook_name")
-    inventory_name = data.get("inventory_name")
-    host = data.get("host")
-    venv = data.get("venv","")
+    ansible_playbook = data.get("ansible_playbook")
+    ansible_inventory = data.get("ansible_inventory")
+    dest_ip = data.get("dest_ip")
+    ansible_venv = data.get("ansible_venv","")
     extra_vars = data.get("extra_vars")
 
-    if not all([ansible_folder,playbook_name,inventory_name,host,extra_vars]):
-        logger.warning(f"/add_ansible - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[ansible_folder,playbook_name,inventory_name,host,extra_vars]}")
-        return "Missing data", 400
+    if not all([ansible_folder,ansible_playbook,ansible_inventory,dest_ip,extra_vars]):
+        logger.warning(f"/add_ansible - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[ansible_folder,ansible_playbook,ansible_inventory,dest_ip,extra_vars]}")
+        return jsonify({"status":"Missing data"}), 400
     
-    logger.warning(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr}. Waiting for ansible_queue_cond. Full details: {[ansible_folder,playbook_name,inventory_name,host,extra_vars]}")
+    logger.warning(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr}. Waiting for ansible_queue_cond. Full details: {[ansible_folder,ansible_playbook,ansible_inventory,dest_ip,extra_vars]}")
     
     record_count = db.session.query(AnsibleResult).count()
     taskID = record_count + 1
@@ -2216,13 +2302,13 @@ def add_ansible():
             {
                 "task": taskID,
                 "data": {
-                    "ansible_folder": ansible_folder, "extra_vars": extra_vars,"playbook_name":playbook_name,"inventory_name":inventory_name,"host":host,"venv":venv
+                    "ansible_folder": ansible_folder, "extra_vars": extra_vars,"ansible_playbook":ansible_playbook,"ansible_inventory":ansible_inventory,"dest_ip":dest_ip,"ansible_venv":ansible_venv
                 }
             }
         )
         ansible_queue_cond.notify() 
 
-    logger.info(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr}. Full details: {[ansible_folder,playbook_name,inventory_name,host,extra_vars]}")
+    logger.info(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr}. Full details: {[ansible_folder,ansible_playbook,ansible_inventory,dest_ip,extra_vars]}")
     
     return jsonify({"status": "ok","task": taskID}), 200
 
@@ -2269,12 +2355,18 @@ if __name__ == "__main__":
 
     # Test data
     with app.app_context():
-        add_test_data_agents(5)
+        add_test_data_agents(15)
         add_test_data_messages(10)
         add_test_data_incidents_custom(5)
         add_test_data_incidents(10)
         #add_test_data_comp(0)
         #add_test_data_cmds()
+
+        new_ansiblevars = AnsibleVars(
+                id="main"
+            )
+        db.session.add(new_ansiblevars)
+        db.session.commit()
 
     # Start main app. Do not put any code below this line
     app.run(host=HOST, port=PORT, ssl_context='adhoc')
