@@ -9,6 +9,9 @@
   "DEFAULT_WEBHOOK_SLEEP_TIME": 0.25,
   "MAX_WEBHOOK_MSG_PER_MINUTE": 50,
   "WEBHOOK_URL": "",
+  "AUTHCONFIG_STRICT_IP": false,
+  "AUTHCONFIG_STRICT_USER": false,
+  "AUTHCONFIG_CREATE_INCIDENT": true,
   "AGENT_AUTH_TOKENS": {
         "testtoken": { 
             "added_by": "default"

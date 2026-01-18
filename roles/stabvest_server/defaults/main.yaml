@@ -22,6 +22,9 @@ stale_time: 300
 default_webhook_sleep_time: 0.25
 max_webhook_msg_per_minute: 50
 webhook_url: "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i04rGxdMu6nnnzJsVtj188VbHtZT5oBNJIoOYV5VP8lpI-mJhzeNYuYD"
+authconfig_strict_ip: false
+authconfig_strict_user: false
+authconfig_create_incident: false
 agent_auth_tokens:
   testtoken:
     added_by: "default"

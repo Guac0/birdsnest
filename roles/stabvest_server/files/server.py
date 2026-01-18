@@ -46,6 +46,9 @@ CONFIG_DEFAULTS = {
     "DEFAULT_WEBHOOK_SLEEP_TIME": 0.25,
     "MAX_WEBHOOK_MSG_PER_MINUTE": 50,
     "WEBHOOK_URL": "",
+    "AUTHCONFIG_STRICT_IP": False,
+    "AUTHCONFIG_STRICT_USER": False,
+    "AUTHCONFIG_CREATE_INCIDENT": False,
     "AGENT_AUTH_TOKENS": {
         "testtoken": { 
             "added_by": "default"
@@ -104,6 +107,9 @@ MAX_WEBHOOK_MSG_PER_MINUTE = CONFIG["MAX_WEBHOOK_MSG_PER_MINUTE"]
 WEBHOOK_URL = CONFIG["WEBHOOK_URL"]
 INITIAL_AGENT_AUTH_TOKENS = CONFIG["AGENT_AUTH_TOKENS"]
 INITIAL_WEBGUI_USERS = CONFIG["WEBGUI_USERS"]
+AUTHCONFIG_STRICT_IP = CONFIG["AUTHCONFIG_STRICT_IP"]
+AUTHCONFIG_STRICT_USER = CONFIG["AUTHCONFIG_STRICT_USER"]
+AUTHCONFIG_CREATE_INCIDENT = CONFIG["AUTHCONFIG_CREATE_INCIDENT"]
 
 # =================================
 # ======= START USER CONFIG =======
@@ -353,7 +359,60 @@ class AnsibleVars(db.Model):
     
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}
+
+class AuthConfig(db.Model):
+    __tablename__ = 'authconfigs'
     
+    id = db.Column(db.Integer, primary_key=True)
+    entity_value = db.Column(db.String(100), nullable=False, unique=True)
+    entity_type = db.Column(db.String(10), nullable=False) # 'IP' or 'USER'
+    disposition = db.Column(db.String(10), nullable=False) # 'LEGITIMATE' or 'MALICIOUS'
+
+    def to_dict(self):
+        return {
+            "value": self.entity_value,
+            "type": self.entity_type,
+            "status": self.disposition
+        }
+    
+    def __repr__(self):
+        return f"<AuthConfig {self.id}: {self.entity_type} {self.entity_value} is classified as {self.disposition}.>"
+    
+    def to_dict(self):
+        return {column.name: getattr(self, column.name) for column in self.__table__.columns}
+
+class AuthConfigGlobal(db.Model):
+    __tablename__ = 'authconfigglobals'
+    id = db.Column(db.Integer, primary_key=True)
+    # The setting name (e.g., 'strict_ip', 'strict_user')
+    key = db.Column(db.String(50), unique=True, nullable=False)
+    # Boolean value stored as integer 0/1 for SQLite compatibility
+    value = db.Column(db.Boolean, default=False)
+
+class AuthRecord(db.Model):
+    __tablename__ = 'authrecords'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.String(128), db.ForeignKey('messages.message_id'), nullable=False)
+    agent_id = db.Column(db.String(128), db.ForeignKey('agents.agent_id'), nullable=False)
+
+    user = db.Column(db.String(100), nullable=False)
+    login_type = db.Column(db.String(32), nullable=False)
+    srcip = db.Column(db.String(45), default="", nullable=False) # Increased for IPv6 support
+    successful = db.Column(db.Boolean, nullable=False)
+    timestamp = db.Column(db.Integer, nullable=False) # Helpful for sorting logs
+    notes = db.Column(db.String(1024))
+
+    def __repr__(self):
+        status = "Success" if self.successful else "Failed"
+        if self.notes:
+            return f"<AuthRecord {self.id}: {self.login_type} login attempt on user {self.user} from {self.srcip} ({status}). Notes: {self.notes}>"
+        return f"<AuthRecord {self.id}: {self.login_type} login attempt on user {self.user} from {self.srcip} ({status}).>"
+    
+    def to_dict(self):
+        # This version is excellent as it handles all columns automatically
+        return {column.name: getattr(self, column.name) for column in self.__table__.columns}
+
 # =================================
 # ======= UTILITY FUNCTIONS =======
 # =================================
@@ -1313,7 +1372,8 @@ def add_test_data_agents(num=5):
     # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int),lastStatus(bool),stale(bool)}
     try:
         for i in range(1,num + 1):
-            agent_name = random.choice(["apache2","iis","smb","mysql","vsftpd"])
+            #agent_name = random.choice(["apache2","iis","smb","mysql","vsftpd"])
+            agent_name = ["apache2","iis","smb","mysql","vsftpd"][i-1]
             agent_type = random.choice(["stabvest","owlet"])
             possible_hostnames = ["webserver1","webserver2","fileshare1","fileshare2","dc01"]
             #hostname = random.choice(possible_hostnames)
@@ -1326,7 +1386,8 @@ def add_test_data_agents(num=5):
             os = possible_oses[i-1]
 
             # The agent_id is computed but we use a unique prefix for test data to avoid collisions
-            computed_agent_id = hash_id(f"test_agent_{i}", hostname, ip, os)
+            #computed_agent_id = hash_id(f"test_agent_{i}", hostname, ip, os)
+            computed_agent_id = hash_id(agent_name, hostname, ip, os)
 
             new_agent = Agent(
                 agent_id=computed_agent_id,
@@ -1351,9 +1412,11 @@ def add_test_data_agents(num=5):
 
 def add_test_data_messages(num=15):
     try:
+        all_agents = Agent.query.all()
         for i in range(1, num + 1):
             timestamp = time.time() - ((num - i) * 100)
-            agent_id = f"agent_{random.randint(1, 5)}" # Uses the agent_id naming pattern from the original code
+            #agent_id = f"agent_{random.randint(1, 5)}" # Uses the agent_id naming pattern from the original code
+            agent_id = random.choice(all_agents).agent_id
 
             message_id = hash_id(timestamp, agent_id)
             new_message = Message(
@@ -1400,9 +1463,13 @@ def add_test_data_messages(num=15):
         logger.error(f"Failed to add test message data: {e}")
 
 def add_test_data_incidents(num=15,createAlert=True):
+    all_agents = Agent.query.all()
     for i in range(1, num + 1):
-        agent_id = f"agent_{random.randint(1,5)}"
-        agent_name = f"agent_{random.randint(1,5)}"
+        ranagent = random.choice(all_agents)
+        #agent_id = f"agent_{random.randint(1,5)}"
+        agent_id = ranagent.agent_id
+        agent_name = ranagent.agent_name
+        #agent_name = f"agent_{random.randint(1,5)}"
         hostname = "exampleHost"
         lastSeenTime = time.time() - ((num - i) * 100)
         incident_data = {
@@ -1470,6 +1537,116 @@ def add_test_data_incidents_custom(num=5,createAlert=True):
         )
     logger.info(f"Successfully added {num} test custom incidents to the database.")
 
+def add_test_data_auth_records(num=10):
+    try:
+        # Fetch existing agents and messages to use as foreign keys
+        all_agents = Agent.query.all()
+        all_messages = Message.query.all()
+
+        if not all_agents or not all_messages:
+            logger.error("Cannot add AuthRecords: Agents or Messages tables are empty.")
+            return
+
+        for i in range(1, num + 1):
+            # Pick a random parent message and its associated agent
+            parent_message = random.choice(all_messages)
+            parent_agent_id = parent_message.agent_id
+            
+            # Setup realistic data variations
+            user = random.choice(["root", "admin", "nobody", "www-data", "db_user", "malicious_actor", "service_acct"])
+            login_type = random.choice(["ssh-password", "ssh-key", "tty", "sudo-attempt"])
+            srcip = random.choice([
+                "192.168.1.50", "10.0.0.15", "172.16.5.22", # Local
+                "45.33.22.11", "185.22.33.44",              # Remote/Malicious
+                "2001:db8:3333:4444:5555:6666:7777:8888"    # IPv6
+            ])
+            successful = random.choice([True, False, False, False]) # Weight toward failure for 'notable' logs
+            
+            # Use the parent message's timestamp for consistency
+            timestamp = parent_message.timestamp + random.randint(1, 10) 
+            
+            # Generate appropriate notes based on success
+            possible_notes = [
+                "User in malicious_users list.",
+                "Multiple failed attempts from this IP detected.",
+                "Successful login from unauthorized subnet.",
+                "Source IP matches known botnet signature.",
+                "Unusual login time for this user account.",
+                None
+            ]
+
+            new_record = AuthRecord(
+                message_id=parent_message.message_id,
+                agent_id=parent_agent_id,
+                user=user,
+                login_type=login_type,
+                srcip=srcip,
+                successful=successful,
+                timestamp=timestamp,
+                notes=random.choice(possible_notes) if not successful else "Successful login audit."
+            )
+            
+            db.session.add(new_record)
+
+        db.session.commit()
+        logger.info(f"Successfully added {num} test auth records to the database.")
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to add test auth record data: {e}")
+
+def add_test_data_auth_config():
+    """
+    Populates the AuthConfig table with sample IPs and Usernames.
+    Matches the data pool used in add_test_data_auth_records.
+    """
+    try:
+        # Define the pool of test entities
+        test_ips = [
+            ("192.168.1.50", "LEGITIMATE"),
+            ("10.0.0.15", "LEGITIMATE"),
+            ("172.16.5.22", "LEGITIMATE"),
+            ("45.33.22.11", "MALICIOUS"),
+            ("185.22.33.44", "MALICIOUS"),
+            ("2001:db8:3333:4444:5555:6666:7777:8888", "MALICIOUS")
+        ]
+
+        test_users = [
+            ("root", "MALICIOUS"),
+            ("admin", "LEGITIMATE"),
+            ("nobody", "LEGITIMATE"),
+            ("www-data", "LEGITIMATE"),
+            ("db_user", "LEGITIMATE"),
+            ("malicious_actor", "MALICIOUS"),
+            ("service_acct", "LEGITIMATE")
+        ]
+
+        # Combine them into a processing list
+        config_items = []
+        for val, disp in test_ips:
+            config_items.append({'val': val, 'type': 'IP', 'disp': disp})
+        for val, disp in test_users:
+            config_items.append({'val': val, 'type': 'USER', 'disp': disp})
+
+        added_count = 0
+        for item in config_items:
+            # Check if entry already exists to avoid Unique Constraint errors
+            exists = AuthConfig.query.filter_by(entity_value=item['val']).first()
+            if not exists:
+                new_entry = AuthConfig(
+                    entity_value=item['val'],
+                    entity_type=item['type'],
+                    disposition=item['disp']
+                )
+                db.session.add(new_entry)
+                added_count += 1
+
+        db.session.commit()
+        logger.info(f"Successfully added {added_count} entries to AuthConfig.")
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to populate AuthConfig test data: {e}")
+
 # =================================
 # ========= API ENDPOINTS =========
 # =================================
@@ -1520,6 +1697,19 @@ def page_incidents():
 def page_management():
     logger.info(f"management - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("management.html")
+
+@app.route("/authrecords")
+@login_required
+def page_authrecords():
+    logger.info(f"/authrecords - Successful connection from {current_user.id} at {request.remote_addr}")
+    return render_template("authrecords.html")
+
+@app.route("/authconfig")
+@login_required
+@analyst_required
+def page_authconfig():
+    logger.info(f"/authconfig - Successful connection from {current_user.id} at {request.remote_addr}")
+    return render_template("authconfig.html")
 
 @app.route('/favicon.ico')
 def favicon():
@@ -1587,27 +1777,33 @@ def handle_beacon():
     data = request.json
 
     agent_name = data.get("name","")
-    agent_type = data.get("type","")
+    agent_type = data.get("agent_type","")
     hostname = data.get("hostname","")
     ip = data.get("ip","")
     os_name = data.get("os","")
     executionUser = data.get("executionUser","")
     executionAdmin = data.get("executionAdmin","")
     auth = data.get("auth","")
-    beacon_type = data.get("beacon_type","")
     oldStatus = data.get("oldStatus","")
     newStatus = data.get("newStatus","")
     message = data.get("message","")
+    #owlet only
+    timestamp = data.get("timestamp","")
+    user = data.get("user","")
+    srcip = data.get("srcip","")
+    login_type = data.get("login_type","")
+    successful = data.get("successful",False)
     
     #if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
-    if not all([agent_name, agent_type, hostname, ip, os_name, auth, beacon_type, message]): # required data only
-        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
+    # intentionally no check for owlet perms
+    if not all([agent_name, agent_type, hostname, ip, os_name, auth, message]): # required data only
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, oldStatus, newStatus, message]}")
         return "Missing data", 400
     
     # Auth check
     auth_token_record = AuthToken.query.filter_by(token=auth).first()
     if not auth_token_record:
-        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, oldStatus, newStatus, message]}")
         return "Unauthorized", 403
 
     # Register client if new, or update agent fields if not
@@ -1626,7 +1822,7 @@ def handle_beacon():
             # Delete existing agent record
             db.session.delete(agent)
             agent = None # Set to None so it gets re-created in the next block
-            logger.info(f"/beacon - Reregistering and deleting old agent record for agent {agent_id} with details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]}")
+            logger.info(f"/beacon - Reregistering and deleting old agent record for agent {agent_id} with details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, oldStatus, newStatus, message]}")
             
         # Register or update client
         if not agent:
@@ -1734,19 +1930,49 @@ def handle_beacon():
         db.session.rollback() 
         logger.error(f"/beacon - Error processing RESUME logic for agent {agent_id}: {e}")
     """
+    doIncident = True
+
+    if agent_type.lower() == "owlet":
+        try:
+            new_authrecord = AuthRecord(
+                agent_id = agent_id,
+                message_id = message_id,
+                timestamp=timestamp,
+                user=user,
+                srcip=srcip,
+                login_type=login_type,
+                successful=successful,
+                notes=message
+            )
+            db.session.add(new_authrecord)
+            db.session.commit()
+            message = str(new_authrecord)
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"/beacon - Failed to create authrecord for agent {agent_id}: {e}")
+            # Not returning an error, as this is secondary to agent update/auth
+            if message:
+                message = f"owlet fallback msg: {login_type} login attempt from user {user} from {srcip} attempted login with status {successful}, notes: {message}"
+            else:
+                message = f"owlet fallback msg: {login_type} login attempt from user {user} from {srcip} attempted login with status {successful}."
+            pass
+        doIncidentDb = db.session.get(AuthConfigGlobal,"create_incident")
+        if doIncidentDb != None:
+            doIncident = doIncidentDb
 
     # 6. Trigger Incident if Status Change is Critical
     if oldStatus == False:
         # The original code just passed the messageDict, which is okay since it contains all necessary info.
-        incident_data = {
-            "timestamp": time.time(),
-            "agent_id": agent_id,
-            "oldStatus": oldStatus,
-            "newStatus": newStatus,
-            "message": message,
-            "sla": 0
-        }
-        create_incident(incident_data)
+        if doIncident:
+            incident_data = {
+                "timestamp": time.time(),
+                "agent_id": agent_id,
+                "oldStatus": oldStatus,
+                "newStatus": newStatus,
+                "message": message,
+                "sla": 0
+            }
+            create_incident(incident_data)
 
     return "ok", 200
 
@@ -1755,24 +1981,23 @@ def get_pause():
     data = request.json
 
     agent_name = data.get("name","")
-    agent_type = data.get("type","")
+    agent_type = data.get("agent_type","")
     hostname = data.get("hostname","")
     ip = data.get("ip","")
     os_name = data.get("os","")
     executionUser = data.get("executionUser","")
     executionAdmin = data.get("executionAdmin","")
     auth = data.get("auth","")
-    beacon_type = data.get("beacon_type","")
     
     #if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
-    if not all([agent_name, agent_type, hostname, ip, os_name, auth, beacon_type]): # required data only
-        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type]}")
+    if not all([agent_name, agent_type, hostname, ip, os_name, auth]): # required data only
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
         return "Missing data", 400
     
     # Auth check
     auth_token_record = AuthToken.query.filter_by(token=auth).first()
     if not auth_token_record:
-        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type]}")
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
         return "Unauthorized", 403
 
     # Get agent identity
@@ -1891,7 +2116,63 @@ def git_backend(repo_name, git_path):
         logger.info(f"/git: Unexpected error in git_backend: {str(e)}")
         return "Internal Server Error", 500
 
+@app.route('/list_authconfig_agent', methods=['GET'])
+def get_config():
+    entries = AuthConfig.query.all()
+    
+    # Structure the data so the agent can easily parse it
+    config = {
+        "users": {"legitimate": [], "malicious": []},
+        "ips": {"legitimate": [], "malicious": []}
+    }
+    
+    for entry in entries:
+        category = "users" if entry.entity_type == 'USER' else "ips"
+        status = entry.disposition.lower()
+        config[category][status].append(entry.entity_value)
+        
+    return jsonify(config)
+
 # === FRONTEND DISPLAY ===
+
+@login_required
+@app.route('/list_authconfigglobal', methods=['POST'])
+def get_global_config():
+    configs = AuthConfigGlobal.query.all()
+    return jsonify({c.key: c.value for c in configs})
+
+@login_required
+@analyst_required
+@app.route('/list_authconfig', methods=['POST'])
+def list_authconfig():
+    entries = AuthConfig.query.all()
+    # Return as a list of dictionaries for the frontend to map
+    return jsonify([entry.to_dict() for entry in entries])
+
+@login_required
+@app.route('/list_auth_records', methods=['POST'])
+def list_auth_records():
+    results = db.session.query(AuthRecord, Agent).\
+        join(Agent, AuthRecord.agent_id == Agent.agent_id).\
+        order_by(AuthRecord.timestamp.desc()).all()
+    
+    data = {}
+    for record, agent in results:
+        # Get the base dictionary from the record
+        entry = record.to_dict()
+        
+        # 1. Detach/Remove the agent_id field
+        entry.pop('agent_id', None)
+        
+        # 2. Attach the foreign keyed agent details
+        entry['hostname'] = agent.hostname
+        entry['agent_ip'] = agent.ip  # Renamed to agent_ip to avoid confusion with srcip
+        entry['os'] = agent.os
+        
+        # Store in the ID-keyed dictionary format required by your frontend
+        data[str(record.id)] = entry
+    
+    return jsonify(data)
 
 @login_required
 @app.route("/list_git_overall", methods=["POST"])
@@ -2143,6 +2424,158 @@ def save_export(filepath=SAVEFILE):
 
 # === FRONTEND INTERACTION ===
 
+@app.route('/update_authconfigglobal', methods=['POST'])
+@login_required
+@analyst_required
+def update_global_config():
+    data = request.get_json()
+    key = data.get('key')
+    
+    config = AuthConfigGlobal.query.filter_by(key=key).first()
+    if not config:
+        config = AuthConfigGlobal(key=key, value=data.get('value'))
+        db.session.add(config)
+    else:
+        config.value = data.get('value')
+    
+    db.session.commit()
+    return jsonify({"status": "success", "key": key, "new_value": config.value})
+
+@app.route('/add_authconfig', methods=['POST'])
+@login_required
+@analyst_required
+def add_authconfig():
+    data = request.get_json()
+    val = data.get('entity_value', '').strip()
+    e_type = data.get('entity_type') # 'IP' or 'USER'
+    disp = data.get('disposition')   # 'LEGITIMATE' or 'MALICIOUS'
+
+    if not val or not e_type or not disp:
+        return jsonify({"status": "error", "message": "Missing fields"}), 400
+
+    # Prevent duplicates
+    if AuthConfig.query.filter_by(entity_value=val).first():
+        return jsonify({"status": "error", "message": "Entry already exists"}), 409
+
+    new_entry = AuthConfig(entity_value=val, entity_type=e_type, disposition=disp)
+    db.session.add(new_entry)
+    db.session.commit()
+    return jsonify({"status": "success", "id": new_entry.id})
+
+@app.route('/update_authconfig_status', methods=['POST'])
+@login_required
+@analyst_required
+def update_authconfig_status():
+    data = request.get_json()
+    entry = AuthConfig.query.get(data.get('id'))
+    if not entry:
+        return jsonify({"status": "error", "message": "Not found"}), 404
+    
+    # Toggle logic
+    entry.disposition = "MALICIOUS" if entry.disposition == "LEGITIMATE" else "LEGITIMATE"
+    db.session.commit()
+    return jsonify({"status": "success", "new_disposition": entry.disposition})
+
+@app.route('/delete_authconfig', methods=['POST'])
+@login_required
+@analyst_required
+def delete_authconfig():
+    data = request.get_json()
+    entry_id = data.get('id')
+    entry = AuthConfig.query.get(entry_id)
+    
+    if entry:
+        db.session.delete(entry)
+        db.session.commit()
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Entry not found"}), 404
+
+@app.route('/authrecord_update_notes', methods=['POST'])
+@login_required
+@analyst_required
+def authrecord_update_notes():
+    data = request.get_json()
+    record_id = data.get('id')
+    new_notes = data.get('notes')
+
+    try:
+        record = AuthRecord.query.get(record_id)
+        if not record:
+            logger.warning(f"/authrecord_update_notes - failed request from {current_user.id} at {request.remote_addr} - record not found for id {record_id} and new_notes {new_notes}.")
+            return jsonify({"status": "error", "message": "Record not found"}), 404
+        
+        record.notes = new_notes
+        db.session.commit()
+        logger.info(f"/authrecord_update_notes - successful request from {current_user.id} at {request.remote_addr} - updating notes for incident {record_id} to {new_notes}.")
+        return jsonify({"status": "success", "message": "Notes updated"})
+    except Exception as E:
+        db.session.rollback()
+        logger.error(f"/authrecord_update_notes - failed request from {current_user.id} at {request.remote_addr} - Database error: {E}")
+        return jsonify({"error": "Database error"}), 500
+
+@app.route('/bulk_authconfig', methods=['POST'])
+@login_required
+@analyst_required
+def bulk_authconfig():
+    data = request.get_json()
+    action = data.get('action') # 'import' or 'export'
+    
+    if action == 'export':
+        entries = AuthConfig.query.all()
+        return jsonify([entry.to_dict() for entry in entries])
+    
+    if action == 'import':
+        raw_list = data.get('data', [])
+        added_count = 0
+        for item in raw_list:
+            # Check for existing to prevent unique constraint errors
+            if not AuthConfig.query.filter_by(entity_value=item['entity_value']).first():
+                new_entry = AuthConfig(
+                    entity_value=item['entity_value'],
+                    entity_type=item['entity_type'],
+                    disposition=item['disposition']
+                )
+                db.session.add(new_entry)
+                added_count += 1
+        db.session.commit()
+        return jsonify({"status": "success", "added": added_count})
+
+@app.route('/bulk_auth_records', methods=['POST'])
+@login_required
+@analyst_required
+def bulk_auth_records():
+    data = request.get_json()
+    action = data.get('action') # 'import' or 'export'
+    
+    if action == 'export':
+        records = AuthRecord.query.all()
+        return jsonify([r.to_dict() for r in records])
+    
+    if action == 'import':
+        raw_list = data.get('data', [])
+        added_count = 0
+        for item in raw_list:
+            # Basic deduplication check: check if record with same timestamp/user/ip exists
+            exists = AuthRecord.query.filter_by(
+                timestamp=item.get('timestamp'),
+                user=item.get('user'),
+                srcip=item.get('srcip')
+            ).first()
+            
+            if not exists:
+                new_rec = AuthRecord(
+                    timestamp=item.get('timestamp'),
+                    agent_id=item.get('agent_id'),
+                    user=item.get('user'),
+                    srcip=item.get('srcip'),
+                    successful=item.get('successful'),
+                    notes=item.get('notes', '')
+                )
+                db.session.add(new_rec)
+                added_count += 1
+        db.session.commit()
+        return jsonify({"status": "success", "added": added_count})
+    
 @app.route("/agent_pause", methods=["POST"])
 @login_required
 @analyst_required
@@ -2608,21 +3041,40 @@ if __name__ == "__main__":
 
     # Test data
     with app.app_context():
-        #add_test_data_agents(5)
-        #add_test_data_messages(10)
-        #add_test_data_incidents_custom(5)
-        #add_test_data_incidents(10)
-        #add_test_data_comp(0)
-        #add_test_data_cmds()
+        try:
+            add_test_data_agents(5)
+            add_test_data_messages(10)
+            add_test_data_incidents_custom(5)
+            add_test_data_incidents(10)
+            #add_test_data_comp(0)
+            #add_test_data_cmds()
+            add_test_data_auth_records(20)
+            add_test_data_auth_config()
 
-        existing_vars = db.session.get(AnsibleVars,"main")
-        if not existing_vars:
-            new_ansiblevars = AnsibleVars(id="main")
-            db.session.add(new_ansiblevars)
-            db.session.commit()
-            logger.info("Initialized default AnsibleVars.")
-        else:
-            logger.info("AnsibleVars 'main' already exists, skipping initialization.")
+            if not db.session.get(AuthConfigGlobal,"strict_user"):
+                config = AuthConfigGlobal(key="strict_user", value=AUTHCONFIG_STRICT_USER)
+                db.session.add(config)
+                logger.info(f"Initialized default strict_user={AUTHCONFIG_STRICT_USER}.")
+            if not db.session.get(AuthConfigGlobal,"strict_ip"):
+                config = AuthConfigGlobal(key="strict_ip", value=AUTHCONFIG_STRICT_IP)
+                db.session.add(config)
+                logger.info(f"Initialized default strict_ip={AUTHCONFIG_STRICT_IP}.")
+            if not db.session.get(AuthConfigGlobal,"create_incident"):
+                config = AuthConfigGlobal(key="create_incident", value=AUTHCONFIG_CREATE_INCIDENT)
+                db.session.add(config)
+                logger.info(f"Initialized default create_incident={AUTHCONFIG_CREATE_INCIDENT}.")
+
+            existing_vars = db.session.get(AnsibleVars,"main")
+            if not existing_vars:
+                new_ansiblevars = AnsibleVars(id="main")
+                db.session.add(new_ansiblevars)
+                db.session.commit()
+                logger.info(f"Initialized default AnsibleVars.")
+            else:
+                logger.info("AnsibleVars 'main' already exists, skipping initialization.")
+        except Exception as E:
+            db.session.rollback()
+            logger.error(f"FATAL: Failed to insert initial data into DB at main(): {E}")
 
     # Start main app. Do not put any code below this line
-    app.run(host=HOST, port=PORT, ssl_context='adhoc', use_reloader=True)
+    app.run(host=HOST, port=PORT, ssl_context='adhoc', use_reloader=False, debug=False)
