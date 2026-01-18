@@ -488,14 +488,13 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
     # Prep payload
     payload = {
         "name": AGENT_NAME,
-        "type": "stabvest",
         "hostname": systemInfo["hostname"],
         "ip": systemInfo["ipadd"],
         "os": systemInfo["os"],
         "executionUser": systemInfo["executionUser"],
         "executionAdmin": systemInfo["executionAdmin"],
         "auth": AUTH_TOKEN,
-        "beacon_type": AGENT_TYPE,
+        "agent_type": AGENT_TYPE,
         "oldStatus": oldStatus,
         "newStatus": newStatus,
         "message": message
@@ -550,14 +549,13 @@ def get_pause_state_server(systemInfo=get_system_details()):
     # Prep payload
     payload = {
         "name": AGENT_NAME,
-        "type": "stabvest",
         "hostname": systemInfo["hostname"],
         "ip": systemInfo["ipadd"],
         "os": systemInfo["os"],
         "executionUser": systemInfo["executionUser"],
         "executionAdmin": systemInfo["executionAdmin"],
         "auth": AUTH_TOKEN,
-        "beacon_type": AGENT_TYPE
+        "agent_type": AGENT_TYPE
     }
 
     try:
