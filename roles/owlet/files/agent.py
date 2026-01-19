@@ -822,13 +822,14 @@ class AuthWatcher:
             base_config.setdefault("create_incident", False)
             base_config.setdefault("log_attempt_successful", True)
 
+        print_debug(f"fetch_config(): new config - {base_config}")
         self.config = base_config
         return base_config
 
     def load_state(self):
         if os.path.exists(STATE_FILE):
             with open(STATE_FILE, 'r') as f:
-                return json.load(f).get("last_scan", 0)
+                return json.load(f).get("last_scan", time.time())
         return int(time.time())# - 3600 # Default to now if no state exists
 
     def save_state(self, timestamp):
@@ -836,10 +837,13 @@ class AuthWatcher:
             json.dump({"last_scan": timestamp}, f)
 
     def analyze_log(self):
-        new_last_scan = self.last_scan_time
+        new_last_scan = self.load_state()
+        self.last_scan_time = new_last_scan
         sent_msg = False
+        print_debug(f"analyze_log(): starting with last scan time of {datetime.datetime.fromtimestamp(new_last_scan).strftime('%Y-%m-%d %H:%M:%S')} {new_last_scan}")
         
         if not os.path.exists(self.auth_log):
+            print_debug(f"analyze_log(): auth_log does not exist! path: {self.auth_log}")
             return sent_msg
 
         with open(self.auth_log, 'r') as f:
@@ -856,6 +860,7 @@ class AuthWatcher:
                     sent_msg = True
 
         self.save_state(new_last_scan)
+        print_debug(f"analyze_log(): exiting, saving state with timestamp {new_last_scan}")
 
         return sent_msg
 
@@ -864,20 +869,22 @@ class AuthWatcher:
         Processes a single auth event, applies flood protection, 
         and determines if a beacon should be sent.
         """
+        # 2. Determine Malicious Status based on Config + Policy
+        # Pull flags from the config (handled during fetch_config)
+        strict_ip = self.config.get('strict_ip', False)
+        strict_user = self.config.get('strict_user', False)
+
         ip = auth.get('srcip', '127.0.0.1')
         user = auth.get('user', 'unknown')
+        print_debug(f"evaluate_threat(): srcip: {ip}, user: {user}, strict_user: {strict_user}, strict_ip: {strict_ip}")
         
         # 1. Check Flood Protection status
         throttle_status = self.throttler.should_throttle(ip)
         
         if throttle_status == "SILENCE":
             # Log line ignored to prevent server flooding
+            print_debug("evaluate_threat(): SILENCED")
             return False
-
-        # 2. Determine Malicious Status based on Config + Policy
-        # Pull flags from the config (handled during fetch_config)
-        strict_ip = self.config.get('strict_ip', False)
-        strict_user = self.config.get('strict_user', False)
         
         # User Evaluation
         is_mal_user = False
@@ -920,6 +927,7 @@ class AuthWatcher:
             msg = f"SECURITY ALERT: Access from malicious IP: {ip}"
         else:
             # If not malicious and not flooding, we do not send a beacon
+            print_debug(f"evaluate_threat(): item is not malicious, ignoring. strict_user: {strict_user}, strict_ip: {strict_ip}")
             return False
 
         # 4. Final Beacon Dispatch
@@ -957,7 +965,7 @@ def main(stop_event=None):
     if AUTH_PARSER:
         parser = PARSER_MAP.get(AUTH_PARSER.lower(), parser)
     watcher = AuthWatcher(parser,log_path)
-    print_debug(f"Selected parser {parser} and log path {AUTH_LOG_PATH}")
+    print_debug(f"Selected parser {parser} and log path {log_path}")
 
     while True:
 
