@@ -69,6 +69,21 @@
     mode: '0755'
   when: ansible_facts.os_family != "Windows"
 
+- name: Copy worker to target
+  win_copy:
+    src: "files/worker.py"
+    dest: "{{ stabvest_deploy_dir }}\\worker.py"
+  when: ansible_facts.os_family == "Windows" 
+
+- name: Copy worker to target
+  copy:
+    src: "files/worker.py"
+    dest: "{{ stabvest_deploy_dir }}/worker.py"
+    owner: root
+    group: root
+    mode: '0755'
+  when: ansible_facts.os_family != "Windows"
+
 - name: Create venv and install requirements
   ansible.builtin.pip:
     requirements: "{{ [stabvest_deploy_dir, 'requirements.txt'] | path_join }}"
