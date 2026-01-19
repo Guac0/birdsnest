@@ -37,6 +37,7 @@ CONFIG_DEFAULTS = {
     "SERVER_TIMEOUT": 5,
     "SLEEPTIME": 60,
     "DISARM": True,
+    "IPTABLES_PATH": "iptables",
     "PORTS": [81],
     "SERVICES": ["AxInstSV"],
     "PACKAGES": [""],
@@ -101,6 +102,7 @@ def load_config(path):
 
 CONFIG = load_config("config.json") # relative to cwd!
 DISARM = CONFIG["DISARM"]
+IPTABLES_PATH = CONFIG["IPTABLES_PATH"]
 DEBUG_PRINT = CONFIG["DEBUG_PRINT"]
 BACKUPDIR = CONFIG["BACKUPDIR"]
 LOGFILE = CONFIG["LOGFILE"]
@@ -1547,7 +1549,7 @@ def firewall_rules_audit_linux(port, direction="in", action="block"):
     
     # 1. Query iptables rules with numbering (-nL --line-numbers)
     # This gives us the crucial rule index number.
-    ip_query_cmd = f"sudo iptables -t filter -nL {chain} --line-numbers"
+    ip_query_cmd = f"sudo {IPTABLES_PATH} -t filter -nL {chain} --line-numbers"
     output = run_bash(ip_query_cmd)
 
     if not output:
@@ -1695,7 +1697,7 @@ def firewall_rules_delete_linux(rules):
 
         # 1. Delete the rule by number
         # Format: iptables -D [CHAIN] [INDEX_NUMBER]
-        delete_cmd = f"sudo iptables -D {chain} {index}"
+        delete_cmd = f"sudo {IPTABLES_PATH} -D {chain} {index}"
         
         if DISARM:
             issues.append(f"DISARMED, but told to remove firewall rule: {chain} rule #{index}")
@@ -1714,7 +1716,7 @@ def firewall_rules_delete_linux(rules):
 
     # 2. Persist the changes (Crucial for iptables)
     if not DISARM:
-        persist_cmd = "sudo /sbin/iptables-save > /etc/sysconfig/iptables"
+        persist_cmd = f"sudo /sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
         
         if overall_status:
             print_debug("Attempting to persist iptables rules...")
@@ -1825,7 +1827,7 @@ def firewall_rules_create_linux(port, direction, action, protocol="tcp"):
         port_flag = "" # Port specification is usually irrelevant for non-tcp/udp rules
 
     rule_spec = f"-p {protocol.lower()} {module_spec} {port_flag} {port} -j {target}"
-    iptables_cmd = f"sudo iptables -A {chain} {rule_spec}"
+    iptables_cmd = f"sudo {IPTABLES_PATH} -A {chain} {rule_spec}"
     
     # 3. Execute the command
     
@@ -1841,7 +1843,7 @@ def firewall_rules_create_linux(port, direction, action, protocol="tcp"):
             issues.append(f"SUCCESSFULLY created firewall rule: {rule_description} (running kernel).")
             
             # 4. Persist the change (Crucial for iptables)
-            persist_cmd = "sudo /sbin/iptables-save > /etc/sysconfig/iptables"
+            persist_cmd = f"sudo /sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
             
             print_debug("Attempting to persist iptables rules...")
             if run_bash(persist_cmd):
@@ -1934,7 +1936,7 @@ def firewall_policy_audit_linux(direction):
 
     # 2. Query the current policy for the target chain
     # iptables -L -n --line-numbers will list policies, but -S gives a clean policy output.
-    ip_query_cmd = f"sudo iptables -t filter -S {chain}"
+    ip_query_cmd = f"sudo {IPTABLES_PATH} -t filter -S {chain}"
     output = run_bash(ip_query_cmd)
 
     if not output:

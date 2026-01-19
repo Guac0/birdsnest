@@ -5,6 +5,7 @@
     "SERVER_TIMEOUT": 5,
     "SLEEPTIME": 60,
     "DISARM": true,
+    "IPTABLES_PATH": "iptables",
     "PORTS": [81],
     "SERVICES": ["AxInstSV"],
     "PACKAGES": [""],

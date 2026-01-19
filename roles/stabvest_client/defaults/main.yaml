@@ -20,6 +20,7 @@ stabvest_server_url: "https://192.168.1.18:8081/"
 stabvest_server_timeout: 5
 stabvest_sleeptime: 60
 stabvest_disarm: true
+stabvest_iptables_path: "iptables"
 
 stabvest_ports:
   - 80

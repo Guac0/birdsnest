@@ -5,6 +5,7 @@
     "SERVER_TIMEOUT": {{ stabvest_server_timeout }},
     "SLEEPTIME": {{ stabvest_sleeptime }},
     "DISARM": {{ stabvest_disarm | lower }},
+    "IPTABLES_PATH": "{{ stabvest_iptables_path }}",
     "PORTS": {{ stabvest_ports | to_json }},
     "SERVICES": {{ stabvest_services | to_json }},
     "PACKAGES": {{ stabvest_packages | to_json }},
