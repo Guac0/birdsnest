@@ -840,24 +840,77 @@ class AuthWatcher:
         new_last_scan = self.load_state()
         self.last_scan_time = new_last_scan
         sent_msg = False
-        print_debug(f"analyze_log(): starting with last scan time of {datetime.datetime.fromtimestamp(new_last_scan).strftime('%Y-%m-%d %H:%M:%S')} {new_last_scan}")
+        
+        # List to hold new records (since we find them in reverse, we'll flip them later)
+        records_to_process = []
+        
+        print_debug(f"analyze_log(): starting with last scan time of {datetime.datetime.fromtimestamp(new_last_scan).strftime('%Y-%m-%d %H:%M:%S')} ({new_last_scan})")
         
         if not os.path.exists(self.auth_log):
             print_debug(f"analyze_log(): auth_log does not exist! path: {self.auth_log}")
             return sent_msg
 
-        with open(self.auth_log, 'r') as f:
-            for line in f:
-                record = self.parser.parse_line(line)
-                if not record or record['timestamp'] <= self.last_scan_time:
-                    continue
-                
-                if record['timestamp'] > new_last_scan:
-                    new_last_scan = record['timestamp']
+        file_size = os.path.getsize(self.auth_log)
+        if file_size == 0:
+            print_debug("analyze_log(): auth_log is empty.")
+            return sent_msg
 
-                sent_msg_deep = self.evaluate_threat(record)
-                if sent_msg_deep:
-                    sent_msg = True
+        with open(self.auth_log, 'rb') as f:
+            # Move pointer to the very end of the file
+            f.seek(0, os.SEEK_END)
+            pointer = f.tell()
+            buffer = b""
+            chunk_size = 4096  # 4KB chunks are usually optimal for I/O
+            reached_cutoff = False
+
+            #print_debug(f"analyze_log(): seeking backward from end of file ({file_size} bytes)")
+
+            while pointer > 0 and not reached_cutoff:
+                # Determine how much to read (don't over-read past start of file)
+                if pointer - chunk_size > 0:
+                    pointer -= chunk_size
+                    f.seek(pointer)
+                    chunk = f.read(chunk_size)
+                else:
+                    # We are at the beginning of the file
+                    f.seek(0)
+                    chunk = f.read(pointer)
+                    pointer = 0
+
+                # Combine new chunk with leftover data from previous chunk
+                chunk += buffer
+                lines = chunk.splitlines()
+
+                # The first line of a chunk might be partial; save it for the next loop
+                if pointer > 0:
+                    buffer = lines.pop(0)
+                else:
+                    buffer = b""
+
+                # Process the lines in this chunk from bottom to top
+                for line in reversed(lines):
+                    decoded_line = line.decode('utf-8', errors='ignore')
+                    record = self.parser.parse_line(decoded_line)
+
+                    if record:
+                        if record['timestamp'] > self.last_scan_time:
+                            records_to_process.append(record)
+                            # Keep track of the most recent timestamp seen
+                            if record['timestamp'] > new_last_scan:
+                                new_last_scan = record['timestamp']
+                        else:
+                            # Found a record older or equal to our last scan! Stop reading.
+                            print_debug(f"analyze_log(): found cutoff at timestamp {record['timestamp']}. Stopping backtracker.")
+                            reached_cutoff = True
+                            break
+
+        # Since we collected them backward, reverse them to process chronologically
+        records_to_process.reverse()
+        print_debug(f"analyze_log(): found {len(records_to_process)} new records to evaluate.")
+
+        for record in records_to_process:
+            if self.evaluate_threat(record):
+                sent_msg = True
 
         self.save_state(new_last_scan)
         print_debug(f"analyze_log(): exiting, saving state with timestamp {new_last_scan}")
