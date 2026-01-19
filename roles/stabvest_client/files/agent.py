@@ -2056,13 +2056,12 @@ def restore_protected_from_repo(repo_dir,protected_folder):
     """Overwrites the protected folder with the 'good' version from the repo."""
     #repo_protected_path = os.path.join(repo_dir, "protected_files")
 
-    if DISARM:
-        return
-    else:
+    #if DISARM:
+    #    return False
+    #else:
         #if os.path.exists(protected_folder):
         #    shutil.rmtree(protected_folder)
-        
-        shutil.copytree(repo_dir, protected_folder, dirs_exist_ok=True)
+    shutil.copytree(repo_dir, protected_folder, dirs_exist_ok=True)
 
 def get_latest_commit_stats(branch_name,repo_dir):
     """
@@ -2139,8 +2138,11 @@ def file_protect_main(repo_dir,protected_folder):
                 
                 # Return to good branch for restoration
                 run_git(["checkout", "good"],repo_dir)
-                restore_protected_from_repo(repo_dir,protected_folder)
-                return False, True, [f"File changes occurred and were successfully restored. Affected files {changes["count"]}: {changes["files"]}"]
+                if not DISARM:
+                    restore_protected_from_repo(repo_dir,protected_folder)
+                    return False, True, [f"File changes occurred and were successfully restored. Affected files {changes["count"]}: {changes["files"]}"]
+                else:
+                    return False, False, [f"File changes occurred, DISARMED. Affected files {changes["count"]}: {changes["files"]}"]
             except Exception as E:
                 return False, False, [f"File changes occurred and failed to restore known good state: {E}"]
         else:
