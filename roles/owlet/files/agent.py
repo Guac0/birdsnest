@@ -793,7 +793,7 @@ class AuthWatcher:
         
         # 1. Fetch Entity Lists (GET)
         try:
-            with urllib.request.urlopen(SERVER_URL + "list_authconfig_agent") as r:
+            with urllib.request.urlopen(SERVER_URL + "list_authconfig_agent", timeout=SERVER_TIMEOUT, context=CTX) as r:
                 base_config.update(json.loads(r.read().decode()))
         except Exception as e:
             print_debug(f"Error fetching entity lists: {e}")
@@ -806,7 +806,7 @@ class AuthWatcher:
                 headers={"Content-Type": "application/json"},
                 method="POST"
             )
-            with urllib.request.urlopen(req) as r:
+            with urllib.request.urlopen(req, timeout=SERVER_TIMEOUT, context=CTX) as r:
                 global_settings = json.loads(r.read().decode())
                 # Convert string booleans from DB ("true"/"false") to Python bools
                 for key, val in global_settings.items():
