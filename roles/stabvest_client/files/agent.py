@@ -1549,7 +1549,7 @@ def firewall_rules_audit_linux(port, direction="in", action="block"):
     
     # 1. Query iptables rules with numbering (-nL --line-numbers)
     # This gives us the crucial rule index number.
-    ip_query_cmd = f"sudo {IPTABLES_PATH} -t filter -nL {chain} --line-numbers"
+    ip_query_cmd = f"{IPTABLES_PATH} -t filter -nL {chain} --line-numbers"
     output = run_bash(ip_query_cmd)
 
     if not output:
@@ -1697,7 +1697,7 @@ def firewall_rules_delete_linux(rules):
 
         # 1. Delete the rule by number
         # Format: iptables -D [CHAIN] [INDEX_NUMBER]
-        delete_cmd = f"sudo {IPTABLES_PATH} -D {chain} {index}"
+        delete_cmd = f"{IPTABLES_PATH} -D {chain} {index}"
         
         if DISARM:
             issues.append(f"DISARMED, but told to remove firewall rule: {chain} rule #{index}")
@@ -1716,7 +1716,7 @@ def firewall_rules_delete_linux(rules):
 
     # 2. Persist the changes (Crucial for iptables)
     if not DISARM:
-        persist_cmd = f"sudo /sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
+        persist_cmd = f"/sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
         
         if overall_status:
             print_debug("Attempting to persist iptables rules...")
@@ -1827,7 +1827,7 @@ def firewall_rules_create_linux(port, direction, action, protocol="tcp"):
         port_flag = "" # Port specification is usually irrelevant for non-tcp/udp rules
 
     rule_spec = f"-p {protocol.lower()} {module_spec} {port_flag} {port} -j {target}"
-    iptables_cmd = f"sudo {IPTABLES_PATH} -A {chain} {rule_spec}"
+    iptables_cmd = f"{IPTABLES_PATH} -A {chain} {rule_spec}"
     
     # 3. Execute the command
     
@@ -1843,7 +1843,7 @@ def firewall_rules_create_linux(port, direction, action, protocol="tcp"):
             issues.append(f"SUCCESSFULLY created firewall rule: {rule_description} (running kernel).")
             
             # 4. Persist the change (Crucial for iptables)
-            persist_cmd = f"sudo /sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
+            persist_cmd = f"/sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
             
             print_debug("Attempting to persist iptables rules...")
             if run_bash(persist_cmd):
@@ -1936,7 +1936,7 @@ def firewall_policy_audit_linux(direction):
 
     # 2. Query the current policy for the target chain
     # iptables -L -n --line-numbers will list policies, but -S gives a clean policy output.
-    ip_query_cmd = f"sudo {IPTABLES_PATH} -t filter -S {chain}"
+    ip_query_cmd = f"{IPTABLES_PATH} -t filter -S {chain}"
     output = run_bash(ip_query_cmd)
 
     if not output:
@@ -2306,7 +2306,7 @@ def service_audit_linux(service_name):
     # 2. If service is not running - start it (Fix Active State)
     # ----------------------------------------------------------
     if not is_running:
-        start_cmd = f"sudo systemctl start {service_name}"
+        start_cmd = f"systemctl start {service_name}"
         
         if DISARM:
             issues.append(f"Service {service_name} is stopped, DISARMED.")
@@ -2328,7 +2328,7 @@ def service_audit_linux(service_name):
     # 3. If service is not Automatic (Enabled) - set it to Automatic (Fix Enable State)
     # ----------------------------------------------------------
     if not is_enabled:
-        enable_cmd = f"sudo systemctl enable {service_name}"
+        enable_cmd = f"systemctl enable {service_name}"
         
         if DISARM:
             issues.append(f"Service {service_name} not set to automatic start (disabled), DISARMED.")
@@ -2498,7 +2498,7 @@ def service_uninstall_linux(service, package):
             
             if not DISARM:
                 # Attempt to install the missing package using dnf (default for Rocky/CentOS 8)
-                install_cmd = f"sudo dnf install -y {package}"
+                install_cmd = f"dnf install -y {package}"
                 print_debug(f"Attempting to install package {package}...")
                 
                 if run_bash(install_cmd):
@@ -3193,7 +3193,7 @@ def service_lastrun_linux(service_name):
     # -u unit: specifies the service unit
     # -n 5: last 5 lines
     # --no-pager: prevent pager
-    journal_cmd = f"sudo journalctl -u {service_name} -n 5 --no-pager"
+    journal_cmd = f"journalctl -u {service_name} -n 5 --no-pager"
     journal_output = run_bash(journal_cmd, noisy=False).strip()
 
     analysis_message = f"Service {service_name} Status: {current_status}."
