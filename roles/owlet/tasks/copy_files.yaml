@@ -20,12 +20,6 @@
     dest: "{{ owlet_deploy_dir }}\\{{ owlet_agent_executable }}"
   when: ansible_facts.os_family == "Windows" 
 
-- name: Copy tester executable to target
-  win_copy:
-    src: "files/{{ owlet_tester_executable }}"
-    dest: "{{ owlet_deploy_dir }}\\{{ owlet_tester_executable }}"
-  when: ansible_facts.os_family == "Windows" and owlet_include_tester
-
 - name: Render config.json from template
   template:
     src: "config.json.j2"
@@ -71,15 +65,6 @@
     mode: '0755'
   when: ansible_facts.os_family != "Windows" 
 
-- name: Copy tester executable to target
-  copy:
-    src: "files/{{ owlet_tester_executable }}"
-    dest: "{{ owlet_deploy_dir }}/{{ owlet_tester_executable }}"
-    owner: root
-    group: root
-    mode: '0755'
-  when: ansible_facts.os_family != "Windows" and owlet_include_tester
-
 - name: Copy NSSM executable to target
   win_copy:
     src: "files/nssm-2.24_win64.exe"
@@ -106,16 +91,6 @@
 #    executable: "powershell.exe"
 #  when: ansible_facts.os_family == "Windows" 
 #
-#- name: Timestomp tester to evade detection
-#  win_shell: |
-#    $time = (Get-Item "C:\\Windows\\System32\\cmd.exe").CreationTime
-#    (Get-Item "{{ owlet_deploy_dir }}\\{{ owlet_tester_executable }}").CreationTime = $time
-#    (Get-Item "{{ owlet_deploy_dir }}\\{{ owlet_tester_executable }}").LastWriteTime = $time
-#    (Get-Item "{{ owlet_deploy_dir }}\\{{ owlet_tester_executable }}").LastAccessTime = $time
-#  args:
-#    executable: "powershell.exe"
-#  when: ansible_facts.os_family == "Windows" and owlet_include_tester
-#
 #- name: Timestomp config to evade detection
 #  win_shell: |
 #    $time = (Get-Item "C:\\Windows\\System32\\cmd.exe").CreationTime
@@ -133,10 +108,6 @@
 #- name: Timestomp the agent
 #  command: touch -r /bin/sh {{ owlet_deploy_dir }}/{{ owlet_agent_executable }}
 #  when: ansible_facts.os_family != "Windows"
-#
-#- name: Timestomp the tester
-#  command: touch -r /bin/sh {{ owlet_deploy_dir }}/{{ owlet_tester_executable }}
-#  when: ansible_facts.os_family != "Windows" and owlet_include_tester
 #
 #- name: Timestomp the config
 #  command: touch -r /bin/sh {{ owlet_deploy_dir }}/config.json
