@@ -638,7 +638,8 @@ class DebianAuthParser(BaseParser):
             return None
             
         ts_str = f"{datetime.now().year} {ts_match.group('month')} {ts_match.group('day')} {ts_match.group('time')}"
-        epoch = int(time.mktime(time.strptime(ts_str, "%Y %b %d %H:%M:%S")))
+        #epoch = int(time.mktime(time.strptime(ts_str, "%Y %b %d %H:%M:%S")))
+        epoch = int(time.mktime(time.strptime(ts_str, "%Y %m %d %H:%M:%S.%f"))) #iso
 
         # Check against each signature
         for sig in self.signatures:
