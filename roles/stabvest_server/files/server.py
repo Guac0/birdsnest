@@ -2206,6 +2206,57 @@ def get_global_config():
 
 # === FRONTEND DISPLAY ===
 
+@app.route("/get_repo_history", methods=["POST"])
+@login_required
+def get_repo_history():
+    data = request.json
+    repo_name = data.get("repo_name")
+    repo_path = os.path.join(app.root_path, 'repos', repo_name)
+    
+    try:
+        # Get history from both branches. %D shows branch decorations.
+        # Format: hash | time | subject | branch_decoration
+        cmd = ["log", "--all", "--pretty=format:%H|%at|%s|%D", "--name-status"]
+        result = run_git(cmd, cwd=repo_path)
+        
+        history = []
+        lines = result.stdout.split('\n')
+        current_commit = None
+        
+        for line in lines:
+            if not line.strip(): continue
+            if "|" in line and len(line.split("|")) >= 3:
+                h, t, s, d = line.split("|")
+                # Identify if commit belongs to good or bad
+                branch = "good" if "good" in d else ("bad" if "bad" in d else "")
+                current_commit = {
+                    "hash": h,
+                    "time": datetime.fromtimestamp(int(t)).strftime('%Y-%m-%d %H:%M:%S'),
+                    "name": s,
+                    "branch": branch,
+                    "changes": []
+                }
+                history.append(current_commit)
+            elif current_commit is not None:
+                # Parse git name-status (A=Added, M=Modified, D=Deleted)
+                parts = line.split('\t')
+                if len(parts) == 2:
+                    current_commit["changes"].append({"type": parts[0], "file": parts[1]})
+        
+        return jsonify(history), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/get_commit_diff", methods=["POST"])
+@login_required
+def get_commit_diff():
+    data = request.json
+    repo_path = os.path.join(app.root_path, 'repos', data.get("repo_name"))
+    # Diff current commit against the tip of 'good'
+    cmd = ["diff", "good", data.get("hash")]
+    result = run_git(cmd, cwd=repo_path)
+    return jsonify({"diff": result.stdout}), 200
+
 @login_required
 @analyst_required
 @app.route('/list_authconfig', methods=['POST'])
@@ -2490,6 +2541,19 @@ def save_export(filepath=SAVEFILE):
         return f"FileNotFound {filepath}", 400
 
 # === FRONTEND INTERACTION ===
+
+@app.route("/set_good_branch", methods=["POST"])
+@login_required
+@analyst_required
+def set_good_branch():
+    data = request.json
+    repo_path = os.path.join(app.root_path, 'repos', data.get("repo_name"))
+    target_hash = data.get("hash")
+    # Force the 'good' branch to point to this hash
+    result = run_git(["update-ref", "refs/heads/good", target_hash], cwd=repo_path)
+    if result.returncode == 0:
+        return jsonify({"status": "success"}), 200
+    return jsonify({"error": result.stderr}), 500
 
 @app.route('/update_authconfigglobal', methods=['POST'])
 @login_required

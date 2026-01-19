@@ -1,14 +1,14 @@
 ---
-- name: Start Owlet Service (Linux/Unix)
+- name: Start Stabvest Service (Linux/Unix)
   service:
-    name: "owlet-{{ stabvest_agent_name if ansible_os_family != 'FreeBSD' else '_' + stabvest_agent_name }}"
+    name: "stabvest-{{ stabvest_agent_name if ansible_os_family != 'FreeBSD' else '_' + stabvest_agent_name }}"
     state: started
     enabled: yes
   when: ansible_os_family in ["RedHat", "Debian", "Alpine", "FreeBSD"]
 
-- name: Start Owlet Service (Windows)
+- name: Start Stabvest Service (Windows)
   win_service:
-    name: "owlet-{{ stabvest_agent_name }}"
+    name: "stabvest-{{ stabvest_agent_name }}"
     start_mode: auto
     state: started
   when: ansible_os_family == "Windows"

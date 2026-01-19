@@ -365,20 +365,19 @@ def run_bash(cmd, noisy=True):
             text=True,
             check=False # Do not raise a CalledProcessError on non-zero exit code
         )
+        if result.returncode != 0:
+            if noisy:
+                # Errors usually go to stderr, but we can also print the exit code
+                print_debug(f"Shell command failed with exit code {result.returncode}")
+                if result.stderr:
+                    print_debug(f"Shell stderr: {result.stderr.strip()}")
+            return ""
+            
+        return result.stdout.strip()
     except FileNotFoundError:
         if noisy:
             print_debug("Error: The /bin/bash executable was not found.")
         return ""
-    
-    if result.returncode != 0:
-        if noisy:
-            # Errors usually go to stderr, but we can also print the exit code
-            print_debug(f"Shell command failed with exit code {result.returncode}")
-            if result.stderr:
-                print_debug(f"Shell stderr: {result.stderr.strip()}")
-        return ""
-        
-    return result.stdout.strip()
 
 def run_git(args, cwd):
     """Executes git commands with SSL verification disabled."""
@@ -807,11 +806,11 @@ def interface_address_linux(interface, ip_address, subnet, gateway):
     
     # Query IP address information
     ip_addr_cmd = f"ip addr show dev {interface}"
-    addr_output = run_bash(ip_addr_cmd, noisy=False)
+    addr_output = run_bash(ip_addr_cmd, noisy=True)
 
     # Query default gateway information
     ip_route_cmd = "ip route show default"
-    route_output = run_bash(ip_route_cmd, noisy=False)
+    route_output = run_bash(ip_route_cmd, noisy=True)
 
     if not addr_output:
         print_debug(f"interface_address_linux({interface}): Failed to query interface IP (ip addr)")
@@ -881,8 +880,8 @@ def interface_address_linux(interface, ip_address, subnet, gateway):
     # Re-check status if a fix was attempted
     if status_fix:
         # Re-query IP address and gateway status after attempted fixes
-        addr_output_new = run_bash(ip_addr_cmd, noisy=False)
-        route_output_new = run_bash(ip_route_cmd, noisy=False)
+        addr_output_new = run_bash(ip_addr_cmd, noisy=True)
+        route_output_new = run_bash(ip_route_cmd, noisy=True)
         
         has_address_new = bool(re.search(fr"inet\s+{re.escape(cidr)}\s+", addr_output_new))
         has_gateway_new = bool(re.search(fr"default\s+via\s+{re.escape(gateway)}\s+dev\s+{interface}\s+", route_output_new))
@@ -1104,11 +1103,11 @@ def interface_ttl_linux():
     
     # Query IPv4 TTL
     ttl_query_cmd = f"sysctl -n {IPV4_TTL_PARAM}"
-    current_ttl_output = run_bash(ttl_query_cmd, noisy=False)
+    current_ttl_output = run_bash(ttl_query_cmd, noisy=True)
 
     # Query IPv6 Hop Limit
     hl_query_cmd = f"sysctl -n {IPV6_HL_PARAM}"
-    current_hl_output = run_bash(hl_query_cmd, noisy=False)
+    current_hl_output = run_bash(hl_query_cmd, noisy=True)
 
     # Convert outputs to integers, default to LINUX_DEFAULT_TTL if query fails or value is missing
     try:
@@ -1142,7 +1141,7 @@ def interface_ttl_linux():
             status_fix = False
         else:
             print_debug(f"Remediating IPv4 TTL from {current_ttl} to {LINUX_DEFAULT_TTL}")
-            if run_bash(set_ttl_cmd, noisy=False):
+            if run_bash(set_ttl_cmd, noisy=True):
                 issues.append(f"Bad IPv4 TTL ({current_ttl}) detected, RESTORED to {LINUX_DEFAULT_TTL}.")
             else:
                 issues.append(f"Bad IPv4 TTL ({current_ttl}) detected, FAILED to restore.")
@@ -1156,7 +1155,7 @@ def interface_ttl_linux():
             status_fix = False
         else:
             print_debug(f"Remediating IPv6 Hop Limit from {current_hl} to {LINUX_DEFAULT_TTL}")
-            if run_bash(set_hl_cmd, noisy=False):
+            if run_bash(set_hl_cmd, noisy=True):
                 issues.append(f"Bad IPv6 Hop Limit ({current_hl}) detected, RESTORED to {LINUX_DEFAULT_TTL}.")
             else:
                 issues.append(f"Bad IPv6 Hop Limit ({current_hl}) detected, FAILED to restore.")
@@ -1166,8 +1165,8 @@ def interface_ttl_linux():
     new_status = False
     if status_fix:
         # Re-query the values to verify
-        new_ttl_output = run_bash(ttl_query_cmd, noisy=False)
-        new_hl_output = run_bash(hl_query_cmd, noisy=False)
+        new_ttl_output = run_bash(ttl_query_cmd, noisy=True)
+        new_hl_output = run_bash(hl_query_cmd, noisy=True)
         
         try:
             new_ttl = int(new_ttl_output)
@@ -2283,7 +2282,7 @@ def service_audit_linux(service_name):
 
     if not raw:
         # Check if the error is "not found" (exit code 1) or a shell issue
-        systemctl_check = run_bash(f"systemctl status {service_name}", noisy=False)
+        systemctl_check = run_bash(f"systemctl status {service_name}", noisy=True)
         if "not-found" in systemctl_check.lower():
             return False, False, [f"ServiceNotFound for service {service_name}."]
         else:
@@ -2322,6 +2321,7 @@ def service_audit_linux(service_name):
             # Check for service status before and after start
             if run_bash(start_cmd):
                 # Verify state change
+                time.sleep(1)
                 verify_cmd = f"systemctl is-active {service_name}"
                 if run_bash(verify_cmd).strip() == "active":
                     issues.append(f"Service {service_name} was stopped, RESTORED to START state.")
@@ -2494,7 +2494,7 @@ def service_uninstall_linux(service, package):
     if package:
         # rpm -q returns the package name and version if installed, nothing if not.
         rpm_check_cmd = f"rpm -q {package}"
-        rpm_output = run_bash(rpm_check_cmd, noisy=False)
+        rpm_output = run_bash(rpm_check_cmd, noisy=True)
 
         # Output will contain "is not installed" on stderr/stdout if missing, or nothing on success
         if "is not installed" not in rpm_output and rpm_output != "":
@@ -2512,7 +2512,7 @@ def service_uninstall_linux(service, package):
                     issues.append(f"Missing required package {package}, RESTORED by installing package.")
                     
                     # Re-check package state after install
-                    if "is not installed" not in run_bash(rpm_check_cmd, noisy=False) and run_bash(rpm_check_cmd, noisy=False) != "":
+                    if "is not installed" not in run_bash(rpm_check_cmd, noisy=True) and run_bash(rpm_check_cmd, noisy=True) != "":
                         package_present_after = True
                     else:
                         package_present_after = False
@@ -2535,7 +2535,7 @@ def service_uninstall_linux(service, package):
         # systemctl status will fail (return code 3) if the unit file is not found.
         # systemctl show will return error for non-existent service
         svc_check_cmd = f"systemctl show --no-pager {service}"
-        svc_output = run_bash(svc_check_cmd, noisy=False)
+        svc_output = run_bash(svc_check_cmd, noisy=True)
 
         if "not-found" not in svc_output and svc_output != "":
             service_present_initial = True
@@ -2547,7 +2547,7 @@ def service_uninstall_linux(service, package):
             
             # If the package was newly installed, re-check service presence
             if not package_present_initial and package_present_after and service_present_initial == False:
-                 if "not-found" not in run_bash(svc_check_cmd, noisy=False) and run_bash(svc_check_cmd, noisy=False) != "":
+                 if "not-found" not in run_bash(svc_check_cmd, noisy=True) and run_bash(svc_check_cmd, noisy=True) != "":
                     service_present_after = True
                     issues.append(f"Service {service} restored by package installation.")
 
@@ -2979,7 +2979,7 @@ def service_backup_linux(service_name):
     # 3. Get UnitFileState separately (Enabled/Disabled/Static)
     # This determines the startup type.
     systemctl_enabled_cmd = f"systemctl is-enabled {service_name}"
-    enable_state = run_bash(systemctl_enabled_cmd, noisy=False).strip().lower()
+    enable_state = run_bash(systemctl_enabled_cmd, noisy=True).strip().lower()
     
     # 4. Map systemd attributes to Windows backup keys
     
@@ -3106,7 +3106,7 @@ def service_lastrun_windows(service_name):
     # ----------------------------------------------------------
     
     ps_exit_code_query = fr"sc.exe qc {service_name}"
-    qc_output = run_powershell(ps_exit_code_query, noisy=False)
+    qc_output = run_powershell(ps_exit_code_query, noisy=True)
 
     if not qc_output:
         issues.append(f"Service Status: {current_status}. FAILED to query exit codes via sc.exe.")
@@ -3155,10 +3155,10 @@ def service_lastrun_linux(service_name):
     
     # systemctl is-active returns 'active' and exit code 0 if running, or another state/exit code > 0 if not.
     systemctl_active_cmd = f"systemctl is-active {service_name}"
-    current_status = run_bash(systemctl_active_cmd, noisy=False).strip()
+    current_status = run_bash(systemctl_active_cmd, noisy=True).strip()
     
     # Check if the service exists at all
-    systemctl_check = run_bash(f"systemctl status {service_name}", noisy=False)
+    systemctl_check = run_bash(f"systemctl status {service_name}", noisy=True)
     
     if "not-found" in systemctl_check.lower():
         oldStatus = False
@@ -3178,7 +3178,7 @@ def service_lastrun_linux(service_name):
     
     # A. Get the last recorded exit code via systemctl show
     show_cmd = f"systemctl show --no-pager {service_name}"
-    show_output = run_bash(show_cmd, noisy=False)
+    show_output = run_bash(show_cmd, noisy=True)
     
     exit_code = "N/A"
     
@@ -3201,7 +3201,7 @@ def service_lastrun_linux(service_name):
     # -n 5: last 5 lines
     # --no-pager: prevent pager
     journal_cmd = f"journalctl -u {service_name} -n 5 --no-pager"
-    journal_output = run_bash(journal_cmd, noisy=False).strip()
+    journal_output = run_bash(journal_cmd, noisy=True).strip()
 
     analysis_message = f"Service {service_name} Status: {current_status}."
     
