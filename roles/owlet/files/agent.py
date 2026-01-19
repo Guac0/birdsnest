@@ -628,7 +628,8 @@ class DebianAuthParser(BaseParser):
         ]
         
         # Base timestamp regex (Jan 18 12:00:01)
-        self.ts_pattern = re.compile(r"^(?P<month>\w{3})\s+(?P<day>\d+)\s+(?P<time>[\d:]+)")
+        #self.ts_pattern = re.compile(r"^(?P<month>\w{3})\s+(?P<day>\d+)\s+(?P<time>[\d:]+)") #old
+        self.ts_pattern = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})T(?P<time>[\d:.]+)(?P<timezone>[+-]\d{2}:\d{2})")
 
     def parse_line(self, line):
         # First, extract timestamp
@@ -776,10 +777,9 @@ class AuthWatcher:
     def __init__(self, parser, auth_log):
         self.parser = parser
         self.auth_log = auth_log
-        self.config = {}
+        self.config = self.fetch_config()
         self.last_scan_time = self.load_state()
         self.throttler = AlertThrottler(threshold=5, window=60)
-        self.fetch_config()
 
     def fetch_config(self):
         """
@@ -822,8 +822,7 @@ class AuthWatcher:
             base_config.setdefault("create_incident", False)
             base_config.setdefault("log_attempt_successful", True)
 
-        print_debug(f"fetch_config(): new config - {base_config}")
-        self.config = base_config
+        print_debug(f"fetch_config(): returning config - {base_config}")
         return base_config
 
     def load_state(self):
@@ -834,7 +833,7 @@ class AuthWatcher:
 
     def save_state(self, timestamp):
         with open(STATE_FILE, 'w') as f:
-            json.dump({"last_scan": timestamp}, f)
+            json.dump({"last_scan": int(timestamp)}, f)
 
     def analyze_log(self):
         new_last_scan = self.load_state()
@@ -844,7 +843,7 @@ class AuthWatcher:
         # List to hold new records (since we find them in reverse, we'll flip them later)
         records_to_process = []
         
-        print_debug(f"analyze_log(): starting with last scan time of {datetime.datetime.fromtimestamp(new_last_scan).strftime('%Y-%m-%d %H:%M:%S')} ({new_last_scan})")
+        print_debug(f"analyze_log(): starting with last scan time of {datetime.fromtimestamp(new_last_scan).strftime('%Y-%m-%d %H:%M:%S')} ({new_last_scan})")
         
         if not os.path.exists(self.auth_log):
             print_debug(f"analyze_log(): auth_log does not exist! path: {self.auth_log}")
@@ -890,6 +889,7 @@ class AuthWatcher:
                 # Process the lines in this chunk from bottom to top
                 for line in reversed(lines):
                     decoded_line = line.decode('utf-8', errors='ignore')
+                    print_debug(f"analyze_log(): sending line to parser: {decoded_line}")
                     record = self.parser.parse_line(decoded_line)
 
                     if record:
@@ -912,6 +912,7 @@ class AuthWatcher:
             if self.evaluate_threat(record):
                 sent_msg = True
 
+        new_last_scan = time.time()
         self.save_state(new_last_scan)
         print_debug(f"analyze_log(): exiting, saving state with timestamp {new_last_scan}")
 
@@ -1065,7 +1066,7 @@ def main(stop_event=None):
         if not PAUSED:
 
             # Files
-            watcher.fetch_config()
+            watcher.config = watcher.fetch_config()
             sent_msg = watcher.analyze_log()
 
             if not sent_msg:

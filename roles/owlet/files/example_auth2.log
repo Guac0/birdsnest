@@ -1,0 +1,436 @@
+2026-01-19T21:17:43.777272+00:00 testing-ubu24 sshd[652148]: Close session: user ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:17:43.794490+00:00 testing-ubu24 sshd[652148]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:17:43.794783+00:00 testing-ubu24 sshd[652148]: Close session: user ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:17:43.805471+00:00 testing-ubu24 sshd[652148]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:17:43.805736+00:00 testing-ubu24 sshd[652148]: Close session: user ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:17:43.815544+00:00 testing-ubu24 sshd[652148]: Starting session: command for ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:17:43.826210+00:00 testing-ubu24 sshd[652148]: Close session: user ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:17:43.836142+00:00 testing-ubu24 sshd[652148]: Starting session: command for ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:17:43.842927+00:00 testing-ubu24 sshd[652148]: Close session: user ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:17:43.852969+00:00 testing-ubu24 sshd[652148]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:17:43.863959+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:17:43.864108+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:17:43.864188+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:17:43.864479+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:17:43.864566+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:17:43.864639+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:17:43.864703+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:17:43.864785+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:17:43.875916+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CO ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-yopszbzgjutmdncrtaqqeqijpyuzckbs ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768857476.6662009-97322-12777209947089/AnsiballZ_file.py'
+2026-01-19T21:17:43.877197+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:17:44.225035+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:17:44.228736+00:00 testing-ubu24 sshd[652148]: Close session: user ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:17:44.239760+00:00 testing-ubu24 sshd[652148]: Starting session: command for ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:17:44.246560+00:00 testing-ubu24 sshd[652148]: Close session: user ccdc from 192.168.1.18 port 51090 id 0
+2026-01-19T21:18:43.557672+00:00 testing-ubu24 sshd[652148]: Received disconnect from 192.168.1.18 port 51090:11: disconnected by user
+2026-01-19T21:18:43.558068+00:00 testing-ubu24 sshd[652148]: Disconnected from user ccdc 192.168.1.18 port 51090
+2026-01-19T21:18:43.559804+00:00 testing-ubu24 sshd[652146]: pam_unix(sshd:session): session closed for user ccdc
+2026-01-19T21:18:43.566881+00:00 testing-ubu24 systemd-logind[687]: Session 917 logged out. Waiting for processes to exit.
+2026-01-19T21:18:43.569588+00:00 testing-ubu24 systemd-logind[687]: Removed session 917.
+2026-01-19T21:25:01.185375+00:00 testing-ubu24 CRON[652853]: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:25:01.185755+00:00 testing-ubu24 CRON[652853]: PAM adding faulty module: pam_sss.so
+2026-01-19T21:25:01.186024+00:00 testing-ubu24 CRON[652853]: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:25:01.186202+00:00 testing-ubu24 CRON[652853]: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:25:01.186269+00:00 testing-ubu24 CRON[652853]: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:25:01.186332+00:00 testing-ubu24 CRON[652853]: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:25:01.186393+00:00 testing-ubu24 CRON[652853]: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:25:01.186455+00:00 testing-ubu24 CRON[652853]: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:25:01.187685+00:00 testing-ubu24 CRON[652853]: pam_unix(cron:session): session opened for user root(uid=0) by root(uid=0)
+2026-01-19T21:25:01.192094+00:00 testing-ubu24 CRON[652853]: pam_unix(cron:session): session closed for user root
+2026-01-19T21:31:00.792635+00:00 testing-ubu24 sshd[653091]: Connection from 192.168.1.18 port 52758 on 192.168.1.31 port 22 rdomain ""
+2026-01-19T21:31:01.002788+00:00 testing-ubu24 sshd[653091]: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:01.003050+00:00 testing-ubu24 sshd[653091]: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:01.003998+00:00 testing-ubu24 sshd[653091]: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:01.005677+00:00 testing-ubu24 sshd[653091]: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:01.005797+00:00 testing-ubu24 sshd[653091]: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:01.005882+00:00 testing-ubu24 sshd[653091]: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:01.005945+00:00 testing-ubu24 sshd[653091]: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:01.006030+00:00 testing-ubu24 sshd[653091]: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:01.008492+00:00 testing-ubu24 sshd[653091]: Failed publickey for ccdc from 192.168.1.18 port 52758 ssh2: ED25519 SHA256:B/HIydfWeHyhTxczxv8pluY3GG7aIWi9JUUDAj6WOVQ
+2026-01-19T21:31:01.187880+00:00 testing-ubu24 sshd[653091]: Accepted password for ccdc from 192.168.1.18 port 52758 ssh2
+2026-01-19T21:31:01.190855+00:00 testing-ubu24 sshd[653091]: pam_unix(sshd:session): session opened for user ccdc(uid=1000) by ccdc(uid=0)
+2026-01-19T21:31:01.199402+00:00 testing-ubu24 systemd-logind[687]: New session 919 of user ccdc.
+2026-01-19T21:31:01.211309+00:00 testing-ubu24 sshd[653091]: User child is on pid 653093
+2026-01-19T21:31:01.256499+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.444889+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.445028+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.445101+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.674660+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.681370+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.699160+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:01.699431+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.711872+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:01.712137+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.725503+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.744363+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.756407+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.763841+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.776996+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:01.792346+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:01.792526+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:01.792883+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:01.793361+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:01.793437+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:01.793502+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:01.793745+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:01.793835+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:01.806642+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CP ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-acbgtkqyjipfybpcmyhfponmzvkiorcr ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858274.6513176-99361-263797215894386/AnsiballZ_setup.py'
+2026-01-19T21:31:01.808368+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:03.145599+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:03.149027+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.164330+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.171936+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.333146+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.340200+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.352537+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.363464+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.599517+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:03.599827+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.612334+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:03.612639+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.625832+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.638182+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.650276+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.658530+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.671921+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:03.683842+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:03.684025+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:03.684100+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:03.684303+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:03.684395+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:03.684523+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:03.684636+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:03.684758+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:03.696006+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CQ ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-yxeuhrjqplkqlzvoymvjcnmtupdarflx ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858276.728016-99380-249470327213793/AnsiballZ_apt.py'
+2026-01-19T21:31:03.697181+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:05.177571+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:05.183717+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.196868+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.205346+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.466868+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.473286+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.485339+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.495881+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.708431+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:05.708754+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.722659+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:05.722905+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.734821+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.745877+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.758175+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.766024+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.779672+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:05.792371+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:05.792585+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:05.792865+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:05.793227+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:05.793386+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:05.793582+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:05.793744+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:05.794011+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:05.805647+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CR ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-bvcwdziziglkhhmtnvahrsiadrgelqxw ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858278.860799-99397-272303039707198/AnsiballZ_file.py'
+2026-01-19T21:31:05.808131+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:06.177103+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:06.181467+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.195623+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.203049+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.413440+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.420264+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.434558+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.442688+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.648946+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:06.649244+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.662214+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:06.662523+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.674056+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.684894+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.695964+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.703180+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.715011+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:06.727558+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:06.727775+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:06.728079+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:06.728383+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:06.728519+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:06.728704+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:06.728882+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:06.729143+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:06.741160+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CS ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-mvumofeukmhkjuyojrubzrvnrnshgxui ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858279.807908-99410-183267200926128/AnsiballZ_stat.py'
+2026-01-19T21:31:06.742906+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:07.099300+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:07.106548+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.121184+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:07.121493+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.134767+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:07.135061+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.146627+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.152659+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.164401+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.172151+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.376580+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:07.376796+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.389157+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:07.389397+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.401349+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.411902+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.424279+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.434602+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.447248+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.466889+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:07.467854+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:07.467941+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:07.468016+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:07.468063+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:07.468138+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:07.468230+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:07.468304+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:07.483541+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CT ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-pzyajllufgyaysvvgurftoipgzxvsisr ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858279.807908-99410-183267200926128/AnsiballZ_copy.py'
+2026-01-19T21:31:07.485382+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:07.845320+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:07.848837+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.863015+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.870487+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.982610+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:07.989360+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.008446+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.028617+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.050940+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:08.051272+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.064696+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:08.065147+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.077373+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.088955+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.122088+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.132661+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.147062+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.168865+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:08.169224+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:08.169479+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:08.169613+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:08.169715+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:08.169785+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:08.169873+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:08.170049+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:08.183614+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CU ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-urfiroxtqairwuxdvkqhvjfqelqklbxg ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858281.379381-99436-276291810473338/AnsiballZ_stat.py'
+2026-01-19T21:31:08.185497+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:08.554685+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:08.562179+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.576794+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:08.577229+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.591209+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:08.591565+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.603548+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.609376+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.621434+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.628987+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.651641+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:08.652058+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.671410+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:08.671668+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.683922+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.700028+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.711845+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.719085+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.731287+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:08.744395+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:08.744568+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:08.744630+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:08.744838+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:08.744938+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:08.745086+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:08.745213+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:08.745329+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:08.756496+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CV ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-fvktohleqlpiwskaptiszdjdenhgzaoi ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858281.379381-99436-276291810473338/AnsiballZ_copy.py'
+2026-01-19T21:31:08.758095+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:09.111025+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:09.116151+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.127993+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.138055+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.203207+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.209666+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.224146+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.234876+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.259194+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:09.259570+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.275449+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:09.275735+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.289028+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.304348+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.316914+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.327581+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.341607+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:09.359241+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:09.359439+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:09.360134+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:09.360644+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:09.360761+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:09.360934+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:09.361135+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:09.361258+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:09.372229+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CW ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-hrgajcjkzgqdifehqrpqfoqwcvpnuvwg ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858282.5978274-99461-263330889373381/AnsiballZ_apt.py'
+2026-01-19T21:31:09.373770+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:10.719467+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:10.722575+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:10.740906+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:10.748500+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:10.839083+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:10.845587+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:10.861468+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:10.871618+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:11.103819+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:11.104107+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:11.116864+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:11.117145+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:11.128638+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:11.139796+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:11.152485+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:11.159761+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:11.176674+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:11.191433+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:11.191706+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:11.191846+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:11.191949+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:11.192074+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:11.192201+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:11.192317+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:11.192430+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:11.202956+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CX ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-lgjncedgvhwlunbqbljlxfvqfygdifrg ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858284.233998-99473-45109409886522/AnsiballZ_pip.py'
+2026-01-19T21:31:11.204667+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:19.692628+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:19.696359+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.708109+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.716120+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.783880+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.791240+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.803312+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.813883+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.835158+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:19.835697+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.849300+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:19.849693+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.865056+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.876120+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.887368+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.895280+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.907377+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:19.919522+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:19.919670+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:19.919747+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:19.919845+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:19.919910+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:19.919985+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:19.920189+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:19.920337+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:19.930900+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CY ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-tgjxtbvsqivtcigbtgmqbcxmckcjoema ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858293.1786413-99485-127489302495047/AnsiballZ_stat.py'
+2026-01-19T21:31:19.932132+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:20.301684+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:20.305547+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.319255+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:20.319528+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.331068+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:20.331326+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.341714+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.347468+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.357246+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.364865+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.379836+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:20.380067+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.391693+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:20.392005+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.404009+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.414670+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.426826+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.434459+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.445581+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.457936+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:20.458124+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:20.458188+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:20.458370+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:20.458476+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:20.458602+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:20.458725+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:20.458857+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:20.470034+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001CZ ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-odmsmjcbjczytdzkfvlzraxnkahgswfi ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858293.1786413-99485-127489302495047/AnsiballZ_copy.py'
+2026-01-19T21:31:20.471199+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:20.825356+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:20.829153+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.841188+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.849090+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.984206+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:20.990861+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.002770+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.013295+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.034467+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:21.034693+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.046146+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:21.046472+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.057349+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.068045+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.079162+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.086216+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.097858+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.109954+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:21.110103+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:21.110180+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:21.110437+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:21.110514+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:21.110571+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:21.110711+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:21.110852+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:21.121854+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001D0 ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-sybooistkdssjyfguqjrwdhyheyihlzo ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858294.37841-99512-2709850282194/AnsiballZ_stat.py'
+2026-01-19T21:31:21.122963+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:21.541258+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:21.545316+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.562858+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:21.563222+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.574062+00:00 testing-ubu24 sshd[653093]: subsystem request for sftp by user ccdc failed, subsystem not found
+2026-01-19T21:31:21.574381+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.584213+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.594615+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.604890+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.612019+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.622764+00:00 testing-ubu24 sshd[653093]: Starting session: command on pts/5 for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:21.633674+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:21.633822+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_sss.so
+2026-01-19T21:31:21.633969+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:21.634200+00:00 testing-ubu24 sudo: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:31:21.634304+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:21.634412+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:31:21.634513+00:00 testing-ubu24 sudo: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:31:21.634610+00:00 testing-ubu24 sudo: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:31:21.645205+00:00 testing-ubu24 sudo:     ccdc : HOST=testing-ubu24 ; TTY=pts/5 ; PWD=/home/ccdc ; USER=root ; TSID=0001D1 ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-qbdeseckaxhgbvvggiurgzysancvnojl ; /usr/bin/python3.12 /home/ccdc/.ansible/tmp/ansible-tmp-1768858294.37841-99512-2709850282194/AnsiballZ_file.py'
+2026-01-19T21:31:21.646310+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by ccdc(uid=1000)
+2026-01-19T21:31:22.004075+00:00 testing-ubu24 sudo: pam_unix(sudo:session): session closed for user root
+2026-01-19T21:31:22.007626+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:22.018564+00:00 testing-ubu24 sshd[653093]: Starting session: command for ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:31:22.026106+00:00 testing-ubu24 sshd[653093]: Close session: user ccdc from 192.168.1.18 port 52758 id 0
+2026-01-19T21:32:21.526948+00:00 testing-ubu24 sshd[653093]: Received disconnect from 192.168.1.18 port 52758:11: disconnected by user
+2026-01-19T21:32:21.527465+00:00 testing-ubu24 sshd[653093]: Disconnected from user ccdc 192.168.1.18 port 52758
+2026-01-19T21:32:21.528101+00:00 testing-ubu24 sshd[653091]: pam_unix(sshd:session): session closed for user ccdc
+2026-01-19T21:32:21.534634+00:00 testing-ubu24 systemd-logind[687]: Session 919 logged out. Waiting for processes to exit.
+2026-01-19T21:32:21.536309+00:00 testing-ubu24 systemd-logind[687]: Removed session 919.
+2026-01-19T21:35:01.197214+00:00 testing-ubu24 CRON[653643]: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:35:01.198076+00:00 testing-ubu24 CRON[653643]: PAM adding faulty module: pam_sss.so
+2026-01-19T21:35:01.198150+00:00 testing-ubu24 CRON[653643]: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:35:01.198217+00:00 testing-ubu24 CRON[653643]: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:35:01.198266+00:00 testing-ubu24 CRON[653643]: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:35:01.198361+00:00 testing-ubu24 CRON[653643]: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:35:01.198437+00:00 testing-ubu24 CRON[653643]: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:35:01.198506+00:00 testing-ubu24 CRON[653643]: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:35:01.199523+00:00 testing-ubu24 CRON[653643]: pam_unix(cron:session): session opened for user root(uid=0) by root(uid=0)
+2026-01-19T21:35:01.203616+00:00 testing-ubu24 CRON[653643]: pam_unix(cron:session): session closed for user root
+2026-01-19T21:38:03.389876+00:00 testing-ubu24 sshd[653774]: Connection from 192.168.1.18 port 51874 on 192.168.1.31 port 22 rdomain ""
+2026-01-19T21:38:03.624711+00:00 testing-ubu24 sshd[653774]: PAM unable to dlopen(pam_sss.so): /usr/lib/security/pam_sss.so: cannot open shared object file: No such file or directory
+2026-01-19T21:38:03.624880+00:00 testing-ubu24 sshd[653774]: PAM adding faulty module: pam_sss.so
+2026-01-19T21:38:03.625836+00:00 testing-ubu24 sshd[653774]: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:38:03.627382+00:00 testing-ubu24 sshd[653774]: PAM unable to dlopen(pam_pwquality.so): /usr/lib/security/pam_pwquality.so: cannot open shared object file: No such file or directory
+2026-01-19T21:38:03.627469+00:00 testing-ubu24 sshd[653774]: PAM adding faulty module: pam_pwquality.so
+2026-01-19T21:38:03.627534+00:00 testing-ubu24 sshd[653774]: PAM unable to dlopen(pam_gnome_keyring.so): /usr/lib/security/pam_gnome_keyring.so: cannot open shared object file: No such file or directory
+2026-01-19T21:38:03.627597+00:00 testing-ubu24 sshd[653774]: PAM adding faulty module: pam_gnome_keyring.so
+2026-01-19T21:38:03.627657+00:00 testing-ubu24 sshd[653774]: PAM unable to resolve symbol: pam_sm_acct_mgmt
+2026-01-19T21:38:03.630105+00:00 testing-ubu24 sshd[653774]: Failed publickey for ccdc from 192.168.1.18 port 51874 ssh2: ED25519 SHA256:B/HIydfWeHyhTxczxv8pluY3GG7aIWi9JUUDAj6WOVQ
+2026-01-19T21:38:04.971732+00:00 testing-ubu24 sshd[653774]: Accepted password for ccdc from 192.168.1.18 port 51874 ssh2
+2026-01-19T21:38:04.973612+00:00 testing-ubu24 sshd[653774]: pam_unix(sshd:session): session opened for user ccdc(uid=1000) by ccdc(uid=0)
+2026-01-19T21:38:04.981146+00:00 testing-ubu24 systemd-logind[687]: New session 921 of user ccdc.
+2026-01-19T21:38:04.994712+00:00 testing-ubu24 sshd[653774]: User child is on pid 653778
+2026-01-19T21:38:05.041709+00:00 testing-ubu24 sshd[653778]: Starting session: shell on pts/5 for ccdc from 192.168.1.18 port 51874 id 0
