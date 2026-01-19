@@ -391,6 +391,11 @@ def run_git(args, cwd):
         text=True, 
         shell=(platform.system() == "Windows")
     )
+    if result.returncode != 0:
+        # Errors usually go to stderr, but we can also print the exit code
+        print_debug(f"Shell command failed with exit code {result.returncode}")
+        if result.stderr:
+            print_debug(f"Shell stderr: {result.stderr.strip()}")
     return result
 
 def setup_git_agent(repo_dir,protected_folder,systemInfo=get_system_details()):
@@ -2129,7 +2134,7 @@ def file_protect_main(repo_dir,protected_folder):
                 # Commit and Push the 'bad' changes
                 run_git(["add", "."],repo_dir)
                 run_git(["commit", "-m", f"auto-malicious{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}"],repo_dir)
-                run_git(["push", "origin", "bad"],repo_dir)
+                run_git(["push", "-u", "origin", "bad"],repo_dir)
                 changes = get_latest_commit_stats("bad",repo_dir)
                 
                 # Return to good branch for restoration

@@ -1912,6 +1912,7 @@ def handle_beacon():
             if not os.path.exists(os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")):
                 try:
                     run_git(["init", "--bare", f"{agent_id}.git"],GIT_PROJECT_ROOT)
+                    run_git(["config", "-f", f"{agent_id}.git/config", "http.receivepack", "true"],GIT_PROJECT_ROOT)
                     logger.info(f"/beacon: created repo {os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")}")
                 except subprocess.CalledProcessError as e:
                     logger.error(f"/beacon: Error occurred when creating {os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")} - {e.stderr}")
@@ -2083,7 +2084,7 @@ def get_pause():
 @app.route('/git/<repo_name>.git/', defaults={'git_path': ''}, methods=['GET', 'POST', 'PROPFIND'])
 def git_backend(repo_name, git_path):
     # Log IMMEDIATELY with all inputs
-    logger.info(f"/git: START git_backend: repo={repo_name}, path={git_path}, method={request.method}")
+    #logger.info(f"/git: START git_backend: repo={repo_name}, path={git_path}, method={request.method}")
 
     try:
         # Check if the cleaning function is the culprit
@@ -2091,8 +2092,8 @@ def git_backend(repo_name, git_path):
             # If this function crashes, it usually happens here
             git_path = clean_and_join_path(git_path)
         except Exception as e:
-            logger.info(f"/git: CRASH in clean_and_join_path: {str(e)}")
-            return f"Path cleaning failed: {str(e)}", 501
+            logger.eoor(f"/git: CRASH in clean_and_join_path: {str(e)}")
+            return f"Path cleaning failed: {str(e)}", 500
 
         # Build Environment
         env = {
@@ -2106,14 +2107,15 @@ def git_backend(repo_name, git_path):
             'CONTENT_TYPE': request.headers.get('Content-Type', ''),
             'CONTENT_LENGTH': request.headers.get('Content-Length', ''),
             'REMOTE_ADDR': request.remote_addr,
+            'REMOTE_USER': 'git_user',
         }
 
-        logger.info(f"/git: GIT_BACKEND - {GIT_BACKEND}, env - {env}.")
+        #logger.info(f"/git: GIT_BACKEND - {GIT_BACKEND}, env - {env}.")
 
         # Validate GIT_BACKEND exists before trying to run it
         if not os.path.exists(GIT_BACKEND):
-            logger.info(f"/git: CRITICAL: GIT_BACKEND binary not found at {GIT_BACKEND}")
-            return "Backend binary missing", 502
+            logger.critical(f"/git: CRITICAL: GIT_BACKEND binary not found at {GIT_BACKEND}")
+            return "Backend binary missing", 500
 
         # Subprocess execution
         process = subprocess.Popen(
@@ -2126,8 +2128,8 @@ def git_backend(repo_name, git_path):
 
         stdout, stderr = process.communicate(input=request.data)
 
-        #if process.returncode != 0:
-        logger.info(f"/git: Git binary returned {process.returncode}. Stderr: {stderr.decode('utf-8')}")
+        if process.returncode != 0:
+            logger.warning(f"/git: Git binary returned {process.returncode}. Stderr: {stderr.decode('utf-8')}")
 
         # Header parsing
         header_end = stdout.find(b'\r\n\r\n')
@@ -2139,8 +2141,8 @@ def git_backend(repo_name, git_path):
 
         if header_end == -1:
             # If no headers found, the binary likely produced an error on stdout
-            logger.info(f"/git: CGI ERROR: No header separator. Raw Output: {stdout[:200]}")
-            return "Invalid response from Git backend", 503
+            logger.warning(f"/git: CGI ERROR: No header separator. Raw Output: {stdout[:200]}")
+            return "Invalid response from Git backend", 500
 
         header_section = stdout[:header_end].decode('utf-8')
         response_body = stdout[header_end + sep_len:]
@@ -2153,8 +2155,8 @@ def git_backend(repo_name, git_path):
             sep_len = 2
 
         if header_end == -1:
-            logger.info(f"/git: CGI Header Parse Error: No header separator found in binary output. Raw output start: {stdout[:50]}")
-            return "Internal Server Error: Invalid CGI Response", 504
+            logger.warning(f"/git: CGI Header Parse Error: No header separator found in binary output. Raw output start: {stdout[:50]}")
+            return "Internal Server Error: Invalid CGI Response", 500
 
         header_section = stdout[:header_end].decode('utf-8')
         response_body = stdout[header_end + sep_len:]
@@ -2170,24 +2172,26 @@ def git_backend(repo_name, git_path):
                     try:
                         status_code = int(v.split(' ')[0])
                     except ValueError:
-                        logger.info(f"/git: Malformed Status header: {v}")
+                        logger.warning(f"/git: Malformed Status header: {v}")
                 else:
                     headers_dict[key.strip()] = v
-        logger.info(f"/git: returning response_body {response_body}, status_code {status_code}, headers_dict {headers_dict}.")
+        #logger.info(f"/git: returning response_body {response_body}, status_code {status_code}, headers_dict {headers_dict}.")
+        logger.info(f"/git - Successful connection from {request.remote_addr}.")
         return response_body, status_code, headers_dict
 
     except FileNotFoundError:
-        logger.info(f"/git: GIT_BACKEND binary not found at: {GIT_BACKEND}")
-        return "Internal Server Error: Backend Binary Missing", 505
+        logger.error(f"/git: GIT_BACKEND binary not found at: {GIT_BACKEND}")
+        return "Internal Server Error: Backend Binary Missing", 500
     except PermissionError:
-        logger.info(f"/git: Permission denied when executing GIT_BACKEND: {GIT_BACKEND}")
-        return "Internal Server Error: Backend Permission Denied", 506
+        logger.error(f"/git: Permission denied when executing GIT_BACKEND: {GIT_BACKEND}")
+        return "Internal Server Error: Backend Permission Denied", 500
     except Exception as e:
-        logger.info(f"/git: Unexpected error in git_backend: {str(e)}")
-        return "Internal Server Error", 507
+        logger.error(f"/git: Unexpected error in git_backend: {str(e)}")
+        return "Internal Server Error", 500
 
 @app.route('/list_authconfig_agent', methods=['GET'])
 def get_config():
+    logger.info(f"/list_authconfig_agent - Successful connection from {request.remote_addr}.")
     entries = AuthConfig.query.all()
     
     # Structure the data so the agent can easily parse it
@@ -2206,6 +2210,7 @@ def get_config():
 # Also used for frontend
 @app.route('/list_authconfigglobal', methods=['POST'])
 def get_global_config():
+    logger.info(f"/list_authconfigglobal - Successful connection from {request.remote_addr}.")
     configs = AuthConfigGlobal.query.all()
     return jsonify({c.key: c.value for c in configs})
 
@@ -2215,6 +2220,7 @@ def get_global_config():
 @analyst_required
 @app.route('/list_authconfig', methods=['POST'])
 def list_authconfig():
+    logger.info(f"/list_authconfig - Successful connection from {current_user.id} at {request.remote_addr}.")
     entries = AuthConfig.query.all()
     # Return as a list of dictionaries for the frontend to map
     return jsonify([entry.to_dict() for entry in entries])
@@ -2222,6 +2228,7 @@ def list_authconfig():
 @login_required
 @app.route('/list_auth_records', methods=['POST'])
 def list_auth_records():
+    logger.info(f"/list_auth_records - Successful connection from {current_user.id} at {request.remote_addr}.")
     results = db.session.query(AuthRecord, Agent).\
         join(Agent, AuthRecord.agent_id == Agent.agent_id).\
         order_by(AuthRecord.timestamp.desc()).all()
