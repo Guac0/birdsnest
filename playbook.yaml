@@ -9,6 +9,7 @@
     - stabvest_server
     - owlet
     - owlet_server
+    - full
 
 - name: Deploy Stabvest Client
   #hosts: iis-winserv22
@@ -22,6 +23,7 @@
   tags:
     - stabvest
     - stabvest_client
+    - full
 
 - name: Deploy Owlet Client
   #hosts: iis-winserv22
@@ -35,6 +37,7 @@
   tags:
     - owlet
     - owlet_client
+    - full
 
 - name: Deploy Stabvest Client Automated (do not touch)
   hosts: all

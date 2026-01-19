@@ -13,7 +13,7 @@ stabvest_tester_executable: "agent_tester.py"
 #stabvest_agent_executable: "agent_rocky_9.7_Rocky_Linux_9.7_(Blue_Onyx).bin" # TODO: dynamic
 #stabvest_tester_executable: "agent_rocky_9.7_Rocky_Linux_9.7_(Blue_Onyx)" # TODO: dynamic
 stabvest_include_tester: true
-stabvest_service_start: false
+stabvest_service_start: true
 
 stabvest_agent_name: "apache2"
 stabvest_auth_token: "testtoken"
