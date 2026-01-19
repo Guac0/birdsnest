@@ -36,3 +36,15 @@ all:
         testing-ubu24:
           hosts:
             192.168.1.31:
+        testing-deb12:
+          hosts:
+            192.168.1.30:
+        testing-centos8:
+          hosts:
+            192.168.1.42:
+        testing-rocky9:
+          hosts:
+            192.168.1.32:
+        testing-alpine:
+          hosts:
+            192.168.1.19:
