@@ -4,7 +4,7 @@
   "PUBLIC_URL": "https://{HOST}:{PORT}",
   "LOGFILE": "log.txt",
   "SAVEFILE": "save_{timestamp}.db",
-  "SAVE_INTERVAL": 60,
+  "SECRET_KEY": "changeme",
   "STALE_TIME": 300,
   "DEFAULT_WEBHOOK_SLEEP_TIME": 0.25,
   "MAX_WEBHOOK_MSG_PER_MINUTE": 50,

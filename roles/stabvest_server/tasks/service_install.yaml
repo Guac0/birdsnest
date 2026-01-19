@@ -10,7 +10,6 @@
       [Service]
       User=root
       WorkingDirectory={{ stabvest_deploy_dir }}
-      # Replace with your venv path if applicable
       ExecStart={{ stabvest_deploy_dir }}/venv/bin/python3 worker.py
       Restart=always
 

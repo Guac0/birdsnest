@@ -1,5 +1,6 @@
 flask
 flask-login
+Flask-Session
 Flask-SQLAlchemy
 pyopenssl
 #nuitka

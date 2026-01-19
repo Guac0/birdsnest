@@ -24,6 +24,7 @@ from sqlalchemy.orm import class_mapper
 import subprocess
 from pathlib import Path
 import platform
+from flask_session import Session
 
 # Path to the git-http-backend executable
 # On Linux: /usr/lib/git-core/git-http-backend
@@ -42,6 +43,7 @@ CONFIG_DEFAULTS = {
     "PUBLIC_URL": "https://{HOST}:{PORT}",
     "LOGFILE": "log_{timestamp}.txt",
     "SAVEFILE": "save_{timestamp}.db",
+    "SECRET_KEY": "changemeplease",
     "SAVE_INTERVAL": 60,
     "STALE_TIME": 300,
     "DEFAULT_WEBHOOK_SLEEP_TIME": 0.25,
@@ -122,6 +124,7 @@ AUTHCONFIG_STRICT_USER = CONFIG["AUTHCONFIG_STRICT_USER"]
 AUTHCONFIG_CREATE_INCIDENT = CONFIG["AUTHCONFIG_CREATE_INCIDENT"]
 AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL = CONFIG["AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL"]
 CREATE_TEST_DATA = CONFIG["CREATE_TEST_DATA"]
+SECRET_KEY = CONFIG["SECRET_KEY"]
 
 # =================================
 # ======= START USER CONFIG =======
@@ -167,13 +170,21 @@ CREATE_TEST_DATA = CONFIG["CREATE_TEST_DATA"]
 # === Set Flask Config ===
 SQLALCHEMY_DATABASE_URI = f'sqlite:///{SAVEFILE}'
 app = Flask(__name__)
+app.config['SECRET_KEY'] = CONFIG["SECRET_KEY"]
+db = SQLAlchemy(app) # Initialize SQLAlchemy
 app.config.update(
-    SECRET_KEY=os.urandom(32), # Randomize the key every startup to avoid cookie reuse
     SESSION_COOKIE_SECURE=True, # Forces the session cookie to be sent only over HTTPS.
     SESSION_COOKIE_HTTPONLY=True, # Prevents JavaScript from accessing the session cookie
     SESSION_COOKIE_SAMESITE="Strict", # "Strict": the cookie is only sent for requests from the same site (no subdomains)
-    PERMANENT_SESSION_LIFETIME=timedelta(minutes=2),
-    SESSION_REFRESH_EACH_REQUEST=True # Automatic refreshes mean that lifetime is effectively infinite! This means that users actively on the site won't get signed out, but people who close the site but not the browser and keep it closed for 1 min will have to sign in again
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=3),
+    SESSION_REFRESH_EACH_REQUEST=True, # Automatic refreshes mean that lifetime is effectively infinite! This means that users actively on the site won't get signed out, but people who close the site but not the browser and keep it closed for 1 min will have to sign in again
+    
+    # --- Server-Side Session Config ---
+    SESSION_TYPE='sqlalchemy',
+    SESSION_SQLALCHEMY=db,  # Tell it to use your existing SQLAlchemy instance
+    SESSION_SQLALCHEMY_TABLE='flask_sessions', # It will create this table automatically
+    SESSION_PERMANENT=True,
+    SESSION_USE_SIGNER=True # Protects the session cookie from tampering
 )
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 # Silence the deprecation warning
@@ -182,7 +193,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # === Initialize Misc Vars ===
 start_time = time.time()
 #last_save_time=0
-db = SQLAlchemy(app) # Initialize SQLAlchemy
 TTYD_PROCESS = None
 class User(UserMixin):
     def __init__(self, id, role):
@@ -727,7 +737,7 @@ def webhook_main():
         sleep_time = 0
         with app.app_context():
             # Find the oldest unprocessed task
-            task = WebhookQueue.query.filter_by(processed=False).order_by(WebhookQueue.created_at.asc()).first()
+            task = WebhookQueue.query.order_by(WebhookQueue.created_at.asc()).first()
             
             if not task:
                 time.sleep(2) # Wait a bit before checking for new tasks again
