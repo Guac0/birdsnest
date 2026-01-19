@@ -13,6 +13,10 @@
 - name: Deploy Stabvest Client
   #hosts: iis-winserv22
   hosts: testing-ubu24
+  #hosts: testing-deb12
+  #hosts: testing-centos8
+  #hosts: testing-rocky9
+  #hosts: testing-alpine
   roles:
     - stabvest_client
   tags:
@@ -22,6 +26,10 @@
 - name: Deploy Owlet Client
   #hosts: iis-winserv22
   hosts: testing-ubu24
+  #hosts: testing-deb12
+  #hosts: testing-centos8
+  #hosts: testing-rocky9
+  #hosts: testing-alpine
   roles:
     - owlet
   tags:
