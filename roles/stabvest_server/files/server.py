@@ -171,6 +171,7 @@ SECRET_KEY = CONFIG["SECRET_KEY"]
 SQLALCHEMY_DATABASE_URI = f'sqlite:///{SAVEFILE}'
 app = Flask(__name__)
 app.config['SECRET_KEY'] = CONFIG["SECRET_KEY"]
+app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 db = SQLAlchemy(app) # Initialize SQLAlchemy
 app.config.update(
     SESSION_COOKIE_SECURE=True, # Forces the session cookie to be sent only over HTTPS.
@@ -186,7 +187,6 @@ app.config.update(
     SESSION_PERMANENT=True,
     SESSION_USE_SIGNER=True # Protects the session cookie from tampering
 )
-app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 # Silence the deprecation warning
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -571,7 +571,7 @@ def insert_initial_data():
 
 def create_db_tables():
 
-    db_exists = os.path.exists(os.path.join("instances",SAVEFILE))
+    db_exists = os.path.exists(os.path.join("instance",SAVEFILE))
     # Use the application context to ensure Flask extensions are configured
     with app.app_context():
         # This checks the database file defined in SQLALCHEMY_DATABASE_URI.
