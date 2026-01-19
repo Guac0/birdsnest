@@ -1,5 +1,13 @@
 ---
 # ansible-playbook stabvest_playbook.yaml -i inventory.yaml -t stabvest_server -vv
+- name: Cleanup
+  hosts: all
+  roles:
+    - cleanup
+  tags:
+    - cleanup
+    - full
+    
 - name: Deploy Stabvest Server
   hosts: ansible-controller
   roles:

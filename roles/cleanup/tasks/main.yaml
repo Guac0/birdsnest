@@ -1,0 +1,6 @@
+---
+- name: Install Python
+  ansible.builtin.include_tasks: install_python.yaml
+
+- name: Cleanup
+  ansible.builtin.include_tasks: cleanup.yaml
