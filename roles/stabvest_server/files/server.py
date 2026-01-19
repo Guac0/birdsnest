@@ -2001,32 +2001,33 @@ def handle_beacon():
     doIncident = True
 
     if agent_type.lower() == "owlet":
-        try:
-            new_authrecord = AuthRecord(
-                agent_id = agent_id,
-                message_id = message_id,
-                timestamp=timestamp,
-                user=user,
-                srcip=srcip,
-                login_type=login_type,
-                successful=successful,
-                notes=message
-            )
-            db.session.add(new_authrecord)
-            db.session.commit()
-            message = str(new_authrecord)
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"/beacon - Failed to create authrecord for agent {agent_id}: {e}")
-            # Not returning an error, as this is secondary to agent update/auth
-            if message:
-                message = f"owlet fallback msg: {login_type} login attempt from user {user} from {srcip} attempted login with status {successful}, notes: {message}"
-            else:
-                message = f"owlet fallback msg: {login_type} login attempt from user {user} from {srcip} attempted login with status {successful}."
-            pass
-        doIncidentDb = db.session.get(AuthConfigGlobal,"create_incident")
-        if doIncidentDb != None:
-            doIncident = doIncidentDb
+        if (message.lower().strip() != "all good") and (message.lower().strip() != "register") and (message.lower().strip() != "reregister"):
+            try:
+                new_authrecord = AuthRecord(
+                    agent_id = agent_id,
+                    message_id = message_id,
+                    timestamp=timestamp,
+                    user=user,
+                    srcip=srcip,
+                    login_type=login_type,
+                    successful=successful,
+                    notes=message
+                )
+                db.session.add(new_authrecord)
+                db.session.commit()
+                message = str(new_authrecord)
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"/beacon - Failed to create authrecord for agent {agent_id}: {e}")
+                # Not returning an error, as this is secondary to agent update/auth
+                if message:
+                    message = f"owlet fallback msg: {login_type} login attempt from user {user} from {srcip} attempted login with status {successful}, notes: {message}"
+                else:
+                    message = f"owlet fallback msg: {login_type} login attempt from user {user} from {srcip} attempted login with status {successful}."
+                pass
+            doIncidentDb = db.session.get(AuthConfigGlobal,"create_incident")
+            if doIncidentDb != None:
+                doIncident = doIncidentDb
 
     # 6. Trigger Incident if Status Change is Critical
     if oldStatus == False:
