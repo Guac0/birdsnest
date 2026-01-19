@@ -31,7 +31,23 @@ import ast
 #region##################
 
 CONFIG_DEFAULTS = {
+    "AGENT_NAME": "test1",
+    "AUTH_TOKEN": "testtoken",
+    "SERVER_URL": "https://127.0.0.1:8080/",
+    "SERVER_TIMEOUT": 5,
+    "SLEEPTIME": 60,
     "DISARM": True,
+    "PORTS": [81],
+    "SERVICES": ["AxInstSV"],
+    "PACKAGES": [""],
+    "SERVICE_BACKUPS": {
+        "PathName": "C:\\\\Windows\\\\system32\\\\svchost.exe -k AxInstSVGroup",
+        "StartName": "LocalSystem",
+        "Dependencies": [],
+        "DisplayName": "ActiveX Installer (AxInstSV)",
+        "StartType": "Manual"
+    },
+    "PROTECTED_FOLDERS": ["var/www"],
     "DEBUG_PRINT": True,
     "BACKUPDIR": "",
     "LOGFILE": "log.txt",
@@ -40,17 +56,7 @@ CONFIG_DEFAULTS = {
     "MTU_DEFAULT": 1300,
     "MTU_MAX": 1514,
     "LINUX_DEFAULT_TTL": 64,
-    "AGENT_NAME": "test",
-    "AUTH_TOKEN": "testtoken",
-    "AGENT_TYPE": "stabvest",
-    "SERVER_URL": "https://127.0.0.1:8080/",
-    "SERVER_TIMEOUT": 5,
-    "SLEEPTIME": 60,
-    "PORTS": [],
-    "SERVICES": [""],
-    "PACKAGES": [""],
-    "SERVICE_BACKUPS": {},
-    "PROTECTED_FOLDERS": []
+    "AGENT_TYPE": "stabvest"
     #"SERVICE_BACKUPS": {
     #    "PathName": "C:\Windows\System32\svchost.exe -k LocalService",
     #    "StartName": "LocalSystem",
