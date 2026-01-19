@@ -1,0 +1,141 @@
+Jan 18 20:19:58 databasevm PackageKit: uid 1000 is trying to obtain org.freedesktop.packagekit.system-sources-refresh auth (only_trusted:0)
+Jan 18 20:19:58 databasevm PackageKit: uid 1000 obtained auth for org.freedesktop.packagekit.system-sources-refresh
+Jan 18 20:20:06 databasevm PackageKit: uid 1000 is trying to obtain org.freedesktop.packagekit.system-sources-refresh auth (only_trusted:0)
+Jan 18 20:20:06 databasevm PackageKit: uid 1000 obtained auth for org.freedesktop.packagekit.system-sources-refresh
+Jan 18 20:20:16 databasevm sshd[7561]: Accepted password for student from 192.168.200.209 port 49478 ssh2
+Jan 18 20:20:16 databasevm sshd[7561]: pam_unix(sshd:session): session opened for user student(uid=1000) by (uid=0)
+Jan 18 20:20:16 databasevm systemd-logind[772]: New session 15 of user student.
+Jan 18 20:20:22 databasevm sudo:  student : TTY=pts/2 ; PWD=/home/student ; USER=root ; COMMAND=/usr/bin/su
+Jan 18 20:20:22 databasevm sudo: pam_unix(sudo:session): session opened for user root(uid=0) by student(uid=1000)
+Jan 18 20:20:22 databasevm su: (to root) root on pts/3
+Jan 18 20:20:22 databasevm su: pam_unix(su:session): session opened for user root(uid=0) by student(uid=0)
+Jan 18 20:20:26 databasevm groupadd[7648]: group added to /etc/group: name=wordpress, GID=1001
+Jan 18 20:20:26 databasevm groupadd[7648]: group added to /etc/gshadow: name=wordpress
+Jan 18 20:20:26 databasevm groupadd[7648]: new group: name=wordpress, GID=1001
+Jan 18 20:20:26 databasevm useradd[7654]: new user: name=wordpress, UID=1001, GID=1001, home=/home/wordpress, shell=/bin/bash, from=/dev/pts/3
+Jan 18 20:21:26 databasevm chfn[7669]: changed user 'wordpress' information
+Jan 18 20:30:01 databasevm CRON[7722]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Jan 18 20:30:01 databasevm CRON[7722]: pam_unix(cron:session): session closed for user root
+Jan 18 20:34:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 20:34:17 databasevm pkexec[7963]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 20:37:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 20:37:17 databasevm pkexec[10708]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 20:40:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 20:40:17 databasevm pkexec[16431]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 20:43:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 20:43:17 databasevm pkexec[21212]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 20:46:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 20:46:17 databasevm pkexec[25727]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 20:49:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 20:49:17 databasevm pkexec[35866]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 20:52:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 20:52:17 databasevm pkexec[40363]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 20:55:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 20:55:17 databasevm pkexec[44812]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 20:58:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 20:58:17 databasevm pkexec[49363]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:01:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:01:17 databasevm pkexec[59369]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:04:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:04:17 databasevm pkexec[75158]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:07:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:07:17 databasevm pkexec[79829]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:10:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:10:17 databasevm pkexec[89774]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:13:16 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:13:16 databasevm pkexec[94042]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:16:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:16:17 databasevm pkexec[98488]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:17:01 databasevm CRON[99490]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Jan 18 21:17:01 databasevm CRON[99490]: pam_unix(cron:session): session closed for user root
+Jan 18 21:19:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:19:17 databasevm pkexec[102871]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:22:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:22:17 databasevm pkexec[107195]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:25:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:25:17 databasevm pkexec[111542]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:28:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:28:17 databasevm pkexec[127593]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:30:01 databasevm CRON[130263]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Jan 18 21:30:01 databasevm CRON[130263]: pam_unix(cron:session): session closed for user root
+Jan 18 21:31:18 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:31:18 databasevm pkexec[132121]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:34:16 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:34:16 databasevm pkexec[142761]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:37:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:37:17 databasevm pkexec[147155]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:40:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:40:17 databasevm pkexec[151439]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:43:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:43:17 databasevm pkexec[155855]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:46:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:46:17 databasevm pkexec[160270]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:49:17 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:49:17 databasevm pkexec[181391]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 21:52:16 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 21:52:16 databasevm pkexec[183565]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 22:11:57 databasevm passwd[183579]: pam_unix(passwd:chauthtok): password changed for wordpress
+Jan 18 22:11:57 databasevm passwd[183579]: gkr-pam: couldn't update the login keyring password: no old password was entered
+Jan 18 22:12:35 databasevm groupadd[183775]: group added to /etc/group: name=mysql, GID=136
+Jan 18 22:12:35 databasevm groupadd[183775]: group added to /etc/gshadow: name=mysql
+Jan 18 22:12:35 databasevm groupadd[183775]: new group: name=mysql, GID=136
+Jan 18 22:12:35 databasevm useradd[183783]: new user: name=mysql, UID=129, GID=136, home=/nonexistent, shell=/bin/false, from=none
+Jan 18 22:12:35 databasevm chage[183790]: changed password expiry for mysql
+Jan 18 22:12:35 databasevm chfn[183794]: changed user 'mysql' information
+Jan 18 22:13:16 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 22:13:16 databasevm pkexec[184764]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 22:17:01 databasevm CRON[184894]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Jan 18 22:17:01 databasevm CRON[184894]: pam_unix(cron:session): session closed for user root
+Jan 18 22:23:29 databasevm su: pam_unix(su:session): session closed for user root
+Jan 18 22:23:29 databasevm sudo: pam_unix(sudo:session): session closed for user root
+Jan 18 22:23:35 databasevm sshd[7621]: Received disconnect from 192.168.200.209 port 49478:11: disconnected by user
+Jan 18 22:23:35 databasevm sshd[7621]: Disconnected from user student 192.168.200.209 port 49478
+Jan 18 22:23:35 databasevm sshd[7561]: pam_unix(sshd:session): session closed for user student
+Jan 18 22:23:35 databasevm systemd-logind[772]: Session 15 logged out. Waiting for processes to exit.
+Jan 18 22:23:35 databasevm systemd-logind[772]: Removed session 15.
+Jan 18 22:28:16 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 22:28:16 databasevm pkexec[185230]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 22:30:01 databasevm CRON[185238]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Jan 18 22:30:01 databasevm CRON[185238]: pam_unix(cron:session): session closed for user root
+Jan 18 22:41:57 databasevm sshd[185250]: Accepted password for student from 192.168.200.209 port 60476 ssh2
+Jan 18 22:41:57 databasevm sshd[185250]: pam_unix(sshd:session): session opened for user student(uid=1000) by (uid=0)
+Jan 18 22:41:57 databasevm systemd-logind[772]: New session 21 of user student.
+Jan 18 22:42:01 databasevm sudo:  student : TTY=pts/2 ; PWD=/home/student ; USER=root ; COMMAND=/usr/bin/su
+Jan 18 22:42:01 databasevm sudo: pam_unix(sudo:session): session opened for user root(uid=0) by student(uid=1000)
+Jan 18 22:42:01 databasevm su: (to root) root on pts/3
+Jan 18 22:42:01 databasevm su: pam_unix(su:session): session opened for user root(uid=0) by student(uid=0)
+Jan 18 22:43:53 databasevm su: pam_unix(su:session): session closed for user root
+Jan 18 22:43:53 databasevm sudo: pam_unix(sudo:session): session closed for user root
+Jan 18 22:43:58 databasevm sshd[185311]: Received disconnect from 192.168.200.209 port 60476:11: disconnected by user
+Jan 18 22:43:58 databasevm sshd[185311]: Disconnected from user student 192.168.200.209 port 60476
+Jan 18 22:43:58 databasevm sshd[185250]: pam_unix(sshd:session): session closed for user student
+Jan 18 22:43:58 databasevm systemd-logind[772]: Session 21 logged out. Waiting for processes to exit.
+Jan 18 22:43:58 databasevm systemd-logind[772]: Removed session 21.
+Jan 18 22:45:01 databasevm sshd[185695]: Accepted password for student from 192.168.200.209 port 51978 ssh2
+Jan 18 22:45:01 databasevm sshd[185695]: pam_unix(sshd:session): session opened for user student(uid=1000) by (uid=0)
+Jan 18 22:45:01 databasevm systemd-logind[772]: New session 22 of user student.
+Jan 18 22:46:15 databasevm pkexec: pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)
+Jan 18 22:46:15 databasevm pkexec[185976]: student: Executing command [USER=root] [TTY=unknown] [CWD=/home/student] [COMMAND=/usr/lib/update-notifier/package-system-locked]
+Jan 18 22:47:42 databasevm sshd[185734]: Received disconnect from 192.168.200.209 port 51978:11: disconnected by user
+Jan 18 22:47:42 databasevm sshd[185734]: Disconnected from user student 192.168.200.209 port 51978
+Jan 18 22:47:42 databasevm sshd[185695]: pam_unix(sshd:session): session closed for user student
+Jan 18 22:47:42 databasevm systemd-logind[772]: Session 22 logged out. Waiting for processes to exit.
+Jan 18 22:47:42 databasevm systemd-logind[772]: Removed session 22.
+Jan 18 22:47:45 databasevm sshd[185989]: pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=192.168.200.209  user=student
+Jan 18 22:47:47 databasevm sshd[185989]: Failed password for student from 192.168.200.209 port 40294 ssh2
+Jan 18 22:47:50 databasevm sshd[185989]: Failed password for student from 192.168.200.209 port 40294 ssh2
+Jan 18 22:48:00 databasevm sshd[185989]: Connection closed by authenticating user student 192.168.200.209 port 40294 [preauth]
+Jan 18 22:48:00 databasevm sshd[185989]: PAM 1 more authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=192.168.200.209  user=student
+Jan 18 22:48:21 databasevm sshd[185992]: Connection closed by authenticating user student 192.168.200.209 port 37570 [preauth]
+Jan 18 22:48:21 databasevm sshd[185994]: Connection closed by authenticating user student 192.168.200.209 port 37572 [preauth]
+Jan 18 22:48:25 databasevm sshd[185996]: Accepted password for student from 192.168.200.209 port 37576 ssh2
+Jan 18 22:48:25 databasevm sshd[185996]: pam_unix(sshd:session): session opened for user student(uid=1000) by (uid=0)
+Jan 18 22:48:25 databasevm systemd-logind[772]: New session 23 of user student.
+Jan 18 22:48:26 databasevm sshd[186035]: Received disconnect from 192.168.200.209 port 37576:11: disconnected by user
+Jan 18 22:48:26 databasevm sshd[186035]: Disconnected from user student 192.168.200.209 port 37576
+Jan 18 22:48:26 databasevm sshd[185996]: pam_unix(sshd:session): session closed for user student
+Jan 18 22:48:26 databasevm systemd-logind[772]: Session 23 logged out. Waiting for processes to exit.
+Jan 18 22:48:26 databasevm systemd-logind[772]: Removed session 23.
+Jan 18 22:48:34 databasevm sshd[186040]: Accepted publickey for student from 192.168.200.209 port 49346 ssh2: ED25519 SHA256:+dNODfSNAEz4NEilAQyULR5WoCg5vDP5IeVzPXGUr4c
+Jan 18 22:48:34 databasevm sshd[186040]: pam_unix(sshd:session): session opened for user student(uid=1000) by (uid=0)
+Jan 18 22:48:34 databasevm systemd-logind[772]: New session 24 of user student.
