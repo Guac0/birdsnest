@@ -17,6 +17,7 @@ import urllib.request
 import urllib.error
 import math
 import logging
+from concurrent_log_handler import ConcurrentRotatingFileHandler
 from logging.handlers import RotatingFileHandler
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import class_mapper
@@ -46,6 +47,7 @@ CONFIG_DEFAULTS = {
     "DEFAULT_WEBHOOK_SLEEP_TIME": 0.25,
     "MAX_WEBHOOK_MSG_PER_MINUTE": 50,
     "WEBHOOK_URL": "",
+    "CREATE_TEST_DATA": True,
     "AUTHCONFIG_STRICT_IP": False,
     "AUTHCONFIG_STRICT_USER": False,
     "AUTHCONFIG_CREATE_INCIDENT": False,
@@ -73,7 +75,14 @@ def load_config(path):
         badPath = True
 
     # Generate timestamp once
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    now = datetime.now()
+
+    # 2. Round up to the start of the next minute
+    # (Adds 1 minute and zeros out the seconds/microseconds)
+    next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+
+    # 3. Generate the timestamp string
+    timestamp = next_minute.strftime("%Y-%m-%d_%H-%M-00")
 
     # Replace placeholders in strings
     for key, value in config.items():
@@ -112,6 +121,7 @@ AUTHCONFIG_STRICT_IP = CONFIG["AUTHCONFIG_STRICT_IP"]
 AUTHCONFIG_STRICT_USER = CONFIG["AUTHCONFIG_STRICT_USER"]
 AUTHCONFIG_CREATE_INCIDENT = CONFIG["AUTHCONFIG_CREATE_INCIDENT"]
 AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL = CONFIG["AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL"]
+CREATE_TEST_DATA = CONFIG["CREATE_TEST_DATA"]
 
 # =================================
 # ======= START USER CONFIG =======
@@ -171,11 +181,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # === Initialize Misc Vars ===
 start_time = time.time()
-last_save_time=0
-webhook_queue = deque()
-webhook_queue_cond = threading.Condition()
-ansible_queue = deque()
-ansible_queue_cond = threading.Condition()
+#last_save_time=0
 db = SQLAlchemy(app) # Initialize SQLAlchemy
 TTYD_PROCESS = None
 class User(UserMixin):
@@ -415,9 +421,69 @@ class AuthRecord(db.Model):
         # This version is excellent as it handles all columns automatically
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}
 
+class WebhookQueue(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    incident_id = db.Column(db.Integer, db.ForeignKey('incidents.incident_id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class AnsibleQueue(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ansible_folder = db.Column(db.String(255), nullable=False)
+    ansible_playbook = db.Column(db.String(255), nullable=False)
+    ansible_inventory = db.Column(db.String(255), nullable=False)
+    dest_ip = db.Column(db.String(50), nullable=False)
+    ansible_venv = db.Column(db.String(255), nullable=True)
+    extra_vars = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
 # =================================
 # ======= UTILITY FUNCTIONS =======
 # =================================
+
+
+def setup_logging():
+    # 1. Create a logger instance
+    logger = logging.getLogger(LOGFILE)
+    
+    # If the logger already has handlers, don't add more (prevents duplicate entries)
+    if logger.handlers:
+        logger.info(f"setup_logging(): logger already exists, returning existing logger")
+        return logger
+
+    logger.setLevel(logging.INFO)
+
+    # 2. Use ConcurrentRotatingFileHandler
+    # This handles multiple processes (Gunicorn workers + Worker.py) 
+    # and manages the .lock file automatically to prevent rotation crashes.
+    handler = ConcurrentRotatingFileHandler(
+        "app.log",        # LOGFILE path
+        "a",              # append mode
+        10 * 1024 * 1024, # maxBytes: 10MB
+        10,               # backupCount: keep 10 old logs
+        encoding='utf-8'
+    )
+    
+    # 3. Define the log format
+    formatter = logging.Formatter(
+        '[%(asctime)s] [%(process)d] %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    # Note: Added [%(process)d] to the format above. 
+    # This helps you identify which Gunicorn worker or background thread 
+    # sent the message when debugging.
+    
+    handler.setFormatter(formatter)
+    
+    # 4. Add the handler to the logger
+    logger.addHandler(handler)
+    
+    # Optional: Prevent logs from bubbling up to the root logger
+    logger.propagate = False
+    
+    return logger
+
+logger = setup_logging()
+logger.info(f"Starting server on {HOST}:{PORT}")
 
 # === DATABASE ====
 
@@ -427,6 +493,44 @@ def insert_initial_data():
     This should only be run after the tables have been created via db.create_all().
     """
     try:
+        if CREATE_TEST_DATA:
+            add_test_data_agents(5)
+            add_test_data_messages(10)
+            add_test_data_incidents_custom(5)
+            add_test_data_incidents(10)
+            #add_test_data_comp(0)
+            #add_test_data_cmds()
+            add_test_data_auth_records(20)
+            add_test_data_auth_config()
+
+        if not db.session.get(AuthConfigGlobal,"strict_user"):
+            config = AuthConfigGlobal(key="strict_user", value=AUTHCONFIG_STRICT_USER)
+            db.session.add(config)
+            logger.info(f"Initialized default strict_user={AUTHCONFIG_STRICT_USER}.")
+        if not db.session.get(AuthConfigGlobal,"strict_ip"):
+            config = AuthConfigGlobal(key="strict_ip", value=AUTHCONFIG_STRICT_IP)
+            db.session.add(config)
+            logger.info(f"Initialized default strict_ip={AUTHCONFIG_STRICT_IP}.")
+        if not db.session.get(AuthConfigGlobal,"create_incident"):
+            config = AuthConfigGlobal(key="create_incident", value=AUTHCONFIG_CREATE_INCIDENT)
+            db.session.add(config)
+            logger.info(f"Initialized default create_incident={AUTHCONFIG_CREATE_INCIDENT}.")
+        if not db.session.get(AuthConfigGlobal,"log_attempt_successful"):
+            config = AuthConfigGlobal(key="log_attempt_successful", value=AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL)
+            db.session.add(config)
+            logger.info(f"Initialized default log_attempt_successful={AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL}.")
+            
+
+        existing_vars = db.session.get(AnsibleVars,"main")
+        if not existing_vars:
+            new_ansiblevars = AnsibleVars(id="main")
+            db.session.add(new_ansiblevars)
+            db.session.commit()
+            logger.info(f"Initialized default AnsibleVars.")
+        else:
+            logger.info("AnsibleVars 'main' already exists, skipping initialization.")
+
+
         # --- Insert Auth Tokens ---
         for token_value, data in INITIAL_AGENT_AUTH_TOKENS.items():
             # In a real app, you would first check if the token already exists 
@@ -513,38 +617,6 @@ def run_git(args, cwd=GIT_PROJECT_ROOT):
         shell=(platform.system() == "Windows")
     )
     return result
-
-def setup_logging():
-    # 1. Create a logger instance
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO) # Set the minimum logging level
-
-    # 2. Create a file handler
-    # Use RotatingFileHandler to automatically manage file size and rotation
-    # maxBytes: 10MB, backupCount: keep 10 old log files
-    handler = RotatingFileHandler(
-        LOGFILE,
-        maxBytes=10 * 1024 * 1024,
-        backupCount=10,
-        encoding='utf-8'
-    )
-    
-    # 3. Define the log format
-    formatter = logging.Formatter(
-        '[%(asctime)s] %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    handler.setFormatter(formatter)
-    
-    # 4. Add the handler to the logger
-    logger.addHandler(handler)
-    
-    # 5. Disable default handlers (often necessary in Flask/Werkzeug)
-    if logger.hasHandlers():
-        logger.handlers.clear()
-    logger.addHandler(handler)
-    
-    return logger
 
 def hash_id(*args):
     # hash any number of args so that we have a single value to use as the id that remains unique if multiple items have similar fields
@@ -634,33 +706,14 @@ def create_incident(messageDict,tag="New",assignee="",createAlert=True):
 
     # --- 3. Handle Alerts ---
     if createAlert:
-        # This part remains mostly the same, but uses the committed incident_id
-        # and the SQLAlchemy object attributes for the dictionary payload.
-        
-        # We assume webhook_queue_cond and webhook_queue are available globals.
         try:
-            # We create a dictionary representation for the webhook handler if needed
-            incident_payload = {
-                "timestamp": new_incident.timestamp,
-                "agent_id": new_incident.agent_id,
-                "oldStatus": new_incident.oldStatus,
-                "tag": new_incident.tag,
-                "newStatus": new_incident.newStatus,
-                "message": new_incident.message,
-                "assignee": new_incident.assignee,
-                "sla": new_incident.sla
-            }
-            
-            #discord_webhook(incident_id,incidentDict)
-            with webhook_queue_cond: # Might lead to minor sleep but nothing major
-                webhook_queue.append({"incident_id": incident_id, "incident":incident_payload})
-                webhook_queue_cond.notify() 
-            # TODO trigger web alert?
-            
+            # Instead of a memory deque, we insert into the DB queue
+            new_task = WebhookQueue(incident_id=new_incident.incident_id)
+            db.session.add(new_task)
+            db.session.commit()
+            # No need for notify() anymore; the worker will poll the DB
         except Exception as E:
-            # logger.error(f"Error queueing webhook: {E}")
-            print(f"create_incident(): Could not queue webhook: {E}")
-
+            logger.error(f"create_incident(): Could not queue webhook in DB: {E}")
     return
 
 def webhook_main():
@@ -668,59 +721,76 @@ def webhook_main():
     if not WEBHOOK_URL:
         return
 
-    last_60_seconds = [] # list of sent times as epoch time
+    last_60_seconds = []
     
     while True:
-        # -----------------------------
-        # BLOCKING dequeue (popleft)
-        # -----------------------------
-        with webhook_queue_cond:
-            while not webhook_queue:
-                webhook_queue_cond.wait()
-            payload = webhook_queue.popleft()
-
-        # Send the webhook and get the response/body
+        sleep_time = 0
         with app.app_context():
-            resp, body = discord_webhook(payload["incident_id"], payload["incident"])
+            # Find the oldest unprocessed task
+            task = WebhookQueue.query.filter_by(processed=False).order_by(WebhookQueue.created_at.asc()).first()
+            
+            if not task:
+                time.sleep(2) # Wait a bit before checking for new tasks again
+                continue
 
-        sleep_time = 0  # default unless rate limited
+            # Fetch incident data needed for the webhook
+            incident = Incident.query.get(task.incident_id)
+            if not incident:
+                # Cleanup if incident was deleted
+                db.session.delete(task)
+                db.session.commit()
+                continue
 
-        try:
-            if resp.code == 429:
-                # Rate limited by Discord
-                bodyDict = json.loads(body)
-                sleep_time = float(bodyDict["retry_after"])
+            # Prepare the payload like your original code did
+            incident_payload = {
+                "timestamp": incident.timestamp,
+                "agent_id": incident.agent_id,
+                "oldStatus": incident.oldStatus,
+                "tag": incident.tag,
+                "newStatus": incident.newStatus,
+                "message": incident.message,
+                "assignee": incident.assignee,
+                "sla": incident.sla
+            }
 
-                # Requeue at TOP
-                with webhook_queue_cond:
-                    webhook_queue.appendleft(payload)
-                    webhook_queue_cond.notify()
+            # Send the webhook
+            resp, body = discord_webhook(task.incident_id, incident_payload)
 
-                logger.warning(f"/webhook_main - Retry_After succeeded, re-queued incident and sleeping for {sleep_time}.")
+            try:
+                if resp.code == 429:
+                    # Rate limited by Discord
+                    bodyDict = json.loads(body)
+                    sleep_time = float(bodyDict["retry_after"])
 
-            else:
-                # Maybe rate-limit headers present
-                remaining = resp.getheader("X-RateLimit-Remaining")
-                reset_after = resp.getheader("X-RateLimit-Reset-After")
-
-                if remaining is not None and reset_after is not None:
-                    try:
-                        remaining_int = int(remaining)
-                        reset_after_float = float(reset_after)
-
-                        if remaining_int == 0:
-                            sleep_time = reset_after_float
-                            logger.info(f"/webhook_main - incident {payload['incident_id']}: 0 responses remaining, sleeping for {sleep_time}.")
-                    except ValueError:
-                        sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
-                        logger.warning(f"/webhook_main - incident {payload['incident_id']}: failed to parse headers, sleeping {sleep_time}.")
+                    logger.warning(f"/webhook_main - Retry_After succeeded, re-queued incident and sleeping for {sleep_time}.")
                 else:
-                    sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
-                    logger.warning(f"/webhook_main - Missing rate limit headers, sleeping {sleep_time}.")
+                    db.session.delete(task)
+                    db.session.commit()
 
-        except Exception as e:
-            sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
-            logger.error(f"/webhook_main - caught unknown error from discord_webhook - {e}.")
+                    # Maybe rate-limit headers present
+                    remaining = resp.getheader("X-RateLimit-Remaining")
+                    reset_after = resp.getheader("X-RateLimit-Reset-After")
+
+                    if remaining is not None and reset_after is not None:
+                        try:
+                            remaining_int = int(remaining)
+                            reset_after_float = float(reset_after)
+
+                            if remaining_int == 0:
+                                sleep_time = reset_after_float
+                                logger.info(f"/webhook_main - incident {incident.incident_id}: 0 responses remaining, sleeping for {sleep_time}.")
+                        except ValueError:
+                            sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
+                            logger.warning(f"/webhook_main - incident {incident.incident_id}: failed to parse headers, sleeping {sleep_time}.")
+                    else:
+                        sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
+                        logger.warning(f"/webhook_main - Missing rate limit headers, sleeping {sleep_time}.")
+
+            except Exception as e:
+                sleep_time = DEFAULT_WEBHOOK_SLEEP_TIME
+                db.session.delete(task)
+                db.session.commit()
+                logger.error(f"/webhook_main - caught unknown error from discord_webhook, deleting incident {task.incident_id} from webhook queue - {e}.")
 
         last_60_seconds.append(time.time())
 
@@ -738,6 +808,7 @@ def webhook_main():
             sleep_time = new_sleep_time # If we are client side ratelimited, set extra time to compensate for discord channel ratelimiting (wait until oldest message drops off)
 
         # Rate limit enforcement
+        #time.sleep(max(sleep_time,0.2))
         time.sleep(sleep_time)
 
 def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
@@ -923,30 +994,27 @@ def periodic_stale(interval=60):
     Generates a new incident if an agent moves into the stale state.
     Closes the relevant incident if an agent moves out of the stale state.
     """
+    logger.info("periodic_stale() started.")
+    
     while True:
+        # Sleep at the START of the loop to allow the system to initialize
         time.sleep(interval)
 
         with app.app_context():
-    
-            # 1. Retrieve all agent records directly
-            agents_records = Agent.query.all()
-            
-            agents_updated = False
+            try:
+                agents_records = Agent.query.all()
+                agents_updated = False
 
-            for agent in agents_records:
-
-                if agent.agent_name == "custom":
-                    continue
+                for agent in agents_records:
+                    if agent.agent_name == "custom":
+                        continue
+                        
+                    time_since_seen = time.time() - agent.lastSeenTime
                     
-                time_since_seen = time.time() - agent.lastSeenTime
-                
-                # --- Check for state change ---
-
-                if agent.stale:
-                    # Scenario A: Agent was STALE, checking if it has recovered
-                    if time_since_seen < STALE_TIME:
-                        # Agent is NO LONGER STALE (checked in recently)
+                    # --- Scenario A: Recovering from Stale ---
+                    if agent.stale and time_since_seen < STALE_TIME:
                         agent.stale = False
+                        agents_updated = True
 
                         criteria = {
                             "agent_id": agent.agent_id,
@@ -955,32 +1023,19 @@ def periodic_stale(interval=60):
                         }
 
                         incident_id = find_incident_db(criteria, newest=True)
-        
                         if incident_id:
-                            try:
-                                incident = db.session.get(Incident,incident_id)
-                                if incident:
-                                    incident.tag = "Closed"
-                                    logger.info(f"periodic_stale(): Stale incident {incident_id} CLOSED for {agent.agent_id}.")
-                                    return True
-                            except Exception as e:
-                                logger.warning(f"periodic_stale(): Failed to close incident {incident_id}: {e}")
-                                return False
+                            incident = db.session.get(Incident, incident_id)
+                            if incident:
+                                incident.tag = "Closed"
+                                logger.info(f"periodic_stale(): Stale incident {incident_id} CLOSED for {agent.agent_id}.")
                         
-                        else:
-                            logger.warning(f"periodic_stale(): Did not find incident for agent {agent.agent_id} recovering from Stale state.")
+                        logger.info(f"periodic_stale(): Agent {agent.agent_id} recovered.")
 
-                        logger.info(f"periodic_stale(): Agent {agent.agent_id} recovered from stale state.")
-                        agents_updated = True
-                    # else: Agent is STILL STALE, continue checking others (no DB update)
-                
-                else:
-                    # Scenario B: Agent was NOT STALE, checking if it is now stale
-                    if time_since_seen > STALE_TIME:
-                        # Agent is NOW STALE (missed check-in)
+                    # --- Scenario B: Becoming Stale ---
+                    elif not agent.stale and time_since_seen > STALE_TIME:
                         agent.stale = True
+                        agents_updated = True
                         
-                        # Generate a new incident
                         incident_data = {
                             "timestamp": time.time(),
                             "agent_id": agent.agent_id,
@@ -989,70 +1044,71 @@ def periodic_stale(interval=60):
                             "message": f"Agent - Agent {agent.agent_name} on {agent.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime('%Y-%m-%d_%H-%M-%S')}.",
                             "sla": 0
                         }
+                        # This will now trigger the DB-backed WebhookQueue
                         create_incident(incident_data)
-                        logger.info(f"periodic_stale(): Agent {agent.agent_id} moved to stale state. Incident created.")
-                        agents_updated = True
+                        logger.info(f"periodic_stale(): Agent {agent.agent_id} moved to stale state.")
 
-            # 2. Commit all accumulated changes at the end for efficiency
-            if agents_updated:
-                try:
+                if agents_updated:
                     db.session.commit()
-                    logger.info("periodic_stale(): Database commit successful for stale status updates.")
-                except Exception as e:
-                    db.session.rollback()
-                    logger.info(f"periodic_stale(): Database error during stale update: {e}")
-            else:
-                logger.info("periodic_stale(): No changes.")
+                    logger.info("periodic_stale(): Database updated.")
+                else:
+                    logger.info("periodic_stale(): No changes.")
+
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"periodic_stale(): Loop encountered error: {e}")
+            
+            #finally:
+                # Explicitly remove the session to prevent connection leaking
+                # in long-running background processes.
+                #db.session.remove()
 
 def periodic_ansible(interval=5):
-    # Handles the ansible queue
-    # We could further unblock this by moving the subprocess execution to another worker, but it's not really intended for multiple agents to be deployed at once for now. As such, this is fine.
-
+    """Polls DB for Ansible tasks, executes them, and logs results."""
+    logger.info("periodic_ansible(): started.")
+    
     while True:
-        # -----------------------------
-        # BLOCKING dequeue (popleft)
-        # -----------------------------
-        with ansible_queue_cond:
-            while not ansible_queue:
-                ansible_queue_cond.wait()
-            item = ansible_queue.popleft()
-
-        task = item["task"]
-        dest_ip = item["data"]["dest_ip"]
-        ansible_folder = item["data"]["ansible_folder"]
-        extra_vars = item["data"]["extra_vars"]
-        ansible_playbook = item["data"]["ansible_playbook"]
-        ansible_inventory = item["data"]["ansible_inventory"]
-        ansible_venv = item["data"]["ansible_venv"]
-        if ansible_venv:
-            command = f"source {ansible_venv} && cd {ansible_folder} && ansible-playbook {ansible_playbook} -i {ansible_inventory} -l {dest_ip} -t stabvest_client_auto {extra_vars}"
-        else:
-            command = f"cd {ansible_folder} && ansible-playbook {ansible_playbook} -i {ansible_inventory} -l {dest_ip} -t stabvest_client_auto {extra_vars}"
-
-        logger.info(f"periodic_ansible(): starting subprocess for task {task}. command: {command}")
-        
-        result = subprocess.run(
-            command,
-            #"whoami",
-            shell=True,
-            capture_output=True, 
-            text=True, 
-            check=False
-        )
-
-        logger.info(f"periodic_ansible(): finished subprocess for task {task} and logging result to database. Returncode: {result.returncode}")
-
         with app.app_context():
-            newResult = AnsibleResult(
-                task = task,
-                returncode = result.returncode,
-                result = f"STDOUT: {result.stdout.strip()} ||| STDERR: {result.stderr.strip()}"
+            # 1. Fetch the oldest queued task
+            item = AnsibleQueue.query.order_by(AnsibleQueue.created_at.asc()).first()
+            
+            if not item:
+                time.sleep(interval)
+                continue
+
+            # 2. Build the command (Using data from the DB record)
+            if item.ansible_venv:
+                command = f"source {item.ansible_venv} && cd {item.ansible_folder} && ansible-playbook {item.ansible_playbook} -i {item.ansible_inventory} -l {item.dest_ip} -t stabvest_client_auto {item.extra_vars}"
+            else:
+                command = f"cd {item.ansible_folder} && ansible-playbook {item.ansible_playbook} -i {item.ansible_inventory} -l {item.dest_ip} -t stabvest_client_auto {item.extra_vars}"
+
+            logger.info(f"periodic_ansible(): starting subprocess for task {item.id}")
+            
+            # 3. Execute Subprocess
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True, 
+                text=True, 
+                check=False
             )
 
+            # 4. Log Result to Database
+            newResult = AnsibleResult(
+                task=item.id,
+                returncode=result.returncode,
+                result=f"STDOUT: {result.stdout.strip()} ||| STDERR: {result.stderr.strip()}"
+            )
             db.session.add(newResult)
+            
+            # 5. REMOVE from queue and commit everything
+            db.session.delete(item)
             db.session.commit()
-        
-        time.sleep(interval) # interval isnt really needed i think
+            
+            logger.info(f"periodic_ansible(): finished task {newResult.task}. Returncode: {result.returncode}")
+            
+        # Optional: small rest between back-to-back tasks
+        time.sleep(1)
 
 def find_incident(incidents, criteria, newest=False):
     """
@@ -2980,25 +3036,26 @@ def add_ansible():
         logger.warning(f"/add_ansible - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[ansible_folder,ansible_playbook,ansible_inventory,dest_ip,extra_vars]}")
         return jsonify({"status":"Missing data"}), 400
     
-    logger.warning(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr}. Waiting for ansible_queue_cond. Full details: {[ansible_folder,ansible_playbook,ansible_inventory,dest_ip,extra_vars]}")
+    #logger.warning(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr}. Waiting for ansible_queue_cond. Full details: {[ansible_folder,ansible_playbook,ansible_inventory,dest_ip,extra_vars]}")
     
-    record_count = db.session.query(AnsibleResult).count()
-    taskID = record_count + 1
+    # Instead of counting records for a taskID, we'll let the DB handle it
+    new_task = AnsibleQueue(
+        ansible_folder=ansible_folder,
+        ansible_playbook=ansible_playbook,
+        ansible_inventory=ansible_inventory,
+        dest_ip=dest_ip,
+        ansible_venv=ansible_venv,
+        extra_vars=extra_vars
+    )
     
-    with ansible_queue_cond: # Might lead to minor sleep but nothing major
-        ansible_queue.append(
-            {
-                "task": taskID,
-                "data": {
-                    "ansible_folder": ansible_folder, "extra_vars": extra_vars,"ansible_playbook":ansible_playbook,"ansible_inventory":ansible_inventory,"dest_ip":dest_ip,"ansible_venv":ansible_venv
-                }
-            }
-        )
-        ansible_queue_cond.notify() 
-
-    logger.info(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr}. Full details: {[ansible_folder,ansible_playbook,ansible_inventory,dest_ip,extra_vars]}")
+    db.session.add(new_task)
+    db.session.commit()
     
-    return jsonify({"status": "ok","task": taskID}), 200
+    # We use the auto-increment ID as the taskID
+    taskID = new_task.id
+    
+    logger.info(f"/add_ansible - Task {taskID} queued via DB for IP {dest_ip}")
+    return jsonify({"status": "ok", "task": taskID}), 200
 
 @app.route("/save_manual", methods=["POST"])
 @login_required
@@ -3018,13 +3075,11 @@ def save_manual():
 # ============= MAIN ==============
 # =================================
 
+def start_server():
+    app.run(host=HOST, port=PORT, ssl_context='adhoc', use_reloader=False, debug=False)
+
 if __name__ == "__main__":
-
-    logger = setup_logging()
-
-    logger.info(f"Starting server on {HOST}:{PORT}")
-
-    create_db_tables()
+    #create_db_tables()
 
     # Load previous state if available
     #load_state()
@@ -3036,52 +3091,10 @@ if __name__ == "__main__":
     #atexit.register(save_state)
 
     # Start threads before test data to avoid delays
-    threading.Thread(target=periodic_autosave, daemon=True).start()
-    threading.Thread(target=webhook_main, daemon=True).start()
-    threading.Thread(target=periodic_stale, daemon=True).start()
-    threading.Thread(target=periodic_ansible, daemon=True).start()
-
-    # Test data
-    with app.app_context():
-        try:
-            add_test_data_agents(5)
-            add_test_data_messages(10)
-            add_test_data_incidents_custom(5)
-            add_test_data_incidents(10)
-            #add_test_data_comp(0)
-            #add_test_data_cmds()
-            add_test_data_auth_records(20)
-            add_test_data_auth_config()
-
-            if not db.session.get(AuthConfigGlobal,"strict_user"):
-                config = AuthConfigGlobal(key="strict_user", value=AUTHCONFIG_STRICT_USER)
-                db.session.add(config)
-                logger.info(f"Initialized default strict_user={AUTHCONFIG_STRICT_USER}.")
-            if not db.session.get(AuthConfigGlobal,"strict_ip"):
-                config = AuthConfigGlobal(key="strict_ip", value=AUTHCONFIG_STRICT_IP)
-                db.session.add(config)
-                logger.info(f"Initialized default strict_ip={AUTHCONFIG_STRICT_IP}.")
-            if not db.session.get(AuthConfigGlobal,"create_incident"):
-                config = AuthConfigGlobal(key="create_incident", value=AUTHCONFIG_CREATE_INCIDENT)
-                db.session.add(config)
-                logger.info(f"Initialized default create_incident={AUTHCONFIG_CREATE_INCIDENT}.")
-            if not db.session.get(AuthConfigGlobal,"log_attempt_successful"):
-                config = AuthConfigGlobal(key="log_attempt_successful", value=AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL)
-                db.session.add(config)
-                logger.info(f"Initialized default log_attempt_successful={AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL}.")
-                
-
-            existing_vars = db.session.get(AnsibleVars,"main")
-            if not existing_vars:
-                new_ansiblevars = AnsibleVars(id="main")
-                db.session.add(new_ansiblevars)
-                db.session.commit()
-                logger.info(f"Initialized default AnsibleVars.")
-            else:
-                logger.info("AnsibleVars 'main' already exists, skipping initialization.")
-        except Exception as E:
-            db.session.rollback()
-            logger.error(f"FATAL: Failed to insert initial data into DB at main(): {E}")
+    #threading.Thread(target=periodic_autosave, daemon=True).start()
+    #threading.Thread(target=webhook_main, daemon=True).start()
+    #threading.Thread(target=periodic_stale, daemon=True).start()
+    #threading.Thread(target=periodic_ansible, daemon=True).start()
 
     # Start main app. Do not put any code below this line
-    app.run(host=HOST, port=PORT, ssl_context='adhoc', use_reloader=False, debug=False)
+    start_server()

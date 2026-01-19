@@ -2,6 +2,8 @@ flask
 flask-login
 Flask-SQLAlchemy
 pyopenssl
-nuitka
+#nuitka
 htmlmin
 jsmin
+gunicorn
+concurrent-log-handler

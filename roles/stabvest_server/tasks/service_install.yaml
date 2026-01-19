@@ -1,0 +1,40 @@
+---
+- name: Deploy Stabvest Worker Service
+  copy:
+    dest: /etc/systemd/system/stabvest-worker.service
+    content: |
+      [Unit]
+      Description=Stabvest Background Worker
+      After=network.target
+
+      [Service]
+      User=root
+      WorkingDirectory={{ stabvest_deploy_dir }}
+      # Replace with your venv path if applicable
+      ExecStart={{ stabvest_deploy_dir }}/venv/bin/python3 worker.py
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Deploy Stabvest Gunicorn Service
+  copy:
+    dest: /etc/systemd/system/stabvest-server.service
+    content: |
+      [Unit]
+      Description=Stabvest Gunicorn Server
+      After=network.target stabvest-worker.service
+
+      [Service]
+      User=root
+      WorkingDirectory={{ stabvest_deploy_dir }}
+      ExecStart={{ stabvest_deploy_dir }}/venv/bin/gunicorn \
+        --certfile=cert.pem \
+        --keyfile=key.pem \
+        --workers {{ stabvest_gunicorn_workers }} \
+        --bind 0.0.0.0:{{ stabvest_port }} \
+        server:app
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target

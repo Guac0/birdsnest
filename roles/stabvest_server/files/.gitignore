@@ -3,3 +3,6 @@ test/
 build_assets/
 instance/
 repos/
+*.pem
+*.lock
+__pycache__
