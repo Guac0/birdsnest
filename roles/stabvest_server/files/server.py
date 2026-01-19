@@ -453,7 +453,7 @@ class AnsibleQueue(db.Model):
 
 def setup_logging():
     # 1. Create a logger instance
-    logger = logging.getLogger(LOGFILE)
+    logger = logging.getLogger(__name__)
     
     # If the logger already has handlers, don't add more (prevents duplicate entries)
     if logger.handlers:
@@ -466,7 +466,7 @@ def setup_logging():
     # This handles multiple processes (Gunicorn workers + Worker.py) 
     # and manages the .lock file automatically to prevent rotation crashes.
     handler = ConcurrentRotatingFileHandler(
-        "app.log",        # LOGFILE path
+        LOGFILE,        # LOGFILE path
         "a",              # append mode
         10 * 1024 * 1024, # maxBytes: 10MB
         10,               # backupCount: keep 10 old logs

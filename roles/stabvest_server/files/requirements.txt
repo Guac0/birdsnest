@@ -8,3 +8,4 @@ htmlmin
 jsmin
 gunicorn
 concurrent-log-handler
+sdnotify

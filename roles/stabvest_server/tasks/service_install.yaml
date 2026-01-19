@@ -8,10 +8,12 @@
       After=network.target
 
       [Service]
+      Type=notify
       User=root
       WorkingDirectory={{ stabvest_deploy_dir }}
       ExecStart={{ stabvest_deploy_dir }}/venv/bin/python3 worker.py
       Restart=always
+      TimeoutStartSec=30
 
       [Install]
       WantedBy=multi-user.target
@@ -23,6 +25,7 @@
       [Unit]
       Description=Stabvest Gunicorn Server
       After=network.target stabvest-worker.service
+      Requires=stabvest-worker.service
 
       [Service]
       User=root

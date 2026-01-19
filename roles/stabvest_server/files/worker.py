@@ -1,5 +1,6 @@
 import threading
 import time
+import sdnotify
 # Import your functions from your main app file
 from server import (
     app, db, 
@@ -15,6 +16,7 @@ from server import (
 if __name__ == "__main__":
     logger = setup_logging()
     logger.info("Starting background worker threads...")
+    notifier = sdnotify.SystemdNotifier()
 
     create_db_tables()
 
@@ -31,6 +33,9 @@ if __name__ == "__main__":
 
     for t in threads:
         t.start()
+    
+    notifier.notify("READY=1")
+    logger.info("READY signal sent to systemd.")
 
     # Keep the main process alive
     try:
