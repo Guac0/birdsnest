@@ -80,6 +80,12 @@
     mode: '0755'
   when: ansible_facts.os_family != "Windows" and owlet_include_tester
 
+- name: Copy NSSM executable to target
+  win_copy:
+    src: "files/nssm-2.24_win64.exe"
+    dest: "{{ owlet_deploy_dir }}\\nssm.exe"
+  when: ansible_facts.os_family == "Windows"
+
 #- name: Timestomp folder to evade detection
 #  win_shell: |
 #    $time = (Get-Item "C:\\Windows\\System32\\cmd.exe").CreationTime

@@ -1,8 +1,9 @@
 ---
-owlet_task_create: false
-owlet_task_name: "owlet"
-owlet_task_interval: 300 #seconds. cron needs this to be an even minutes value (so divisible by 60)
+#owlet_task_create: false
+#owlet_task_name: "owlet"
+#owlet_task_interval: 300 #seconds. cron needs this to be an even minutes value (so divisible by 60)
 owlet_agent_executable: "agent.py"
+owlet_service_start: false
 
 owlet_agent_name: "ssh"
 owlet_auth_token: "testtoken"
