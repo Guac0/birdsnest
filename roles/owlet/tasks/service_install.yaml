@@ -49,11 +49,11 @@
       run_rc_command "$1"
   when: ansible_os_family == "FreeBSD"
 
-- name: Deploy Stabvest Service (NSSM)
+- name: Deploy Owlet Service (NSSM)
   win_shell: |
-    $BaseDir = "{{ stabvest_deploy_dir }}"
+    $BaseDir = "{{ owlet_deploy_dir }}"
     $NssmPath = "$BaseDir\nssm.exe"
-    $ServiceName = "stabvest-{{ stabvest_agent_name }}"
+    $ServiceName = "owlet-{{ owlet_agent_name }}"
     $PythonPath = "$BaseDir\venv\Scripts\python.exe"
     $ScriptPath = "$BaseDir\agent.py"
 

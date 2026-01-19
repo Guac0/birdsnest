@@ -49,21 +49,6 @@
       run_rc_command "$1"
   when: ansible_os_family == "FreeBSD"
 
-- name: Deploy Stabvest Service rc.d (NSSM)
-  win_shell: |
-    $NssmPath = "{{ stabvest_deploy_dir }}\\nssm.exe"
-    $ServiceName = "stabvest-{{ stabvest_agent_name }}"
-    $PythonPath = "{{ stabvest_deploy_dir }}\\venv\\Scripts\\python.exe"
-    $ScriptPath = "{{ stabvest_deploy_dir }}\\agent.py"
-
-    if (!(Get-Service $ServiceName -ErrorAction SilentlyContinue)) {
-        & $NssmPath install $ServiceName $PythonPath $ScriptPath
-        & $NssmPath set $ServiceName AppDirectory "{{ stabvest_deploy_dir }}"
-        # Set to manual so it doesn't start on reboot until we are ready
-        & $NssmPath set $ServiceName Start SERVICE_DEMAND_START 
-    }
-  when: ansible_os_family == "Windows"
-
 - name: Deploy Stabvest Service (NSSM)
   win_shell: |
     $BaseDir = "{{ stabvest_deploy_dir }}"
