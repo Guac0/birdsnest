@@ -49,6 +49,7 @@ CONFIG_DEFAULTS = {
     "AUTHCONFIG_STRICT_IP": False,
     "AUTHCONFIG_STRICT_USER": False,
     "AUTHCONFIG_CREATE_INCIDENT": False,
+    "AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL": True,
     "AGENT_AUTH_TOKENS": {
         "testtoken": { 
             "added_by": "default"
@@ -110,6 +111,7 @@ INITIAL_WEBGUI_USERS = CONFIG["WEBGUI_USERS"]
 AUTHCONFIG_STRICT_IP = CONFIG["AUTHCONFIG_STRICT_IP"]
 AUTHCONFIG_STRICT_USER = CONFIG["AUTHCONFIG_STRICT_USER"]
 AUTHCONFIG_CREATE_INCIDENT = CONFIG["AUTHCONFIG_CREATE_INCIDENT"]
+AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL = CONFIG["AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL"]
 
 # =================================
 # ======= START USER CONFIG =======
@@ -2133,13 +2135,13 @@ def get_config():
         
     return jsonify(config)
 
-# === FRONTEND DISPLAY ===
-
-@login_required
+# Also used for frontend
 @app.route('/list_authconfigglobal', methods=['POST'])
 def get_global_config():
     configs = AuthConfigGlobal.query.all()
     return jsonify({c.key: c.value for c in configs})
+
+# === FRONTEND DISPLAY ===
 
 @login_required
 @analyst_required
@@ -3063,6 +3065,11 @@ if __name__ == "__main__":
                 config = AuthConfigGlobal(key="create_incident", value=AUTHCONFIG_CREATE_INCIDENT)
                 db.session.add(config)
                 logger.info(f"Initialized default create_incident={AUTHCONFIG_CREATE_INCIDENT}.")
+            if not db.session.get(AuthConfigGlobal,"log_attempt_successful"):
+                config = AuthConfigGlobal(key="log_attempt_successful", value=AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL)
+                db.session.add(config)
+                logger.info(f"Initialized default log_attempt_successful={AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL}.")
+                
 
             existing_vars = db.session.get(AnsibleVars,"main")
             if not existing_vars:

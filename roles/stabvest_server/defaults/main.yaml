@@ -25,6 +25,7 @@ webhook_url: "https://discord.com/api/webhooks/1445146908808188065/1xkiXfsL7ie8i
 authconfig_strict_ip: false
 authconfig_strict_user: false
 authconfig_create_incident: false
+authconfig_log_attempt_successful: true
 agent_auth_tokens:
   testtoken:
     added_by: "default"

@@ -77,7 +77,15 @@
             <input type="checkbox" id="createIncidentToggle" onchange="updatePolicy('create_incident', this.checked)">
             <span class="slider"></span>
             </label>
-            <small style="color:var(--muted)">True = Create Incidents if alert criteria met<br>False = Do not create incidents, only log</small>
+            <small style="color:var(--muted)">True = Create incs if alert criteria met<br>False = Do not create incidents, only log</small>
+        </div>
+        <div class="toggle-container">
+            <span>Log Attempt Mode:</span>
+            <label class="switch">
+            <input type="checkbox" id="logAttemptSuccessfulToggle" onchange="updatePolicy('log_attempt_successful', this.checked)">
+            <span class="slider"></span>
+            </label>
+            <small style="color:var(--muted)">True = Log attempt only if login was successful<br>False = Log attempt regardless of state</small>
         </div>
       <div class="toggle-container">
         <span>IP Strict Mode:</span>
@@ -85,7 +93,7 @@
           <input type="checkbox" id="strictIpToggle" onchange="updatePolicy('strict_ip', this.checked)">
           <span class="slider"></span>
         </label>
-        <small style="color:var(--muted)">True = Alert on all except Legitimate IPs<br>False = Alert if matched malicious IP</small>
+        <small style="color:var(--muted)">True = Alert on all except legit IPs<br>False = Alert if matched malicious IP</small>
       </div>
       <div class="toggle-container">
         <span>User Strict Mode:</span>
@@ -93,7 +101,7 @@
           <input type="checkbox" id="strictUserToggle" onchange="updatePolicy('strict_user', this.checked)">
           <span class="slider"></span>
         </label>
-        <small style="color:var(--muted)">True = Alert on all except Legitimate Users<br>False = Alert if matched malicious user</small>
+        <small style="color:var(--muted)">True = Alert on all except legit Users<br>False = Alert if matched malicious user</small>
       </div>
     </div>
   </section>
@@ -177,6 +185,7 @@ async function refreshConfig() {
         const policies = await apiCall('/list_authconfigglobal', {});
         
         document.getElementById('createIncidentToggle').checked = !!policies.create_incident;
+        document.getElementById('logAttemptSuccessfulToggle').checked = !!policies.log_attempt_successful;
         document.getElementById('strictIpToggle').checked = !!policies.strict_ip;
         document.getElementById('strictUserToggle').checked = !!policies.strict_user;
         
