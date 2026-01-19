@@ -1230,7 +1230,7 @@ def get_git_stats(db,repos_root=os.path.join(GIT_PROJECT_ROOT,"")):
     # Iterate through each folder in the repos directory
     for repo_folder in os.listdir(repos_root):
         repo_path = os.path.join(repos_root, repo_folder)
-        logger.info(f"handling repo folder {repo_folder} at {repo_path}")
+        #logger.info(f"handling repo folder {repo_folder} at {repo_path}")
         
         # Only process directories
         if not os.path.isdir(repo_path):
@@ -1245,61 +1245,51 @@ def get_git_stats(db,repos_root=os.path.join(GIT_PROJECT_ROOT,"")):
         # Data points for both required branches
         for branch in ["good", "bad"]:
             try:
+                repo_path = os.path.join(GIT_PROJECT_ROOT, repo_folder)
+
                 # 1. Get Commit Name (Subject) and Time
-                # %s = subject, %at = author date (unix timestamp)
+                # Access .stdout and strip() to get the actual string
+                cp_commit = run_git(["show", "-s", "--format=%s|%at", branch], repo_path)
+                commit_raw = cp_commit.stdout.strip() 
                 
-                commit_raw = run_git(["show", "-s", "--format=%s|%at", branch],os.path.join(GIT_PROJECT_ROOT,repo_folder))
+                if not commit_raw:
+                    continue
+                    
                 name, timestamp = commit_raw.split('|')
 
                 # 2. Get Diff Stats
-                # --summary provides "create mode", "delete mode"
-                # --numstat provides added/deleted line counts
-                diff_cmd = run_git(["diff", f"{branch}^!", "--summary"],os.path.join(GIT_PROJECT_ROOT,repo_folder))
-                diff_output = subprocess.check_output(diff_cmd, cwd=repo_path, text=True)
-                
+                # Use your run_git wrapper consistently instead of mixing with check_output
+                cp_diff = run_git(["diff", f"{branch}^!", "--summary"], repo_path)
+                diff_output = cp_diff.stdout
+
                 # Parse types of changes
                 added = diff_output.count("create mode")
                 deleted = diff_output.count("delete mode")
-                # Modified is everything else in the diff that isn't a create/delete
-                total_files_cmd = run_git(["diff", f"{branch}^!", "--name-only"],os.path.join(GIT_PROJECT_ROOT,repo_folder))
-                total_files = len(subprocess.check_output(total_files_cmd, cwd=repo_path, text=True).splitlines())
+
+                # 3. Get Modified Count
+                cp_total = run_git(["diff", f"{branch}^!", "--name-only"], repo_path)
+                total_files = len(cp_total.stdout.splitlines())
                 modified = total_files - (added + deleted)
 
                 # Build the data point
-                if agent:
-                    results.append({
-                        "repo_name": repo_folder,
-                        "branch": branch,
-                        "agent_name": agent.agent_name,
-                        "hostname": agent.hostname,
-                        "ip": agent.ip,
-                        "latest_commit_name": name,
-                        "latest_commit_time": datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S'),
-                        "diffs": {
-                            "files_added": added,
-                            "files_deleted": deleted,
-                            "files_modified": modified
-                        }
-                    })
-                else:
-                    results.append({
-                        "repo_name": repo_folder,
-                        "branch": branch,
-                        "agent_name": "UNK",
-                        "hostname": "UNK",
-                        "ip": "UNK",
-                        "latest_commit_name": name,
-                        "latest_commit_time": datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S'),
-                        "diffs": {
-                            "files_added": added,
-                            "files_deleted": deleted,
-                            "files_modified": modified
-                        }
-                    })
+                entry = {
+                    "repo_name": repo_folder,
+                    "branch": branch,
+                    "agent_name": agent.agent_name if agent else "UNK",
+                    "hostname": agent.hostname if agent else "UNK",
+                    "ip": agent.ip if agent else "UNK",
+                    "latest_commit_name": name,
+                    "latest_commit_time": datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S'),
+                    "diffs": {
+                        "files_added": added,
+                        "files_deleted": deleted,
+                        "files_modified": modified
+                    }
+                }
+                results.append(entry)
 
-            except subprocess.CalledProcessError as E:
-                # Handle cases where a branch might not exist yet
-                logger.warning(f"subprocess info {E}")
+            except (subprocess.CalledProcessError, ValueError, AttributeError) as e:
+                logger.warning(f"Failed to process branch {branch} in {repo_folder}: {e}")
                 continue
 
     logger.info(f"returning {results}")
