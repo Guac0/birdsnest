@@ -49,17 +49,17 @@
       run_rc_command "$1"
   when: ansible_os_family == "FreeBSD"
 
-- name: Deploy Owlet Service rc.d (NSSM)
+- name: Deploy Stabvest Service (NSSM)
   win_shell: |
-    $NssmPath = "{{ owlet_deploy_dir }}\\nssm.exe"
-    $ServiceName = "owlet-{{ owlet_agent_name }}"
-    $PythonPath = "{{ owlet_deploy_dir }}\\venv\\Scripts\\python.exe"
-    $ScriptPath = "{{ owlet_deploy_dir }}\\agent.py"
+    $BaseDir = "{{ stabvest_deploy_dir }}"
+    $NssmPath = "$BaseDir\nssm.exe"
+    $ServiceName = "stabvest-{{ stabvest_agent_name }}"
+    $PythonPath = "$BaseDir\venv\Scripts\python.exe"
+    $ScriptPath = "$BaseDir\agent.py"
 
     if (!(Get-Service $ServiceName -ErrorAction SilentlyContinue)) {
         & $NssmPath install $ServiceName $PythonPath $ScriptPath
-        & $NssmPath set $ServiceName AppDirectory "{{ owlet_deploy_dir }}"
-        # Set to manual so it doesn't start on reboot until we are ready
-        & $NssmPath set $ServiceName Start SERVICE_DEMAND_START 
+        & $NssmPath set $ServiceName AppDirectory "$BaseDir"
+        & $NssmPath set $ServiceName Start SERVICE_DEMAND_START
     }
   when: ansible_os_family == "Windows"
