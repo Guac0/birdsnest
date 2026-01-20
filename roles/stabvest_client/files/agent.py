@@ -397,39 +397,47 @@ def run_git(args, cwd):
             print_debug(f"Shell stderr: {result.stderr.strip()}")
     return result
 
-def setup_git_agent(repo_dir,protected_folder,systemInfo=get_system_details()):
-    # TODO allow multiple folders
-    """Initializes git config for the agent session."""
-
-    try:
-        if not os.path.exists(repo_dir):
-            run_git(["clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git",Path(repo_dir).name],os.path.dirname(Path(__file__).resolve()))
+def setup_git_agent(repo_dir, protected_folders, systemInfo=None):
+    """Initializes git config and creates initial 'good' and 'bad' baselines."""
+    if systemInfo is None:
+        systemInfo = get_system_details()
         
-        run_git(["config", "user.name", "Agent"],repo_dir)
-        run_git(["config", "user.email", f"agent@{systemInfo["hostname"]}.local"],repo_dir)
+    try:
+        # 1. Clone or Init Repo
+        if not os.path.exists(repo_dir):
+            agent_hash = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
+            repo_url = f"{SERVER_URL}git/{agent_hash}.git"
+            run_git(["clone", repo_url, Path(repo_dir).name], os.path.dirname(Path(repo_dir).resolve()))
+        
+        run_git(["config", "user.name", "Agent"], repo_dir)
+        run_git(["config", "user.email", f"agent@{systemInfo['hostname']}.local"], repo_dir)
 
-        # create good branch
+        # 2. Create 'good' branch baseline
         run_git(["checkout", "-b", "good"], cwd=repo_dir)
-        sync_protected_to_repo(repo_dir, protected_folder)
+        
+        # Sync every folder in the list into its own slug-folder
+        for folder in protected_folders:
+            sync_protected_to_repo(repo_dir, folder)
+            
         run_git(["add", "."], cwd=repo_dir)
         run_git(["commit", "-m", "initialCommitGood"], cwd=repo_dir)
         run_git(["push", "-u", "origin", "good"], cwd=repo_dir)
 
-        # create bad branch
+        # 3. Create 'bad' branch baseline
         run_git(["checkout", "-b", "bad"], cwd=repo_dir)
-        sync_protected_to_repo(repo_dir, protected_folder)
+        # (Files are already synced from the step above)
         run_git(["add", "."], cwd=repo_dir)
         run_git(["commit", "-m", "initialCommitBad"], cwd=repo_dir)
         run_git(["push", "-u", "origin", "bad"], cwd=repo_dir)
 
         # Switch back to good as the default working state
         run_git(["checkout", "good"], cwd=repo_dir)
-
         return True
-    except Exception as E:
-        print_debug(f"Critical error when running setup_git_agent: {E}")
-        return False
 
+    except Exception as E:
+        print_debug(f"Critical error in setup_git_agent: {E}")
+        return False
+    
 def audit_command(command,package="",packageManager="apt"):
     """
     Given a command, ensures that it is available.
@@ -2039,28 +2047,89 @@ def firewall_main(protectedPorts):
 ## File Protect Funcs ###
 #region##################
 
-
-def sync_protected_to_repo(repo_dir,protected_folder):
-    """Copies current protected files into the git directory."""
-    # Define destination inside the repo
-    # Note: Using os.path.join for cross-platform path compatibility
-
-    #if os.path.exists(repo_dir):
-    #    shutil.rmtree(repo_dir)
+def apply_security_policy(target_path):
+    """
+    Applies the security policy: 
+    Not immutable, Owner/Admin: RWX, Users: R.
+    """
+    is_windows = platform.system() == "Windows"
     
-    shutil.copytree(protected_folder, repo_dir, dirs_exist_ok=True)
-    return repo_dir
+    # 1. Remove Immutability / Read-Only Flags
+    try:
+        if is_windows:
+            # Remove Read-Only (R), System (S), and Hidden (H) attributes
+            subprocess.run(["attrib", "-R", "-S", "-H", target_path, "/S", "/D"], capture_output=True)
+        else:
+            # Linux (chattr) and BSD/FreeBSD (chflags)
+            if platform.system() in ["FreeBSD", "Darwin"]:
+                subprocess.run(["chflags", "-R", "noschg", target_path], capture_output=True)
+            else:
+                subprocess.run(["chattr", "-R", "-i", target_path], capture_output=True)
+    except Exception:
+        pass # Some filesystems might not support these flags
 
-def restore_protected_from_repo(repo_dir,protected_folder):
-    """Overwrites the protected folder with the 'good' version from the repo."""
-    #repo_protected_path = os.path.join(repo_dir, "protected_files")
+    # 2. Apply Access Permissions
+    if is_windows:
+        # Reset inheritance and grant permissions
+        # /grant:r = replace permissions
+        # Administrators:(OI)(CI)F = Full access to Admins, Inherit to files/folders
+        # Users:(OI)(CI)R = Read access to all users
+        cmds = [
+            ["icacls", target_path, "/reset", "/T", "/C"],
+            ["icacls", target_path, "/grant:r", "Administrators:(OI)(CI)F", "/T", "/C"],
+            ["icacls", target_path, "/grant:r", "Users:(OI)(CI)R", "/T", "/C"]
+        ]
+        for cmd in cmds:
+            subprocess.run(cmd, capture_output=True)
+    else:
+        # Unix-like (Debian, Ubuntu, RHEL, Alpine, FreeBSD)
+        # 7 = rwx (Owner), 4 = r (Group), 4 = r (Others)
+        for root, dirs, files in os.walk(target_path):
+            for d in dirs:
+                os.chmod(os.path.join(root, d), 0o744)
+            for f in files:
+                os.chmod(os.path.join(root, f), 0o744)
 
-    #if DISARM:
-    #    return False
-    #else:
-        #if os.path.exists(protected_folder):
-        #    shutil.rmtree(protected_folder)
-    shutil.copytree(repo_dir, protected_folder, dirs_exist_ok=True)
+def get_path_slug(path):
+    """Converts a system path into a safe, flat folder name for the repo."""
+    # Remove drive letters (C:) and replace separators with underscores
+    clean_path = re.sub(r'^[a-zA-Z]:', '', path)
+    slug = re.sub(r'[^a-zA-Z0-9]', '_', clean_path).strip('_')
+    return slug if slug else "root_dir"
+
+def sync_protected_to_repo(repo_dir, protected_folder):
+    """Copies a specific folder into its designated sub-folder in the repo."""
+    slug = get_path_slug(protected_folder)
+    dest_in_repo = os.path.join(repo_dir, slug)
+    
+    # Apply security policy before copying
+    apply_security_policy(protected_folder)
+    
+    # If it's a single file, use copy2; if directory, use copytree
+    if os.path.isfile(protected_folder):
+        os.makedirs(dest_in_repo, exist_ok=True)
+        shutil.copy2(protected_folder, os.path.join(dest_in_repo, os.path.basename(protected_folder)))
+    else:
+        shutil.copytree(protected_folder, dest_in_repo, dirs_exist_ok=True)
+    
+    apply_security_policy(dest_in_repo)
+
+def restore_protected_from_repo(repo_dir, protected_folder):
+    """Restores a specific folder from its slug-folder in the repo."""
+    slug = get_path_slug(protected_folder)
+    source_in_repo = os.path.join(repo_dir, slug)
+    
+    if not os.path.exists(source_in_repo):
+        return
+        
+    if os.path.isfile(protected_folder):
+        # Extract the file from the slug directory
+        file_name = os.path.basename(protected_folder)
+        shutil.copy2(os.path.join(source_in_repo, file_name), protected_folder)
+    else:
+        shutil.copytree(source_in_repo, protected_folder, dirs_exist_ok=True)
+    
+    apply_security_policy(protected_folder)
 
 def get_latest_commit_stats(branch_name,repo_dir):
     """
@@ -2094,61 +2163,86 @@ def get_latest_commit_stats(branch_name,repo_dir):
         "files": files_info
     }
 
-def file_protect_main(repo_dir,protected_folder):
-    """Main logic for the agent sync loop."""
+def file_protect_main(repo_dir, protected_folders):
+    """Main logic for the agent sync loop supporting multiple paths."""
     try:
-    
         # 1. Pull latest 'good' state from remote
-        run_git(["checkout", "good"],repo_dir)
-        run_git(["pull", "origin", "good"],repo_dir)
+        run_git(["checkout", "good"], repo_dir)
+        run_git(["pull", "origin", "good"], repo_dir)
         
-        # 2. Sync protected folder to repo for comparison
-        sync_protected_to_repo(repo_dir,protected_folder)
+        # 2. Sync all protected folders to their sub-directories in the repo
+        for folder in protected_folders:
+            if os.path.exists(folder):
+                sync_protected_to_repo(repo_dir, folder)
+            else:
+                print_debug(f"Warning: Protected path {folder} not found. Skipping sync.")
         
-        # 3. Check for differences
-        # 'git add' to track new/modified files, then check 'git diff'
-        run_git(["add", "."],repo_dir)
-        diff_check = run_git(["diff", "--cached", "--quiet"],repo_dir)
+        # 3. Check for differences across the entire repo
+        run_git(["add", "."], repo_dir)
+        diff_check = run_git(["diff", "--cached", "--quiet"], repo_dir)
 
-        changes = {}
-        
-        # exit_code 1 means there are changes
+        # exit_code 1 means there are changes somewhere in the repo
         if diff_check.returncode != 0:
             try:
-                # Stash changes, move to bad branch, and apply them
-                run_git(["stash"],repo_dir)
-                run_git(["checkout", "bad"],repo_dir)
-                run_git(["pull", "origin", "bad"],repo_dir)
-                
-                # Apply stashed changes (the diffs)
-                stash_apply = run_git(["stash", "pop"],repo_dir)
-                
-                # Resolve conflicts by preferring "theirs" (the new content from protectedFolder)
-                if stash_apply.returncode != 0:
-                    run_git(["checkout", "--theirs", "."],repo_dir)
-                    run_git(["add", "."],repo_dir)
-                    run_git(["commit", "-m", f"auto-resolveconflict"],repo_dir)
-                
-                # Commit and Push the 'bad' changes
-                run_git(["add", "."],repo_dir)
-                run_git(["commit", "-m", f"auto-malicious{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}"],repo_dir)
-                run_git(["push", "-u", "origin", "bad"],repo_dir)
-                changes = get_latest_commit_stats("bad",repo_dir)
-                
-                # Return to good branch for restoration
-                run_git(["checkout", "good"],repo_dir)
-                if not DISARM:
-                    restore_protected_from_repo(repo_dir,protected_folder)
-                    return False, True, [f"File changes occurred and were successfully restored. Affected files {changes["count"]}: {changes["files"]}"]
-                else:
-                    return False, False, [f"File changes occurred, DISARMED. Affected files {changes["count"]}: {changes["files"]}"]
-            except Exception as E:
-                return False, False, [f"File changes occurred and failed to restore known good state: {E}"]
-        else:
-            return True,True,[]
-    except Exception as E:
-        return False, False, [f"Unexpected error when attempting to check file integrity status: {E}"]
+                # 1. Get the current commit hash from the 'good' branch for the baseline name
+                # 'git rev-parse --short HEAD' gives us the 7-character hash
+                hash_result = run_git(["rev-parse", "--short", "HEAD"], repo_dir)
+                good_hash = hash_result.stdout.strip() if hash_result.returncode == 0 else "unknown"
 
+                # 2. Stash the malicious changes currently in the working directory
+                run_git(["stash"], repo_dir)
+                
+                # 3. Move to the 'bad' branch and pull latest
+                run_git(["checkout", "bad"], repo_dir)
+                run_git(["pull", "origin", "bad"], repo_dir)
+                
+                # 4. Sync 'bad' branch working tree to match 'good' state exactly
+                run_git(["checkout", "good", "."], repo_dir) 
+                run_git(["add", "."], repo_dir)
+                
+                # 5. Commit the Baseline using the captured hash
+                # Using --allow-empty in case the previous 'bad' state was already identical to this 'good' hash
+                run_git(["commit", "--allow-empty", "-m", f"baseline-{good_hash}"], repo_dir)
+
+                # 6. Apply the malicious changes back on top of the clean baseline
+                stash_apply = run_git(["stash", "pop"], repo_dir)
+                if stash_apply.returncode != 0:
+                    # Resolve conflicts by preferring the malicious changes (the "popped" stash)
+                    run_git(["checkout", "--theirs", "."], repo_dir)
+                    run_git(["add", "."], repo_dir)
+                    run_git(["commit", "-m", "auto-resolveconflict"], repo_dir)
+                
+                # 7. Commit and Push the 'bad' state
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                run_git(["add", "."], repo_dir)
+                run_git(["commit", "-m", f"auto-malicious-{timestamp}"], repo_dir)
+                run_git(["push", "-u", "origin", "bad"], repo_dir)
+                
+                # Get details of what changed for the alert message
+                changes = get_latest_commit_stats("bad", repo_dir)
+                
+                # 4. RESTORATION
+                run_git(["checkout", "good"], repo_dir)
+                if not DISARM:
+                    # Restore every protected folder from its 'good' repo sub-folder
+                    for folder in protected_folders:
+                        restore_protected_from_repo(repo_dir, folder)
+                    
+                    msg = f"SECURITY ALERT: {changes['count']} unauthorized changes restored across protected paths: {changes['files']}"
+                    return False, True, [msg]
+                else:
+                    msg = f"SECURITY ALERT: {changes['count']} changes detected (DISARMED): {changes['files']}"
+                    return False, False, [msg]
+
+            except Exception as E:
+                return False, False, [f"Changes detected but restoration failed: {E}"]
+        
+        # No changes detected
+        return True, True, []
+
+    except Exception as E:
+        return False, False, [f"Integrity check error: {E}"]
+    
 #endregion###############
 # Service Protect Funcs #
 #region##################

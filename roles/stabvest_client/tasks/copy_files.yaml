@@ -33,13 +33,13 @@
 
 - name: Copy requirements to target
   win_copy:
-    src: "files/requirements.txt"
+    src: "files/requirements_windows.txt"
     dest: "{{ stabvest_deploy_dir }}\\requirements.txt"
   when: ansible_facts.os_family == "Windows" 
 
 - name: Copy requirements to target
   copy:
-    src: "files/requirements.txt"
+    src: "files/requirements_unix.txt"
     dest: "{{ stabvest_deploy_dir }}/requirements.txt"
     owner: root
     group: root

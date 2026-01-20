@@ -1996,7 +1996,7 @@ def handle_beacon():
     doIncident = True
 
     if agent_type.lower() == "owlet":
-        if (message.lower().strip() != "all good") and (message.lower().strip() != "register") and (message.lower().strip() != "reregister"):
+        if (message.lower().strip() != "all good") and (message.lower().strip() != "register") and (message.lower().strip() != "reregister") and (message.lower().strip() != "agent moved into pause status for") and (message.lower().strip() != "agent still in pase status for"):
             try:
                 new_authrecord = AuthRecord(
                     agent_id = agent_id,
