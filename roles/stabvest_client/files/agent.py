@@ -3604,7 +3604,7 @@ def main(stop_event=None):
 
     send_message(True,True,f"Register")
     
-    setup_git_agent(repo_dir,PROTECTED_FOLDERS[0]) # todo works for multiple folders
+    setup_git_agent(repo_dir,PROTECTED_FOLDERS) # todo works for multiple folders
 
     #test_main()
     #return
@@ -3718,14 +3718,14 @@ def main(stop_event=None):
             # Files
             print_debug(f"main(): running file checks")
             result_issues_main = []
-            for protected_folder in PROTECTED_FOLDERS:
-                result_oldStatus, result_newStatus, result_issues = file_protect_main(repo_dir,protected_folder)
-                if not result_oldStatus:
-                    oldStatus = False
-                if not result_newStatus:
-                    newStatus = False
-                for issue in result_issues:
-                    result_issues_main.append(f"{issue}")
+            #for protected_folder in PROTECTED_FOLDERS:
+            result_oldStatus, result_newStatus, result_issues = file_protect_main(repo_dir,PROTECTED_FOLDERS)
+            if not result_oldStatus:
+                oldStatus = False
+            if not result_newStatus:
+                newStatus = False
+            for issue in result_issues:
+                result_issues_main.append(f"{issue}")
             for issue in result_issues_main:
                 newIssues.append(f"File - {issue}")
                 print_debug(newIssues[-1])
