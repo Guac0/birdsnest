@@ -2205,40 +2205,49 @@ def get_global_config():
     return jsonify({c.key: c.value for c in configs})
 
 # === FRONTEND DISPLAY ===
-
 @app.route("/get_repo_history", methods=["POST"])
 @login_required
 def get_repo_history():
     data = request.json
-    repo_name = data.get("repo_name")
-    repo_path = os.path.join(app.root_path, 'repos', repo_name)
+    repo_path = os.path.join(app.root_path, 'repos', data.get("repo_name"))
     try:
-        # Added %N to include Git Notes in the log output
-        # Using a rare delimiter to handle potential newlines in notes
-        cmd = ["log", "--all", "--pretty=format:%H|%at|%s|%D|%N", "--name-status"]
+        # Use a unique delimiter ( is the ASCII Record Separator) to prevent parser breaks
+        # We use --topo-order to ensure a readable chronological history
+        fmt = "%H|%at|%s|%D|%N"
+        cmd = ["log", "--all", f"--pretty=format:{fmt}", "--name-status", "--topo-order"]
         result = run_git(cmd, cwd=repo_path)
         
         history = []
-        lines = result.stdout.split('\n')
-        current_commit = None
+        # Split by the Record Separator instead of just newlines
+        blocks = result.stdout.split('')
         
-        for line in lines:
-            if not line.strip(): continue
-            if "|" in line and len(line.split("|")) >= 4:
-                parts = line.split("|")
-                h, t, s, d = parts[0], parts[1], parts[2], parts[3]
-                n = parts[4] if len(parts) > 4 else ""
+        for block in blocks:
+            if not block.strip(): continue
+            lines = block.strip().split('\n')
+            header = lines[0].split('|')
+            
+            if len(header) >= 4:
+                h, t, s, d = header[0], header[1], header[2], header[3]
+                n = header[4] if len(header) > 4 else ""
                 branch = "good" if "good" in d else ("bad" if "bad" in d else "")
-                current_commit = {
-                    "hash": h, "time": datetime.fromtimestamp(int(t)).strftime('%Y-%m-%d %H:%M:%S'),
-                    "name": s, "branch": branch, "notes": n, "changes": []
+                
+                commit_item = {
+                    "hash": h, 
+                    "time": datetime.fromtimestamp(int(t)).strftime('%Y-%m-%d %H:%M:%S'),
+                    "name": s, "branch": branch, "notes": n.strip(), "changes": []
                 }
-                history.append(current_commit)
-            elif current_commit is not None:
-                p = line.split('\t')
-                if len(p) == 2: current_commit["changes"].append({"type": p[0], "file": p[1]})
+                
+                # Parse the name-status lines that follow the header in this block
+                for line in lines[1:]:
+                    p = line.split('\t')
+                    if len(p) == 2:
+                        commit_item["changes"].append({"type": p[0], "file": p[1]})
+                history.append(commit_item)
+        
+        logger.info(f"/get_repo_history - Successful connection from {current_user.id} at {request.remote_addr}")
         return jsonify(history), 200
     except Exception as e:
+        logger.warning(f"/get_repo_history - Failed connection from {current_user.id} at {request.remote_addr}. Git error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/get_commit_diff", methods=["POST"])
@@ -2248,8 +2257,12 @@ def get_commit_diff():
     repo_path = os.path.join(app.root_path, 'repos', data.get("repo_name"))
     # Diff current commit against the tip of 'good'
     cmd = ["diff", "good", data.get("hash")]
-    result = run_git(cmd, cwd=repo_path)
-    return jsonify({"diff": result.stdout}), 200
+    try:
+        result = run_git(cmd, cwd=repo_path)
+        logger.info(f"/get_commit_diff - Successful connection from {current_user.id} at {request.remote_addr}")
+        return jsonify({"diff": result.stdout}), 200
+    except Exception as E:
+        logger.warning(f"/get_commit_diff - Failed connection from {current_user.id} at {request.remote_addr}. Git error: {str(E)}")
 
 @login_required
 @analyst_required
@@ -2542,10 +2555,19 @@ def save_export(filepath=SAVEFILE):
 def save_git_note():
     data = request.json
     repo_path = os.path.join(app.root_path, 'repos', data.get("repo_name"))
-    # 'git notes add -f' overwrites existing notes for that hash
+    
+    # Minimal change: Ensure git identity is set so the note commit can be created
+    run_git(["config", "user.name", "Dashboard-Operator"], cwd=repo_path)
+    run_git(["config", "user.email", f"operator@server.local"], cwd=repo_path)
+    
     cmd = ["notes", "add", "-f", "-m", data.get("note"), data.get("hash")]
-    run_git(cmd, cwd=repo_path)
-    return jsonify({"status": "success"}), 200
+    result = run_git(cmd, cwd=repo_path)
+    
+    if result.returncode == 0:
+        logger.info(f"/save_git_note - Successful connection from {current_user.id} at {request.remote_addr}")
+        return jsonify({"status": "success"}), 200
+    logger.warning(f"/save_git_note - Failed connection from {current_user.id} at {request.remote_addr}. Failed to execute git: {result.stderr}")
+    return jsonify({"error": result.stderr}), 500
 
 @app.route("/set_good_branch", methods=["POST"])
 @login_required
@@ -2557,16 +2579,19 @@ def set_good_branch():
     
     try:
         # 1. Ensure we are on the good branch
-        run_git(["checkout", "good"], cwd=repo_path)
-        # 2. Extract the state of the target commit into the current index/worktree
-        run_git(["checkout", target_hash, "--", "."], cwd=repo_path)
-        # 3. Create the RESTORE commit
-        run_git(["commit", "-m", f"RESTORE to {target_hash[:8]}"], cwd=repo_path)
-        # 4. Point 'bad' to match the new 'good' state so they are synchronized
-        run_git(["update-ref", "refs/heads/bad", "refs/heads/good"], cwd=repo_path)
+        for branch in ["good","bad"]:
+            run_git(["checkout", branch], cwd=repo_path)
+            # 2. Extract the state of the target commit into the current index/worktree
+            run_git(["checkout", target_hash, "--", "."], cwd=repo_path)
+            # 3. Create the RESTORE commit
+            run_git(["commit", "-m", f"RESTORE to {target_hash[:8]}"], cwd=repo_path)
+            # 4. Point 'bad' to match the new 'good' state so they are synchronized
+            #run_git(["update-ref", "refs/heads/bad", "refs/heads/good"], cwd=repo_path)
         
+        logger.info(f"/set_good_branch - Successful connection from {current_user.id} at {request.remote_addr}")
         return jsonify({"status": "success"}), 200
     except Exception as e:
+        logger.info(f"/set_good_branch - Successful connection from {current_user.id} at {request.remote_addr}. Failed to execute git: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/update_authconfigglobal', methods=['POST'])
@@ -2584,6 +2609,7 @@ def update_global_config():
         config.value = data.get('value')
     
     db.session.commit()
+    logger.info(f"/update_global_config - Successful connection from {current_user.id} at {request.remote_addr}. Config change: {key}:{config.value}")
     return jsonify({"status": "success", "key": key, "new_value": config.value})
 
 @app.route('/add_authconfig', methods=['POST'])
@@ -2600,11 +2626,13 @@ def add_authconfig():
 
     # Prevent duplicates
     if AuthConfig.query.filter_by(entity_value=val).first():
+        logger.info(f"/add_authconfig - Successful connection from {current_user.id} at {request.remote_addr}. New val already exists: {val}, e_type: {e_type}, disp: {disp}")
         return jsonify({"status": "error", "message": "Entry already exists"}), 409
 
     new_entry = AuthConfig(entity_value=val, entity_type=e_type, disposition=disp)
     db.session.add(new_entry)
     db.session.commit()
+    logger.info(f"/add_authconfig - Successful connection from {current_user.id} at {request.remote_addr}. New val: {val}, e_type: {e_type}, disp: {disp}")
     return jsonify({"status": "success", "id": new_entry.id})
 
 @app.route('/update_authconfig_status', methods=['POST'])
@@ -2614,11 +2642,13 @@ def update_authconfig_status():
     data = request.get_json()
     entry = AuthConfig.query.get(data.get('id'))
     if not entry:
+        logger.warning(f"/update_authconfig_status - Failed connection from {current_user.id} at {request.remote_addr}. No value with id {data.get('id')} found")
         return jsonify({"status": "error", "message": "Not found"}), 404
     
     # Toggle logic
     entry.disposition = "MALICIOUS" if entry.disposition == "LEGITIMATE" else "LEGITIMATE"
     db.session.commit()
+    logger.info(f"/update_authconfig_status - Successful connection from {current_user.id} at {request.remote_addr}. Entity: {entry.entity_value}, disposition: {entry.disposition}")
     return jsonify({"status": "success", "new_disposition": entry.disposition})
 
 @app.route('/delete_authconfig', methods=['POST'])
@@ -2630,9 +2660,11 @@ def delete_authconfig():
     entry = AuthConfig.query.get(entry_id)
     
     if entry:
+        logger.info(f"/delete_authconfig - Successful connection from {current_user.id} at {request.remote_addr}. Deleting entry {entry.entity_value}")
         db.session.delete(entry)
         db.session.commit()
         return jsonify({"status": "success"})
+    logger.warning(f"/delete_authconfig - Failed connection from {current_user.id} at {request.remote_addr}. Entry with id {data.get('id')} not found.")
     return jsonify({"status": "error", "message": "Entry not found"}), 404
 
 @app.route('/authrecord_update_notes', methods=['POST'])
@@ -2667,6 +2699,7 @@ def bulk_authconfig():
     
     if action == 'export':
         entries = AuthConfig.query.all()
+        logger.info(f"/bulk_authconfig - Successful connection from {current_user.id} at {request.remote_addr}. Exporting config.")
         return jsonify([entry.to_dict() for entry in entries])
     
     if action == 'import':
@@ -2683,6 +2716,7 @@ def bulk_authconfig():
                 db.session.add(new_entry)
                 added_count += 1
         db.session.commit()
+        logger.info(f"/bulk_authconfig - Successful connection from {current_user.id} at {request.remote_addr}. Importing config of size {added_count}.")
         return jsonify({"status": "success", "added": added_count})
 
 @app.route('/bulk_auth_records', methods=['POST'])
@@ -2694,6 +2728,7 @@ def bulk_auth_records():
     
     if action == 'export':
         records = AuthRecord.query.all()
+        logger.info(f"/bulk_authconfig - Successful connection from {current_user.id} at {request.remote_addr}. Exporting records.")
         return jsonify([r.to_dict() for r in records])
     
     if action == 'import':
@@ -2719,6 +2754,7 @@ def bulk_auth_records():
                 db.session.add(new_rec)
                 added_count += 1
         db.session.commit()
+        logger.info(f"/bulk_authconfig - Successful connection from {current_user.id} at {request.remote_addr}. Importing records of size {added_count}.")
         return jsonify({"status": "success", "added": added_count})
     
 @app.route("/agent_pause", methods=["POST"])

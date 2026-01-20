@@ -196,49 +196,59 @@ async function setGood(hash) {
 // --- RENDER LOGIC ---
 async function editNote(hash, currentNote) {
     const newNote = prompt("Edit Commit Notes:", currentNote);
+    // Ensure we don't save if user cancels
     if (newNote === null) return;
     
-    const res = await fetch('/save_git_note', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({repo_name: selectedRepo, hash: hash, note: newNote})
-    });
-    if(res.ok) {
-        showToast("Note Saved");
-        // Refresh history to show new note
-        enterHistoryMode({repo_name: selectedRepo, agent_name: document.getElementById('infoName').innerText, hostname: document.getElementById('infoHost').innerText, ip: document.getElementById('infoIP').innerText});
-    }
+    try {
+        const res = await fetch('/save_git_note', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({repo_name: selectedRepo, hash: hash, note: newNote})
+        });
+        
+        if(res.ok) {
+            showToast("Note Saved");
+            // Re-fetch history to update the view with the new note immediately
+            const historyRes = await fetch('/get_repo_history', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({repo_name: selectedRepo}) 
+            });
+            const history = await historyRes.json();
+            renderHistoryTable(history);
+        } else {
+            const err = await res.json();
+            alert("Error saving note: " + err.error);
+        }
+    } catch (e) { console.error("Note save failed", e); }
 }
 
 function renderHistoryTable(data) {
     const tableEl = document.getElementById('gitTable');
-    // Added 'notes' to columns
     const cols = ["actions", "branch", "time", "name", "notes", "files_changed"];
     
-    let thead = `<thead><tr>${cols.map(c => `<th style="width:${c==='name'||c==='notes'?'auto':'150px'}">${c.toUpperCase()}</th>`).join('')}</tr></thead>`;
+    let thead = `<thead><tr>${cols.map(c => `<th>${c.toUpperCase()}</th>`).join('')}</tr></thead>`;
     let tbody = data.map(commit => {
         const fileTags = commit.changes.map(c => {
             let cls = c.type === 'A' ? 'add' : (c.type === 'D' ? 'del' : 'mod');
             return `<span class="diff-tag ${cls}">${c.file}</span>`;
         }).join(' ');
         
-        const isLatestGood = (commit.branch === 'good');
-        
         return `<tr>
             <td>
                 <button class="btn ghost" style="padding:4px 8px; font-size:11px" onclick="viewDiff('${commit.hash}')">Diff</button>
-                ${!isLatestGood ? `<button class="btn" style="padding:4px 8px; font-size:11px" onclick="setGood('${commit.hash}')">Restore</button>` : ''}
+                ${commit.branch !== 'good' ? `<button class="btn" style="padding:4px 8px; font-size:11px" onclick="setGood('${commit.hash}')">Restore</button>` : ''}
             </td>
             <td><b style="color:${commit.branch==='good'?'#2ecc71':(commit.branch==='bad'?'#ff6b6b':'#666')}">${commit.branch || 'history'}</b></td>
             <td>${commit.time}</td>
             <td>${escapeHtml(commit.name)}</td>
-            <td style="width:auto">
-                <div style="display:flex; align-items:center; gap:8px">
-                    <span style="color:var(--muted); font-style:italic">${escapeHtml(commit.notes) || 'No notes...'}</span>
-                    <button class="btn ghost" style="padding:2px 6px; font-size:10px" onclick="editNote('${commit.hash}', '${escapeHtml(commit.notes)}')">Edit</button>
+            <td>
+                <div style="display:flex; flex-direction:column; gap:4px">
+                    <span style="color:var(--muted); font-size:11px; white-space:pre-wrap;">${escapeHtml(commit.notes) || '...'}</span>
+                    <button class="btn ghost" style="width:fit-content; padding:2px 6px; font-size:10px" onclick="editNote('${commit.hash}', \`${escapeHtml(commit.notes)}\`)">Edit</button>
                 </div>
             </td>
-            <td style="width:auto; white-space:normal;">${fileTags}</td>
+            <td style="white-space:normal;">${fileTags}</td>
         </tr>`;
     }).join('');
     
