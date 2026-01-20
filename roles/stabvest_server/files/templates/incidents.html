@@ -72,6 +72,7 @@ Security & production notes:
     --color-ir:  #4e08aa;
     --color-inject:  #036995;
     --color-uptime:  #380a8e;
+    --color-file:   #b11226;
     --color-unknown:   #5e5e5e;
     --glass: rgba(255,255,255,0.03);
     --radius:12px;
@@ -90,6 +91,7 @@ Security & production notes:
   .color-inject          { color: var(--color-inject); }
   .color-uptime          { color: var(--color-uptime); }
   .color-server          { color: var(--color-server); }
+  .color-file          { color: var(--color-file); }
   .color-unknown         { color: var(--color-unknown); }
   .sla-red        { color: #8b0000; }   /* dark red */
   .sla-green      { color: #00ff66; }
@@ -254,7 +256,7 @@ Security & production notes:
         <a href="/" style="padding-left: 20px;">Back to Home</a>
         <div style="padding-left: 20px;">
           <div class="sub">Click <strong>Claim</strong> to tag an incident as <em>Active</em>, <strong>Resolve</strong> to tag as <em>Closed</em>, or <strong>Reopen</strong> to mark as <em>New</em>. You must have <code>Analyst</code> permissions to do this.</div>
-          <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Interface</span>, <span class="color-service-generic">Service Generic</span>, <span class="color-service-custom">Service Custom</span>, <span class="color-agent-alert">Agent Alert</span>, <span class="color-ir">IR</span>, <span class="color-inject">Inject</span>, <span class="color-uptime">Uptime</span>, <span class="color-uptime">Server</span>, <span class="color-unknown">Other</span>.</div>
+          <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Interface</span>, <span class="color-service-generic">Service Generic</span>, <span class="color-service-custom">Service Custom</span>, <span class="color-file">File</span>, <span class="color-agent-alert">Agent Alert</span>, <span class="color-ir">IR</span>, <span class="color-inject">Inject</span>, <span class="color-uptime">Uptime</span>, <span class="color-server">Server</span>, <span class="color-unknown">Other</span>.</div>
           <div class="sub">Tip: use "<strong>incident</strong> <code>(number)</code>" as a search term to limit results to only incidents.</div>
         </div>
       </div>
@@ -291,6 +293,7 @@ Security & production notes:
         <option value="interface">Interface</option>
         <option value="service">Service Generic</option>
         <option value="servicecustom">Service Custom</option>
+        <option value="file">File</option>
         <option value="agent">Agent Alerts</option>
         <option value="ir">IR</option>
         <option value="inject">Injects</option>
@@ -348,6 +351,7 @@ Security & production notes:
       <span class="color-interface">Interface</span>,
       <span class="color-service-generic">Service Generic</span>,
       <span class="color-service-custom">Service Custom</span>,
+      <span class="color-file">File</span>,
       <span class="color-agent-alert">Agent</span>,
       <span class="color-ir">IR</span>,
       <span class="color-inject">Inject</span>,
@@ -639,6 +643,7 @@ const ui = (function(){
       interface: "var(--color-interface)",
       service:   "var(--color-service-generic)",
       servicecustom:    "var(--color-service-custom)",
+      file:     "var(--color-file)",
       agent:     "var(--color-agent-alert)",
       ir:         "var(--color-ir)",
       inject:     "var(--color-inject)",

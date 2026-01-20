@@ -448,7 +448,7 @@ def get_pause_status(file=STATUSFILE):
             firstline = f.readline().strip()
             if len(firstline) < 1:
                 return False,False,0
-            preferServer = firstline == "true"
+            preferServer = firstline.lower() == "true"
             pausedUntilEpoch = float(f.readline().strip())
             if round(pausedUntilEpoch) != 0:
                 if pausedUntilEpoch > time.time():
@@ -457,7 +457,7 @@ def get_pause_status(file=STATUSFILE):
                 else:
                     # Sleep has elapsed
                     f.seek(0)
-                    f.write(f"{preferServer}\n{pausedUntilEpoch}\n")
+                    f.write(f"{preferServer}\n0\n")
                     f.truncate()
                     return preferServer, False, 0
             else:

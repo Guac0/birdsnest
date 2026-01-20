@@ -343,10 +343,12 @@ refreshLogs();
 
 // Auto-refresh every 60 seconds
 setInterval(() => {
+  refreshLogs();
+}, 30000);
+setInterval(() => {
   refreshUsers();
   refreshTokens();
-  refreshLogs();
-}, 60000);
+}, 90000);
 </script>
 
 </body>

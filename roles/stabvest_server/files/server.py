@@ -847,6 +847,9 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
             color = "036995"
         elif (incident["message"].lower().split(' ')[0] == "uptime"):
             color = "380a8e"
+        elif (incident["message"].lower().split(' ')[0]  == "file"):
+            color = "b11226"
+
     except Exception as E:
         # weird format, fallback to generic color
         pass
@@ -2304,7 +2307,7 @@ def list_auth_records():
 def list_git_overall():
     try:
         returned_info = get_git_stats(db)
-        logger.info(f"/list_git_overall - Successful connection from {current_user.id} at {request.remote_addr}. returning info {returned_info}")
+        logger.info(f"/list_git_overall - Successful connection from {current_user.id} at {request.remote_addr}.")
         return jsonify(returned_info), 200
     except Exception as E:
         logger.warning(f"/list_git_overall - Failed connection from {current_user.id} at {request.remote_addr}. Exception: {E}")
@@ -2401,15 +2404,32 @@ def list_agents():
 @login_required
 def list_messages():
     try:
-        logger.info(f"/list_messages - Successful connection from {current_user.id} at {request.remote_addr}")
-        
-        messages = Message.query.all()
-        
-        message_dict = {
-            message.message_id: serialize_model(message)
-            for message in messages
-        }
-        
+
+        # Join Message -> Agent
+        results = (
+            db.session.query(Message, Agent)
+            .join(Agent, Agent.agent_id == Message.agent_id)
+            .all()
+        )
+
+        message_dict = {}
+
+        for message, agent in results:
+            msg_data = serialize_model(message)
+
+            # Add agent context
+            msg_data.update({
+                "agent_name": agent.agent_name,
+                "agent_type": agent.agent_type,
+                "hostname": agent.hostname,
+                "ip": agent.ip,
+            })
+
+            message_dict[message.message_id] = msg_data
+
+        logger.info(
+            f"/list_messages - Successful connection from {current_user.id} at {request.remote_addr}"
+        )
         return jsonify(message_dict)
 
     except Exception as e:
@@ -2788,18 +2808,25 @@ def agent_pause():
 def agent_resume():
     data = request.json
     agent_id = data.get("agent_id")
+    logger.info(f"/agent_resume - {data}")
     if not all([agent_id]):
         logger.warning(f"/agent_resume - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[agent_id]}")
         return "Missing data", 400
     agent = Agent.query.filter_by(agent_id=agent_id).first()
     if not agent:
         logger.warning(f"/agent_resume - Failed connection from {current_user.id} at {request.remote_addr} - bad agent_id value, agent_id does not exist. Full details: {[agent_id]}")
-        return "Agent with specified ID ", 400
+        return f"Agent with specified ID {agent_id} does not exist", 400
     try:
-        if (int(agent.pausedUntil) == 0) or (int(agent.pausedUntil) == 1):
+        logger.info(f"/agent_resume - 1")
+        pausedUntilInt = int(agent.pausedUntil)
+        logger.info(f"/agent_resume - ")
+        if (pausedUntilInt == 0) or (pausedUntilInt == 1):
             return "Agent is already in ACTIVE state", 400
-        agent.pausedUntil = str(1)
+        logger.info(f"/agent_resume - 3")
+        agent.pausedUntil = "1"
+        logger.info(f"/agent_resume - 4")
         db.session.commit()
+        logger.info(f"/agent_resume - 5")
         logger.info(f"/agent_resume - Successful connection from {current_user.id} at {request.remote_addr}. Resuming agent {agent_id}.")
         return jsonify({"status": "ok"})
     except Exception as e:
