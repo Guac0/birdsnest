@@ -2210,12 +2210,12 @@ def get_global_config():
 
 # === FRONTEND DISPLAY ===
 
-@app.route("/api/dashboard_summary", methods=["POST"])
+@app.route("/dashboard_summary", methods=["POST"])
 @login_required
 def dashboard_summary():
     try:
         now = int(time.time())
-        one_hour_ago = now - 3600 # 3600 seconds = 1 hour (your code had 900)
+        one_hour_ago = now - 900 # 3600 seconds = 1 hour (your code had 900)
 
         # Execution logic: Wrap subqueries to ensure they return lists
         # .all() returns a list of Row objects which work like tuples
@@ -2247,6 +2247,10 @@ def dashboard_summary():
                 "new": Incident.query.filter_by(tag="New").count() or 0,
                 "active": Incident.query.filter_by(tag="Active").count() or 0,
                 "closed": Incident.query.filter_by(tag="Closed").count() or 0
+            },
+            "messages": {
+                "total": Message.query.count(),
+                "recent": Message.query.filter(Message.timestamp >= one_hour_ago).count()
             },
             "users": {
                 "total": WebUser.query.count() or 0,
