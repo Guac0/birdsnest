@@ -1292,7 +1292,7 @@ def get_git_stats(db,repos_root=os.path.join(GIT_PROJECT_ROOT,"")):
                 logger.warning(f"Failed to process branch {branch} in {repo_folder}: {e}")
                 continue
 
-    logger.info(f"returning {results}")
+    #logger.info(f"returning {results}")
     return results
 
 # === SAVE AND LOAD ===
@@ -2212,11 +2212,10 @@ def get_repo_history():
     data = request.json
     repo_name = data.get("repo_name")
     repo_path = os.path.join(app.root_path, 'repos', repo_name)
-    
     try:
-        # Get history from both branches. %D shows branch decorations.
-        # Format: hash | time | subject | branch_decoration
-        cmd = ["log", "--all", "--pretty=format:%H|%at|%s|%D", "--name-status"]
+        # Added %N to include Git Notes in the log output
+        # Using a rare delimiter to handle potential newlines in notes
+        cmd = ["log", "--all", "--pretty=format:%H|%at|%s|%D|%N", "--name-status"]
         result = run_git(cmd, cwd=repo_path)
         
         history = []
@@ -2225,24 +2224,19 @@ def get_repo_history():
         
         for line in lines:
             if not line.strip(): continue
-            if "|" in line and len(line.split("|")) >= 3:
-                h, t, s, d = line.split("|")
-                # Identify if commit belongs to good or bad
+            if "|" in line and len(line.split("|")) >= 4:
+                parts = line.split("|")
+                h, t, s, d = parts[0], parts[1], parts[2], parts[3]
+                n = parts[4] if len(parts) > 4 else ""
                 branch = "good" if "good" in d else ("bad" if "bad" in d else "")
                 current_commit = {
-                    "hash": h,
-                    "time": datetime.fromtimestamp(int(t)).strftime('%Y-%m-%d %H:%M:%S'),
-                    "name": s,
-                    "branch": branch,
-                    "changes": []
+                    "hash": h, "time": datetime.fromtimestamp(int(t)).strftime('%Y-%m-%d %H:%M:%S'),
+                    "name": s, "branch": branch, "notes": n, "changes": []
                 }
                 history.append(current_commit)
             elif current_commit is not None:
-                # Parse git name-status (A=Added, M=Modified, D=Deleted)
-                parts = line.split('\t')
-                if len(parts) == 2:
-                    current_commit["changes"].append({"type": parts[0], "file": parts[1]})
-        
+                p = line.split('\t')
+                if len(p) == 2: current_commit["changes"].append({"type": p[0], "file": p[1]})
         return jsonify(history), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2541,6 +2535,17 @@ def save_export(filepath=SAVEFILE):
         return f"FileNotFound {filepath}", 400
 
 # === FRONTEND INTERACTION ===
+    
+@app.route("/save_git_note", methods=["POST"])
+@login_required
+@analyst_required
+def save_git_note():
+    data = request.json
+    repo_path = os.path.join(app.root_path, 'repos', data.get("repo_name"))
+    # 'git notes add -f' overwrites existing notes for that hash
+    cmd = ["notes", "add", "-f", "-m", data.get("note"), data.get("hash")]
+    run_git(cmd, cwd=repo_path)
+    return jsonify({"status": "success"}), 200
 
 @app.route("/set_good_branch", methods=["POST"])
 @login_required
@@ -2549,11 +2554,20 @@ def set_good_branch():
     data = request.json
     repo_path = os.path.join(app.root_path, 'repos', data.get("repo_name"))
     target_hash = data.get("hash")
-    # Force the 'good' branch to point to this hash
-    result = run_git(["update-ref", "refs/heads/good", target_hash], cwd=repo_path)
-    if result.returncode == 0:
+    
+    try:
+        # 1. Ensure we are on the good branch
+        run_git(["checkout", "good"], cwd=repo_path)
+        # 2. Extract the state of the target commit into the current index/worktree
+        run_git(["checkout", target_hash, "--", "."], cwd=repo_path)
+        # 3. Create the RESTORE commit
+        run_git(["commit", "-m", f"RESTORE to {target_hash[:8]}"], cwd=repo_path)
+        # 4. Point 'bad' to match the new 'good' state so they are synchronized
+        run_git(["update-ref", "refs/heads/bad", "refs/heads/good"], cwd=repo_path)
+        
         return jsonify({"status": "success"}), 200
-    return jsonify({"error": result.stderr}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/update_authconfigglobal', methods=['POST'])
 @login_required
