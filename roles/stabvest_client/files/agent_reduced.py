@@ -232,26 +232,30 @@ def run_git(args, cwd):
         if result.stderr:
             print_debug(f"Shell stderr: {result.stderr.strip()}")
     return result
-def setup_git_agent(repo_dir,protected_folder,systemInfo=get_system_details()):
+def setup_git_agent(repo_dir, protected_folders, systemInfo=None):
+    if systemInfo is None:
+        systemInfo = get_system_details()
     try:
         if not os.path.exists(repo_dir):
-            run_git(["clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git",Path(repo_dir).name],os.path.dirname(Path(__file__).resolve()))
-        run_git(["config", "user.name", "Agent"],repo_dir)
-        run_git(["config", "user.email", f"agent@{systemInfo["hostname"]}.local"],repo_dir)
+            agent_hash = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
+            repo_url = f"{SERVER_URL}git/{agent_hash}.git"
+            run_git(["clone", repo_url, Path(repo_dir).name], os.path.dirname(Path(repo_dir).resolve()))
+        run_git(["config", "user.name", "Agent"], repo_dir)
+        run_git(["config", "user.email", f"agent@{systemInfo['hostname']}.local"], repo_dir)
         run_git(["checkout", "-b", "good"], cwd=repo_dir)
-        sync_protected_to_repo(repo_dir, protected_folder)
+        for folder in protected_folders:
+            sync_protected_to_repo(repo_dir, folder)
         run_git(["add", "."], cwd=repo_dir)
         run_git(["commit", "-m", "initialCommitGood"], cwd=repo_dir)
         run_git(["push", "-u", "origin", "good"], cwd=repo_dir)
         run_git(["checkout", "-b", "bad"], cwd=repo_dir)
-        sync_protected_to_repo(repo_dir, protected_folder)
         run_git(["add", "."], cwd=repo_dir)
         run_git(["commit", "-m", "initialCommitBad"], cwd=repo_dir)
         run_git(["push", "-u", "origin", "bad"], cwd=repo_dir)
         run_git(["checkout", "good"], cwd=repo_dir)
         return True
     except Exception as E:
-        print_debug(f"Critical error when running setup_git_agent: {E}")
+        print_debug(f"Critical error in setup_git_agent: {E}")
         return False
 def audit_command(command,package="",packageManager="apt"):
     return True, True
@@ -674,15 +678,16 @@ def interface_down_windows(interface=interface_get_primary()):
     ps_check = fr"""
     $iface = '{interface}'
     $int = Get-NetAdapter -Name $iface
-    if ($int -eq $null) { 
+
+    if ($int -eq $null) {{
         Write-Output 'NotFound'
-    } 
-    elseif ($int.Status -eq 'Up') { 
+    }}
+    elseif ($int.Status -eq 'Up') {{
         Write-Output 'Up'
-    } 
-    else { 
+    }}
+    else {{
         Write-Output 'Down'
-    } 
+    }}
     """
     status = run_powershell(ps_check).strip()
     if not status:
@@ -823,25 +828,29 @@ def firewall_rules_audit(port,direction="in",action="block"):
 def firewall_rules_audit_windows(port,direction="in",action="block"):
     ps_query = fr"""
     $rules = Get-NetFirewallPortFilter |
-        Where-Object { 
+        Where-Object {{
             $lp = $_.LocalPort
-            if ($lp -like '*,*') { 
+
+            if ($lp -like '*,*') {{
                 return $lp.Split(',') -contains '{port}'
-            } 
-            if ($lp -like '*-*') { 
+            }}
+
+            if ($lp -like '*-*') {{
                 $a, $b = $lp.Split('-')
                 return ({port} -ge [int]$a -and {port} -le [int]$b)
-            } 
+            }}
+
             return $lp -eq '{port}'
-        }  |
+        }} |
         Get-NetFirewallRule |
-        Where-Object {  $_.Direction -eq '{direction}' -and $_.Action -eq '{action}' }  |
+        Where-Object {{ $_.Direction -eq '{direction}' -and $_.Action -eq '{action}' }} |
         Select-Object Name, DisplayName, Action, Direction, Profile
-    if (-not $rules) { 
+
+    if (-not $rules) {{
         "none found"
-    }  else { 
+    }} else {{
         $rules | ConvertTo-Json
-    } 
+    }}
     """
     output = run_powershell(ps_query).strip()
     if not output:
@@ -1121,11 +1130,57 @@ def firewall_main(protectedPorts):
             for issue in result_issues:
                 issues.append(issue)
     return oldStatus, newStatus, issues
-def sync_protected_to_repo(repo_dir,protected_folder):
-    shutil.copytree(protected_folder, repo_dir, dirs_exist_ok=True)
-    return repo_dir
-def restore_protected_from_repo(repo_dir,protected_folder):
-    shutil.copytree(repo_dir, protected_folder, dirs_exist_ok=True)
+def apply_security_policy(target_path):
+    is_windows = platform.system() == "Windows"
+    try:
+        if is_windows:
+            subprocess.run(["attrib", "-R", "-S", "-H", target_path, "/S", "/D"], capture_output=True)
+        else:
+            if platform.system() in ["FreeBSD", "Darwin"]:
+                subprocess.run(["chflags", "-R", "noschg", target_path], capture_output=True)
+            else:
+                subprocess.run(["chattr", "-R", "-i", target_path], capture_output=True)
+    except Exception:
+        pass 
+    if is_windows:
+        cmds = [
+            ["icacls", target_path, "/reset", "/T", "/C"],
+            ["icacls", target_path, "/grant:r", "Administrators:(OI)(CI)F", "/T", "/C"],
+            ["icacls", target_path, "/grant:r", "Users:(OI)(CI)R", "/T", "/C"]
+        ]
+        for cmd in cmds:
+            subprocess.run(cmd, capture_output=True)
+    else:
+        for root, dirs, files in os.walk(target_path):
+            for d in dirs:
+                os.chmod(os.path.join(root, d), 0o744)
+            for f in files:
+                os.chmod(os.path.join(root, f), 0o744)
+def get_path_slug(path):
+    clean_path = re.sub(r'^[a-zA-Z]:', '', path)
+    slug = re.sub(r'[^a-zA-Z0-9]', '_', clean_path).strip('_')
+    return slug if slug else "root_dir"
+def sync_protected_to_repo(repo_dir, protected_folder):
+    slug = get_path_slug(protected_folder)
+    dest_in_repo = os.path.join(repo_dir, slug)
+    apply_security_policy(protected_folder)
+    if os.path.isfile(protected_folder):
+        os.makedirs(dest_in_repo, exist_ok=True)
+        shutil.copy2(protected_folder, os.path.join(dest_in_repo, os.path.basename(protected_folder)))
+    else:
+        shutil.copytree(protected_folder, dest_in_repo, dirs_exist_ok=True)
+    apply_security_policy(dest_in_repo)
+def restore_protected_from_repo(repo_dir, protected_folder):
+    slug = get_path_slug(protected_folder)
+    source_in_repo = os.path.join(repo_dir, slug)
+    if not os.path.exists(source_in_repo):
+        return
+    if os.path.isfile(protected_folder):
+        file_name = os.path.basename(protected_folder)
+        shutil.copy2(os.path.join(source_in_repo, file_name), protected_folder)
+    else:
+        shutil.copytree(source_in_repo, protected_folder, dirs_exist_ok=True)
+    apply_security_policy(protected_folder)
 def get_latest_commit_stats(branch_name,repo_dir):
     result = run_git(["show", "--format=", "--name-status", branch_name],repo_dir)
     if result.returncode != 0 or not result.stdout.strip():
@@ -1144,40 +1199,51 @@ def get_latest_commit_stats(branch_name,repo_dir):
         "count": len(files_info),
         "files": files_info
     }
-def file_protect_main(repo_dir,protected_folder):
+def file_protect_main(repo_dir, protected_folders):
     try:
-        run_git(["checkout", "good"],repo_dir)
-        run_git(["pull", "origin", "good"],repo_dir)
-        sync_protected_to_repo(repo_dir,protected_folder)
-        run_git(["add", "."],repo_dir)
-        diff_check = run_git(["diff", "--cached", "--quiet"],repo_dir)
-        changes = {}
+        run_git(["checkout", "good"], repo_dir)
+        run_git(["pull", "origin", "good"], repo_dir)
+        for folder in protected_folders:
+            if os.path.exists(folder):
+                sync_protected_to_repo(repo_dir, folder)
+            else:
+                print_debug(f"Warning: Protected path {folder} not found. Skipping sync.")
+        run_git(["add", "."], repo_dir)
+        diff_check = run_git(["diff", "--cached", "--quiet"], repo_dir)
         if diff_check.returncode != 0:
             try:
-                run_git(["stash"],repo_dir)
-                run_git(["checkout", "bad"],repo_dir)
-                run_git(["pull", "origin", "bad"],repo_dir)
-                stash_apply = run_git(["stash", "pop"],repo_dir)
+                hash_result = run_git(["rev-parse", "--short", "HEAD"], repo_dir)
+                good_hash = hash_result.stdout.strip() if hash_result.returncode == 0 else "unknown"
+                run_git(["stash"], repo_dir)
+                run_git(["checkout", "bad"], repo_dir)
+                run_git(["pull", "origin", "bad"], repo_dir)
+                run_git(["checkout", "good", "."], repo_dir) 
+                run_git(["add", "."], repo_dir)
+                run_git(["commit", "--allow-empty", "-m", f"baseline-{good_hash}"], repo_dir)
+                stash_apply = run_git(["stash", "pop"], repo_dir)
                 if stash_apply.returncode != 0:
-                    run_git(["checkout", "--theirs", "."],repo_dir)
-                    run_git(["add", "."],repo_dir)
-                    run_git(["commit", "-m", f"auto-resolveconflict"],repo_dir)
-                run_git(["add", "."],repo_dir)
-                run_git(["commit", "-m", f"auto-malicious{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}"],repo_dir)
-                run_git(["push", "-u", "origin", "bad"],repo_dir)
-                changes = get_latest_commit_stats("bad",repo_dir)
-                run_git(["checkout", "good"],repo_dir)
+                    run_git(["checkout", "--theirs", "."], repo_dir)
+                    run_git(["add", "."], repo_dir)
+                    run_git(["commit", "-m", "auto-resolveconflict"], repo_dir)
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                run_git(["add", "."], repo_dir)
+                run_git(["commit", "-m", f"auto-malicious-{timestamp}"], repo_dir)
+                run_git(["push", "-u", "origin", "bad"], repo_dir)
+                changes = get_latest_commit_stats("bad", repo_dir)
+                run_git(["checkout", "good"], repo_dir)
                 if not DISARM:
-                    restore_protected_from_repo(repo_dir,protected_folder)
-                    return False, True, [f"File changes occurred and were successfully restored. Affected files {changes["count"]}: {changes["files"]}"]
+                    for folder in protected_folders:
+                        restore_protected_from_repo(repo_dir, folder)
+                    msg = f"SECURITY ALERT: {changes['count']} unauthorized changes restored across protected paths: {changes['files']}"
+                    return False, True, [msg]
                 else:
-                    return False, False, [f"File changes occurred, DISARMED. Affected files {changes["count"]}: {changes["files"]}"]
+                    msg = f"SECURITY ALERT: {changes['count']} changes detected (DISARMED): {changes['files']}"
+                    return False, False, [msg]
             except Exception as E:
-                return False, False, [f"File changes occurred and failed to restore known good state: {E}"]
-        else:
-            return True,True,[]
+                return False, False, [f"Changes detected but restoration failed: {E}"]
+        return True, True, []
     except Exception as E:
-        return False, False, [f"Unexpected error when attempting to check file integrity status: {E}"]
+        return False, False, [f"Integrity check error: {E}"]
 def service_audit(service):
     system = platform.system()
     if system == "Windows":
@@ -1187,15 +1253,15 @@ def service_audit(service):
 def service_audit_windows(service_name):
     ps_check = fr"""
     $svc = Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue
-    if ($svc -eq $null) { 
+    if ($svc -eq $null) {{
         Write-Output 'NotFound'
-    }  else { 
-        $obj = New-Object PSObject -Property @{ 
+    }} else {{
+        $obj = New-Object PSObject -Property @{{
             Status = $svc.Status
             StartType = (Get-CimInstance Win32_Service -Filter "Name='{service_name}'").StartMode
-        } 
+        }}
         $obj | ConvertTo-Json
-    } 
+    }}
     """
     raw = run_powershell(ps_check).strip()
     if not raw:
@@ -1426,16 +1492,16 @@ def service_integrity(service,backupDict):
 def service_integrity_windows(service_name, backupDict):
     ps_check = fr"""
     $svc = Get-CimInstance Win32_Service -Filter "Name='{service_name}'" -ErrorAction SilentlyContinue
-    if ($svc -eq $null) { 
+    if ($svc -eq $null) {{
         Write-Output 'NotFound'
-    }  else { 
-        $obj = New-Object PSObject -Property @{ 
+    }} else {{
+        $obj = New-Object PSObject -Property @{{
             StartName = $svc.StartName
             PathName = $svc.PathName
             Dependencies = $svc.DependsOn
-        } 
+        }}
         $obj | ConvertTo-Json
-    } 
+    }}
     """
     raw = run_powershell(ps_check).strip()
     if not raw:
@@ -1595,18 +1661,18 @@ def service_backup(service):
 def service_backup_windows(service_name):
     ps_query = fr"""
     $svc = Get-CimInstance Win32_Service -Filter "Name='{service_name}'" -ErrorAction SilentlyContinue
-    if ($svc -eq $null) { 
+    if ($svc -eq $null) {{
         Write-Output 'NotFound'
-    }  else { 
-        $obj = New-Object PSObject -Property @{ 
+    }} else {{
+        $obj = New-Object PSObject -Property @{{
             PathName = $svc.PathName
             StartName = $svc.StartName
             Dependencies = $svc.DependsOn
             DisplayName = $svc.DisplayName
             StartType = $svc.StartMode
-        } 
+        }}
         $obj | ConvertTo-Json
-    } 
+    }}
     """
     raw = run_powershell(ps_query).strip()
     if not raw or raw == "NotFound":
@@ -1669,14 +1735,14 @@ def service_lastrun_windows(service_name):
     issues = []
     ps_check = fr"""
     $svc = Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue
-    if ($svc -eq $null) { 
+    if ($svc -eq $null) {{
         Write-Output 'NotFound'
-    }  else { 
-        $obj = New-Object PSObject -Property @{ 
+    }} else {{
+        $obj = New-Object PSObject -Property @{{
             Status = $svc.Status
-        } 
+        }}
         $obj | ConvertTo-Json
-    } 
+    }}
     """
     raw = run_powershell(ps_check).strip()
     if not raw:
@@ -2024,6 +2090,7 @@ def main(stop_event=None):
         else:
             if not suppressed_send:
                 send_message(True,False,f"Agent still in PAUSE status for {int(pausedEpochLocal - time.time())} seconds remaining")
+        time.sleep(SLEEPTIME)
         """
         system = platform.system()
         if system == "Windows":
@@ -2039,6 +2106,6 @@ def main(stop_event=None):
         else:
             time.sleep(sleeptime)
         """
-        time.sleep(SLEEPTIME)
+    
 if __name__ == "__main__":
     main()

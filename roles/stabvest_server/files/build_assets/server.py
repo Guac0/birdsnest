@@ -1553,11 +1553,13 @@ def get_repo_history():
     data = request.json
     repo_path = os.path.join(app.root_path, 'repos', data.get("repo_name"))
     try:
-        fmt = "%H|%at|%s|%D|%N"
+        fmt = "
+%H|%at|%s|%D|%N"
         cmd = ["log", "--all", f"--pretty=format:{fmt}", "--name-status", "--topo-order"]
         result = run_git(cmd, cwd=repo_path)
         history = []
-        blocks = result.stdout.split('')
+        blocks = result.stdout.split('
+')
         for block in blocks:
             if not block.strip(): continue
             lines = block.strip().split('\n')

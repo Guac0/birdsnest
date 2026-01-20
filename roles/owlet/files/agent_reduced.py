@@ -360,15 +360,17 @@ def get_pause_state_server(systemInfo=get_system_details()):
     return -1
 def get_native_parser():
     if os.path.exists("/etc/debian_version"):
-        return DebianAuthParser(), "/var/log/auth.log"
+        return DebianAuthParser(), "/var/log/auth.log", AuthWatcher()
     elif os.path.exists("/etc/redhat-release") or os.path.exists("/etc/rocky-release"):
-        return RedHatParser(), "/var/log/secure"
+        return RedHatParser(), "/var/log/secure", AuthWatcher()
     elif os.path.exists("/etc/alpine-release"):
-        return AlpineParser(), "/var/log/messages"
+        return AlpineParser(), "/var/log/messages", AuthWatcher()
     elif os.uname().sysname == "FreeBSD":
-        return FreeBSDParser(), "/var/log/auth.log"
+        return FreeBSDParser(), "/var/log/auth.log", AuthWatcher()
+    elif "windows" in platform.system().lower():
+        return WindowsAuthParser(), "N/A", WindowsAuthWatcher()
     else:
-        return DebianAuthParser(), "/var/log/auth.log"
+        return DebianAuthParser(), "/var/log/auth.log", AuthWatcher()
 class BaseParser:
     def parse_line(self, line):
         raise NotImplementedError("Each parser must implement parse_line")
@@ -471,6 +473,33 @@ class FreeBSDParser(BaseParser):
         return None
     def __repr__(self):
         return f"FreeBSDParser"
+class WindowsAuthParser:
+    def __init__(self):
+        self.log_type = "Security"
+        self.event_ids = {4624: True, 4625: False}
+    def _get_timestamp(self, event):
+        return int(event.TimeGenerated.timestamp())
+    def parse_event(self, event):
+        event_id = event.EventID & 0xFFFF 
+        if event_id not in self.event_ids:
+            return None
+        try:
+            user = event.StringInserts[5] if len(event.StringInserts) > 5 else "unknown"
+            ip = event.StringInserts[18] if len(event.StringInserts) > 18 else "127.0.0.1"
+            if ip == "-" or ip == "::1": ip = "127.0.0.1"
+            return {
+                "timestamp": self._get_timestamp(event),
+                "user": user,
+                "srcip": ip,
+                "successful": self.event_ids[event_id],
+                "type": "win_auth",
+                "raw": f"WinEvent {event_id}: {user} from {ip}"
+            }
+        except Exception as e:
+            print(f"Error parsing Windows Event: {e}")
+            return None
+    def __repr__(self):
+        return "WindowsAuthParser"
 class AlertThrottler:
     def __init__(self, threshold=10, window=60):
         self.threshold = threshold  
@@ -635,6 +664,32 @@ class AuthWatcher:
             return False
         self.send_message(old_status, new_status, msg, authInfo=auth)
         return True
+class WindowsAuthWatcher(AuthWatcher):
+    def analyze_log(self):
+        server = 'localhost'
+        handle = win32evtlog.OpenEventLog(server, self.parser.log_type)
+        flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+        records_to_process = []
+        reached_cutoff = False
+        print_debug(f"Starting Windows Event Scan. Last scan: {self.last_scan_time}")
+        while not reached_cutoff:
+            events = win32evtlog.ReadEventLog(handle, flags, 0)
+            if not events:
+                break
+            for event in events:
+                record = self.parser.parse_event(event)
+                if record:
+                    if record['timestamp'] > self.last_scan_time:
+                        records_to_process.append(record)
+                    else:
+                        reached_cutoff = True
+                        break
+            if reached_cutoff: break
+        records_to_process.reverse() 
+        for record in records_to_process:
+            self.evaluate_threat(record)
+        self.save_state(time.time())
+        win32evtlog.CloseEventLog(handle)
 def main(stop_event=None):
     global PAUSED
     send_message(True,True,f"Register")
@@ -647,12 +702,12 @@ def main(stop_event=None):
         "alpine": AlpineParser,
         "freebsd": FreeBSDParser
     }
-    parser, log_path = get_native_parser()
+    parser, log_path, watcherObj = get_native_parser()
     if AUTH_LOG_PATH:
         log_path = AUTH_LOG_PATH
     if AUTH_PARSER:
         parser = PARSER_MAP.get(AUTH_PARSER.lower(), parser)
-    watcher = AuthWatcher(parser,log_path)
+    watcher = watcherObj(parser,log_path)
     print_debug(f"Selected parser {parser} and log path {log_path}")
     while True:
         pausedEpochServer = get_pause_state_server()

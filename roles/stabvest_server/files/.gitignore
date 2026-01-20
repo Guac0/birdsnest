@@ -1,6 +1,6 @@
 server*/
 test/
-build_assets/
+#build_assets/
 instance/
 repos/
 *.pem
