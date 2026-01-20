@@ -21,6 +21,7 @@ from concurrent_log_handler import ConcurrentRotatingFileHandler
 from logging.handlers import RotatingFileHandler
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import class_mapper
+from sqlalchemy import func
 import subprocess
 from pathlib import Path
 import platform
@@ -2209,12 +2210,12 @@ def get_global_config():
 
 # === FRONTEND DISPLAY ===
 
-@app.route("/api/dashboard_summary", methods=["POST"])
+@app.route("/dashboard_summary", methods=["POST"])
 @login_required
 def dashboard_summary():
     try:
         now = int(time.time())
-        one_hour_ago = now - 3600
+        one_hour_ago = now - 900
 
         # Subqueries for grouping
         auth_config_counts = db.session.query(AuthConfig.entity_type, func.count(AuthConfig.id)).group_by(AuthConfig.entity_type).all()
@@ -2250,9 +2251,10 @@ def dashboard_summary():
                 "roles": {r[0]: r[1] for r in db.session.query(WebUser.role, func.count(WebUser.role)).group_by(WebUser.role).all()}
             }
         }
+        logger.info(f"/dashboard_summary - Successful connection from {current_user.id} at {request.remote_addr}.")
         return jsonify(stats)
     except Exception as e:
-        logger.error(f"Dashboard Error: {e}")
+        logger.error(f"/dashboard_summary - Failed connection from {current_user.id} at {request.remote_addr}. Backend Error: {e}")
         return jsonify({"error": str(e)}), 500
     
 @app.route("/get_repo_history", methods=["POST"])
