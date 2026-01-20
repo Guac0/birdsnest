@@ -121,7 +121,7 @@ header p.lead{margin:0;color:var(--muted);font-size:14px;}
     <div class="stat-card">
       <h3>System Queues</h3>
       <p class="desc">Pending messages and outbound notifications.</p>
-      <p class="value" id="webhookCount">...</p>
+      <p class="value" id="webhookCount">Webhooks: ..., Ansible: ...</p>
       <p class="desc">Webhook Queue Size</p>
       <p class="desc">Total Messages: <span id="messagesTotal">...</span></p>
       <p class="desc">Activity (5m): <span id="messagesLast5">...</span></p>
@@ -198,14 +198,18 @@ async function verifyClientContext() {
 async function fetchStats(){
   try{
     const data = await postJSON(DASHBOARD_API, {});
+    if (!data || data.error) {
+        console.error("Backend error:", data?.error);
+        return;
+    }
     await verifyClientContext();
 
-    // 1. Agents & Queues
-    updateStatsElement('agentsCount', data.agents.total);
-    updateStatsElement('agentsActive', data.agents.active);
-    updateStatsElement('agentsStale', data.agents.stale);
-    updateStatsElement('agentsPaused', data.agents.paused);
-    updateStatsElement('webhookCount', data.webhooks.queue_count);
+    // Use ?. to prevent "Cannot read properties of undefined"
+    updateStatsElement('agentsCount', data.agents?.total ?? 0);
+    updateStatsElement('agentsActive', data.agents?.active ?? 0);
+    updateStatsElement('agentsStale', data.agents?.stale ?? 0);
+    updateStatsElement('agentsPaused', data.agents?.paused ?? 0);
+    updateStatsElement('webhookCount', `Webhooks: ${data.webhooks?.queue_count ?? 0}, Ansible: ${data.webhooks?.ansible_count ?? 0}`);
 
     // 2. Auth Records
     updateStatsElement('authTotal', data.auth_records.total);

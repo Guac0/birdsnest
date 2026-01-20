@@ -2210,52 +2210,62 @@ def get_global_config():
 
 # === FRONTEND DISPLAY ===
 
-@app.route("/dashboard_summary", methods=["POST"])
+@app.route("/api/dashboard_summary", methods=["POST"])
 @login_required
 def dashboard_summary():
     try:
         now = int(time.time())
-        one_hour_ago = now - 900
+        one_hour_ago = now - 3600 # 3600 seconds = 1 hour (your code had 900)
 
-        # Subqueries for grouping
-        auth_config_counts = db.session.query(AuthConfig.entity_type, func.count(AuthConfig.id)).group_by(AuthConfig.entity_type).all()
-        auth_record_types = db.session.query(AuthRecord.login_type, func.count(AuthRecord.id)).group_by(AuthRecord.login_type).all()
+        # Execution logic: Wrap subqueries to ensure they return lists
+        # .all() returns a list of Row objects which work like tuples
+        auth_config_raw = db.session.query(AuthConfig.entity_type, func.count(AuthConfig.id)).group_by(AuthConfig.entity_type).all()
+        auth_record_raw = db.session.query(AuthRecord.login_type, func.count(AuthRecord.id)).group_by(AuthRecord.login_type).all()
+        user_roles_raw = db.session.query(WebUser.role, func.count(WebUser.role)).group_by(WebUser.role).all()
 
         stats = {
             "agents": {
-                "total": Agent.query.count(),
-                "active": Agent.query.filter_by(lastStatus=True).count(),
-                "stale": Agent.query.filter_by(stale=True).count(),
-                "paused": Agent.query.filter(Agent.pausedUntil != "0").count()
+                "total": Agent.query.count() or 0,
+                "active": Agent.query.filter_by(lastStatus=True).count() or 0,
+                "stale": Agent.query.filter_by(stale=True).count() or 0,
+                "paused": Agent.query.filter(Agent.pausedUntil != "0").count() or 0
             },
             "webhooks": {
-                "queue_count": WebhookQueue.query.count()
+                "queue_count": WebhookQueue.query.count() or 0,
+                "ansible_count": AnsibleQueue.query.count() or 0
             },
-            "auth_globals": {c.key: c.value for c in AuthConfigGlobal.query.all()},
-            "auth_configs": {t: count for t, count in auth_config_counts},
+            "auth_globals": {str(c.key): bool(c.value) for c in AuthConfigGlobal.query.all()},
+            "auth_configs": {str(t): count for t, count in auth_config_raw},
             "auth_records": {
-                "total": AuthRecord.query.count(),
-                "by_type": {t: count for t, count in auth_record_types},
-                "recent_failed": AuthRecord.query.filter(AuthRecord.successful == False, AuthRecord.timestamp >= one_hour_ago).count(),
-                "recent_success": AuthRecord.query.filter(AuthRecord.successful == True, AuthRecord.timestamp >= one_hour_ago).count()
+                "total": AuthRecord.query.count() or 0,
+                "by_type": {str(t): count for t, count in auth_record_raw},
+                "recent_failed": AuthRecord.query.filter(AuthRecord.successful == False, AuthRecord.timestamp >= one_hour_ago).count() or 0,
+                "recent_success": AuthRecord.query.filter(AuthRecord.successful == True, AuthRecord.timestamp >= one_hour_ago).count() or 0
             },
-            # Carry over previous logic
             "incidents": {
-                "total": Incident.query.count(),
-                "new": Incident.query.filter_by(tag="New").count(),
-                "active": Incident.query.filter_by(tag="Active").count(),
-                "closed": Incident.query.filter_by(tag="Closed").count()
+                "total": Incident.query.count() or 0,
+                "new": Incident.query.filter_by(tag="New").count() or 0,
+                "active": Incident.query.filter_by(tag="Active").count() or 0,
+                "closed": Incident.query.filter_by(tag="Closed").count() or 0
             },
             "users": {
-                "total": WebUser.query.count(),
-                "roles": {r[0]: r[1] for r in db.session.query(WebUser.role, func.count(WebUser.role)).group_by(WebUser.role).all()}
-            }
+                "total": WebUser.query.count() or 0,
+                "roles": {str(r): count for r, count in user_roles_raw}
+            },
+            # Hardcode these to 0 if the tables don't exist yet to prevent Frontend 'undefined' errors
+            "tokens": AuthToken.query.count() if 'AuthToken' in globals() else 0
         }
-        logger.info(f"/dashboard_summary - Successful connection from {current_user.id} at {request.remote_addr}.")
+
+        # Debug print to terminal (Optional - remove for production)
+        # print(f"DEBUG: Returning Stats Keys: {stats.keys()}")
+
+        logger.info(f"/dashboard_summary - Successful connection from {current_user.id} at {request.remote_addr}")
         return jsonify(stats)
+
     except Exception as e:
-        logger.error(f"/dashboard_summary - Failed connection from {current_user.id} at {request.remote_addr}. Backend Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        # This is critical: if this returns a 500, the frontend 'data' variable becomes undefined
+        logger.error(f"/dashboard_summary Error: {str(e)}")
+        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
     
 @app.route("/get_repo_history", methods=["POST"])
 @login_required
