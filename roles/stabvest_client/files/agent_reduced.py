@@ -11,8 +11,29 @@ import time
 import urllib.request
 import urllib.error
 import ssl
+import shutil
+import base64
+from pathlib import Path
+import ast
 CONFIG_DEFAULTS = {
+    "AGENT_NAME": "test1",
+    "AUTH_TOKEN": "testtoken",
+    "SERVER_URL": "https://127.0.0.1:8080/",
+    "SERVER_TIMEOUT": 5,
+    "SLEEPTIME": 60,
     "DISARM": True,
+    "IPTABLES_PATH": "iptables",
+    "PORTS": [81],
+    "SERVICES": ["AxInstSV"],
+    "PACKAGES": [""],
+    "SERVICE_BACKUPS": {
+        "PathName": "C:\\\\Windows\\\\system32\\\\svchost.exe -k AxInstSVGroup",
+        "StartName": "LocalSystem",
+        "Dependencies": [],
+        "DisplayName": "ActiveX Installer (AxInstSV)",
+        "StartType": "Manual"
+    },
+    "PROTECTED_FOLDERS": ["var/www"],
     "DEBUG_PRINT": True,
     "BACKUPDIR": "",
     "LOGFILE": "log.txt",
@@ -21,16 +42,7 @@ CONFIG_DEFAULTS = {
     "MTU_DEFAULT": 1300,
     "MTU_MAX": 1514,
     "LINUX_DEFAULT_TTL": 64,
-    "AGENT_NAME": "test",
-    "AUTH_TOKEN": "testtoken",
-    "AGENT_TYPE": "stabvest",
-    "SERVER_URL": "https://127.0.0.1:8080/",
-    "SERVER_TIMEOUT": 5,
-    "SLEEPTIME": 60,
-    "PORTS": [],
-    "SERVICES": [""],
-    "PACKAGES": [""],
-    "SERVICE_BACKUPS": {}
+    "AGENT_TYPE": "stabvest"
 }
 def load_config(path):
     config = CONFIG_DEFAULTS.copy()
@@ -55,6 +67,7 @@ def load_config(path):
     return config
 CONFIG = load_config("config.json") 
 DISARM = CONFIG["DISARM"]
+IPTABLES_PATH = CONFIG["IPTABLES_PATH"]
 DEBUG_PRINT = CONFIG["DEBUG_PRINT"]
 BACKUPDIR = CONFIG["BACKUPDIR"]
 LOGFILE = CONFIG["LOGFILE"]
@@ -74,8 +87,10 @@ PORTS = CONFIG["PORTS"]
 SERVICES = CONFIG["SERVICES"]
 PACKAGES = CONFIG["PACKAGES"]
 SERVICE_BACKUPS = CONFIG["SERVICE_BACKUPS"]
+PROTECTED_FOLDERS = CONFIG["PROTECTED_FOLDERS"]
+if isinstance(PROTECTED_FOLDERS, str):
+    PROTECTED_FOLDERS = ast.literal_eval(PROTECTED_FOLDERS)
 PAUSED = False
-LASTPAUSETIME = int(time.time())
 CTX = ssl.create_default_context()
 CTX.check_hostname = False
 CTX.verify_mode = ssl.CERT_NONE
@@ -168,6 +183,10 @@ def get_system_details():
     return sysInfo
 def create_backup_primary(path,backupDir=BACKUPDIR):
     return True, ""
+def hash_id(*args):
+    combined = "|".join(map(str, args))
+    encoded = base64.b64encode(combined.encode("utf-8")).decode("utf-8")
+    return encoded
 def run_powershell(cmd,noisy=True):
     result = subprocess.run(
         ["powershell", "-NoProfile", "-Command", cmd],
@@ -188,54 +207,84 @@ def run_bash(cmd, noisy=True):
             text=True,
             check=False 
         )
+        if result.returncode != 0:
+            if noisy:
+                print_debug(f"Shell command failed with exit code {result.returncode}")
+                if result.stderr:
+                    print_debug(f"Shell stderr: {result.stderr.strip()}")
+            return ""
+        return result.stdout.strip()
     except FileNotFoundError:
         if noisy:
             print_debug("Error: The /bin/bash executable was not found.")
         return ""
+def run_git(args, cwd):
+    cmd = ["git", "-c", "http.sslVerify=false"] + args
+    result = subprocess.run(
+        cmd, 
+        cwd=cwd, 
+        capture_output=True, 
+        text=True, 
+        shell=(platform.system() == "Windows")
+    )
     if result.returncode != 0:
-        if noisy:
-            print_debug(f"Shell command failed with exit code {result.returncode}")
-            if result.stderr:
-                print_debug(f"Shell stderr: {result.stderr.strip()}")
-        return ""
-    return result.stdout.strip()
+        print_debug(f"Shell command failed with exit code {result.returncode}")
+        if result.stderr:
+            print_debug(f"Shell stderr: {result.stderr.strip()}")
+    return result
+def setup_git_agent(repo_dir,protected_folder,systemInfo=get_system_details()):
+    try:
+        if not os.path.exists(repo_dir):
+            run_git(["clone", f"{SERVER_URL}git/{hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])}.git",Path(repo_dir).name],os.path.dirname(Path(__file__).resolve()))
+        run_git(["config", "user.name", "Agent"],repo_dir)
+        run_git(["config", "user.email", f"agent@{systemInfo["hostname"]}.local"],repo_dir)
+        run_git(["checkout", "-b", "good"], cwd=repo_dir)
+        sync_protected_to_repo(repo_dir, protected_folder)
+        run_git(["add", "."], cwd=repo_dir)
+        run_git(["commit", "-m", "initialCommitGood"], cwd=repo_dir)
+        run_git(["push", "-u", "origin", "good"], cwd=repo_dir)
+        run_git(["checkout", "-b", "bad"], cwd=repo_dir)
+        sync_protected_to_repo(repo_dir, protected_folder)
+        run_git(["add", "."], cwd=repo_dir)
+        run_git(["commit", "-m", "initialCommitBad"], cwd=repo_dir)
+        run_git(["push", "-u", "origin", "bad"], cwd=repo_dir)
+        run_git(["checkout", "good"], cwd=repo_dir)
+        return True
+    except Exception as E:
+        print_debug(f"Critical error when running setup_git_agent: {E}")
+        return False
 def audit_command(command,package="",packageManager="apt"):
     return True, True
 def get_pause_status(file=STATUSFILE):
-    global LASTPAUSETIME
     try:
         with open(file,"r+") as f:
             firstline = f.readline().strip()
             if len(firstline) < 1:
                 return False,False,0
-            preferServer = firstline == "true"
-            pausedUntilEpoch = f.readline().strip()
-            if pausedUntilEpoch != 0:
+            preferServer = firstline.lower() == "true"
+            pausedUntilEpoch = float(f.readline().strip())
+            if round(pausedUntilEpoch) != 0:
                 if pausedUntilEpoch > time.time():
                     return preferServer, True, pausedUntilEpoch
                 else:
                     f.seek(0)
-                    f.write(str(preferServer))
-                    f.write(str(pausedUntilEpoch))
+                    f.write(f"{preferServer}\n0\n")
                     f.truncate()
                     return preferServer, False, 0
             else:
                 return preferServer, False, 0
     except FileNotFoundError:
-        with open(file,"w"):
-            f.write("false")
-            f.write("0")
+        with open(file,"w") as f:
+            f.write(f"false\n0\n")
         return False, False, 0
     except ValueError:
         with open(file,"w") as f:
-            f.write("false")
-            f.write("0")
+            f.write(f"false\n0\n")
         return False, False, 0
     except Exception as E:
         print_debug(f"get_pause_status(): unknown error - {E}")
         with open(file,"w") as f:
-            f.write("false")
-            f.write("0")
+            f.write(f"false\n0\n")
         return False, False, 0
 def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
     if not SERVER_URL:
@@ -243,14 +292,13 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
     url = SERVER_URL + "beacon"
     payload = {
         "name": AGENT_NAME,
-        "type": "stabvest",
         "hostname": systemInfo["hostname"],
         "ip": systemInfo["ipadd"],
         "os": systemInfo["os"],
         "executionUser": systemInfo["executionUser"],
         "executionAdmin": systemInfo["executionAdmin"],
         "auth": AUTH_TOKEN,
-        "beacon_type": AGENT_TYPE,
+        "agent_type": AGENT_TYPE,
         "oldStatus": oldStatus,
         "newStatus": newStatus,
         "message": message
@@ -282,14 +330,13 @@ def get_pause_state_server(systemInfo=get_system_details()):
     url = SERVER_URL + "get_pause"
     payload = {
         "name": AGENT_NAME,
-        "type": "stabvest",
         "hostname": systemInfo["hostname"],
         "ip": systemInfo["ipadd"],
         "os": systemInfo["os"],
         "executionUser": systemInfo["executionUser"],
         "executionAdmin": systemInfo["executionAdmin"],
         "auth": AUTH_TOKEN,
-        "beacon_type": AGENT_TYPE
+        "agent_type": AGENT_TYPE
     }
     try:
         data = json.dumps(payload).encode("utf-8")
@@ -302,7 +349,7 @@ def get_pause_state_server(systemInfo=get_system_details()):
         with urllib.request.urlopen(req, timeout=SERVER_TIMEOUT, context=CTX) as response:
             if response.getcode() == 200:
                 response_body = response.read().decode("utf-8")
-                timeInt = int(response_body)
+                timeInt = float(response_body)
                 print_debug(f"get_pause_state_server(): sent msg to server with response {response_body}")
                 return timeInt
             else:
@@ -321,7 +368,7 @@ def interface_get_primary():
     if system == "Windows":
         return interface_get_primary_windows(get_primary_ip())
     else:
-        return interface_get_primary_unix(get_primary_ip())
+        return interface_get_primary_linux(get_primary_ip())
 def interface_get_primary_windows(ip):
     output = subprocess.check_output(["ipconfig"], text=True, encoding="utf-8", errors="ignore")
     current_iface = None
@@ -334,7 +381,7 @@ def interface_get_primary_windows(ip):
         if "IPv4 Address" in line and ip in line:
             return current_iface
     return None
-def interface_get_primary_unix(ip):
+def interface_get_primary_linux(ip):
     try:
         output = subprocess.check_output(["ip", "-4", "addr"], text=True)
         iface = None
@@ -417,9 +464,9 @@ def interface_address_windows(interface,ip_address,subnet,gateway):
 def interface_address_linux(interface, ip_address, subnet, gateway):
     issues = []
     ip_addr_cmd = f"ip addr show dev {interface}"
-    addr_output = run_bash(ip_addr_cmd, noisy=False)
+    addr_output = run_bash(ip_addr_cmd, noisy=True)
     ip_route_cmd = "ip route show default"
-    route_output = run_bash(ip_route_cmd, noisy=False)
+    route_output = run_bash(ip_route_cmd, noisy=True)
     if not addr_output:
         print_debug(f"interface_address_linux({interface}): Failed to query interface IP (ip addr)")
         return False, False, [f"Failed to query interface {interface} (ip addr error)."]
@@ -456,8 +503,8 @@ def interface_address_linux(interface, ip_address, subnet, gateway):
             else:
                 issues.append(f"Missing Gateway Address for interface {interface}, RESTORED {gateway}.")
     if status_fix:
-        addr_output_new = run_bash(ip_addr_cmd, noisy=False)
-        route_output_new = run_bash(ip_route_cmd, noisy=False)
+        addr_output_new = run_bash(ip_addr_cmd, noisy=True)
+        route_output_new = run_bash(ip_route_cmd, noisy=True)
         has_address_new = bool(re.search(fr"inet\s+{re.escape(cidr)}\s+", addr_output_new))
         has_gateway_new = bool(re.search(fr"default\s+via\s+{re.escape(gateway)}\s+dev\s+{interface}\s+", route_output_new))
         new_status = has_address_new and has_gateway_new
@@ -469,7 +516,7 @@ def interface_mtu(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maxi
     if system == "Windows":
         return interface_mtu_windows(interface,mtu_minimum,mtu_maximum,mtu_default)
     else:
-        return interface_mtu_windows(interface,mtu_minimum,mtu_maximum,mtu_default)
+        return interface_mtu_linux(interface,mtu_minimum,mtu_maximum,mtu_default)
 def interface_mtu_windows(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maximum=MTU_MAX,mtu_default=MTU_DEFAULT):
     ps_get_mtu = fr"""
     Get-NetIPInterface -InterfaceAlias "{interface}" -AddressFamily IPv4 |
@@ -565,9 +612,9 @@ def interface_ttl_linux():
     IPV4_TTL_PARAM = "net.ipv4.ip_default_ttl"
     IPV6_HL_PARAM = "net.ipv6.conf.default.hop_limit" 
     ttl_query_cmd = f"sysctl -n {IPV4_TTL_PARAM}"
-    current_ttl_output = run_bash(ttl_query_cmd, noisy=False)
+    current_ttl_output = run_bash(ttl_query_cmd, noisy=True)
     hl_query_cmd = f"sysctl -n {IPV6_HL_PARAM}"
-    current_hl_output = run_bash(hl_query_cmd, noisy=False)
+    current_hl_output = run_bash(hl_query_cmd, noisy=True)
     try:
         current_ttl = int(current_ttl_output)
     except (ValueError, TypeError):
@@ -589,7 +636,7 @@ def interface_ttl_linux():
             status_fix = False
         else:
             print_debug(f"Remediating IPv4 TTL from {current_ttl} to {LINUX_DEFAULT_TTL}")
-            if run_bash(set_ttl_cmd, noisy=False):
+            if run_bash(set_ttl_cmd, noisy=True):
                 issues.append(f"Bad IPv4 TTL ({current_ttl}) detected, RESTORED to {LINUX_DEFAULT_TTL}.")
             else:
                 issues.append(f"Bad IPv4 TTL ({current_ttl}) detected, FAILED to restore.")
@@ -601,15 +648,15 @@ def interface_ttl_linux():
             status_fix = False
         else:
             print_debug(f"Remediating IPv6 Hop Limit from {current_hl} to {LINUX_DEFAULT_TTL}")
-            if run_bash(set_hl_cmd, noisy=False):
+            if run_bash(set_hl_cmd, noisy=True):
                 issues.append(f"Bad IPv6 Hop Limit ({current_hl}) detected, RESTORED to {LINUX_DEFAULT_TTL}.")
             else:
                 issues.append(f"Bad IPv6 Hop Limit ({current_hl}) detected, FAILED to restore.")
                 status_fix = False
     new_status = False
     if status_fix:
-        new_ttl_output = run_bash(ttl_query_cmd, noisy=False)
-        new_hl_output = run_bash(hl_query_cmd, noisy=False)
+        new_ttl_output = run_bash(ttl_query_cmd, noisy=True)
+        new_hl_output = run_bash(hl_query_cmd, noisy=True)
         try:
             new_ttl = int(new_ttl_output)
             new_hl = int(new_hl_output)
@@ -772,7 +819,7 @@ def firewall_rules_audit(port,direction="in",action="block"):
     if system == "Windows":
         return firewall_rules_audit_windows(port,direction,action)
     else:
-        return firewall_rules_audit_windows(port,direction,action)
+        return firewall_rules_audit_linux(port,direction,action)
 def firewall_rules_audit_windows(port,direction="in",action="block"):
     ps_query = fr"""
     $rules = Get-NetFirewallPortFilter |
@@ -813,7 +860,7 @@ def firewall_rules_audit_linux(port, direction="in", action="block"):
     matching_rules = []
     chain = "INPUT" if direction.lower() == "in" else "OUTPUT"
     targets = ["DROP", "REJECT"] if action.lower() == "block" else ["ACCEPT"]
-    ip_query_cmd = f"sudo iptables -t filter -nL {chain} --line-numbers"
+    ip_query_cmd = f"{IPTABLES_PATH} -t filter -nL {chain} --line-numbers"
     output = run_bash(ip_query_cmd)
     if not output:
         return [f"Could not run '{ip_query_cmd}' or no rules found."], []
@@ -860,7 +907,7 @@ def firewall_rules_delete(rules,port):
     if system == "Windows":
         return firewall_rules_delete_windows(rules,port)
     else:
-        return firewall_rules_delete_windows(rules)
+        return firewall_rules_delete_linux(rules)
 def firewall_rules_delete_windows(rules,port):
     issues = []
     status = True
@@ -889,7 +936,7 @@ def firewall_rules_delete_linux(rules):
             issues.append(f"FAILED: Rule {display_name} is missing Chain or Index and cannot be deleted.")
             overall_status = False
             continue
-        delete_cmd = f"sudo iptables -D {chain} {index}"
+        delete_cmd = f"{IPTABLES_PATH} -D {chain} {index}"
         if DISARM:
             issues.append(f"DISARMED, but told to remove firewall rule: {chain} rule #{index}")
             continue
@@ -901,7 +948,7 @@ def firewall_rules_delete_linux(rules):
                 issues.append(f"FAILED to remove firewall rule from {chain} at index #{index}. Command failed.")
                 overall_status = False
     if not DISARM:
-        persist_cmd = "sudo /sbin/iptables-save > /etc/sysconfig/iptables"
+        persist_cmd = f"/sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
         if overall_status:
             print_debug("Attempting to persist iptables rules...")
             if run_bash(persist_cmd):
@@ -954,7 +1001,7 @@ def firewall_rules_create_linux(port, direction, action, protocol="tcp"):
         module_spec = ""
         port_flag = "" 
     rule_spec = f"-p {protocol.lower()} {module_spec} {port_flag} {port} -j {target}"
-    iptables_cmd = f"sudo iptables -A {chain} {rule_spec}"
+    iptables_cmd = f"{IPTABLES_PATH} -A {chain} {rule_spec}"
     rule_description = f"{target} on port {port} ({protocol.upper()}) {direction.upper()}"
     if DISARM:
         print_debug(f"firewall_rules_create_linux(): DISARMED, but told to create rule: {iptables_cmd}")
@@ -963,7 +1010,7 @@ def firewall_rules_create_linux(port, direction, action, protocol="tcp"):
         print_debug(f"Creating iptables rule: {iptables_cmd}")
         if run_bash(iptables_cmd) == "":
             issues.append(f"SUCCESSFULLY created firewall rule: {rule_description} (running kernel).")
-            persist_cmd = "sudo /sbin/iptables-save > /etc/sysconfig/iptables"
+            persist_cmd = f"/sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
             print_debug("Attempting to persist iptables rules...")
             if run_bash(persist_cmd):
                 issues.append("SUCCESS: Running iptables rules saved to disk (persistent).")
@@ -1009,11 +1056,11 @@ def firewall_policy_audit_linux(direction):
         chain = "OUTPUT"
     else:
         return False, False, [f"Failed: Invalid direction '{direction}'. Must be 'Inbound' or 'Outbound'."]
-    ip_query_cmd = f"sudo iptables -t filter -S {chain}"
+    ip_query_cmd = f"{IPTABLES_PATH} -t filter -S {chain}"
     output = run_bash(ip_query_cmd)
     if not output:
         return False, False, [f"Failed to load iptables policy for {chain} due to shell error."]
-    policy_regex = re.compile(fr"^-P\s+{chain}\s+(?P<action>ACCEPT|DROP|REJECT)\s+\[\d+:\d+\]")
+    policy_regex = re.compile(fr"^-P\s+{chain}\s+(?P<action>ACCEPT|DROP|REJECT)(?:\s+\[\d+:\d+\])?")
     match = policy_regex.search(output)
     if not match:
         return False, False, [f"Failed to parse iptables policy for {chain}. Unexpected output."]
@@ -1074,10 +1121,63 @@ def firewall_main(protectedPorts):
             for issue in result_issues:
                 issues.append(issue)
     return oldStatus, newStatus, issues
-def file_restore():
-    return True
-def file_diff():
-    return True
+def sync_protected_to_repo(repo_dir,protected_folder):
+    shutil.copytree(protected_folder, repo_dir, dirs_exist_ok=True)
+    return repo_dir
+def restore_protected_from_repo(repo_dir,protected_folder):
+    shutil.copytree(repo_dir, protected_folder, dirs_exist_ok=True)
+def get_latest_commit_stats(branch_name,repo_dir):
+    result = run_git(["show", "--format=", "--name-status", branch_name],repo_dir)
+    if result.returncode != 0 or not result.stdout.strip():
+        return {"count": 0, "files": []}
+    lines = result.stdout.strip().split('\n')
+    files_info = []
+    for line in lines:
+        if not line: continue
+        parts = line.split(maxsplit=1)
+        if len(parts) == 2:
+            status, file_path = parts
+            status_map = {'M': 'Modified', 'A': 'Created', 'D': 'Deleted'}
+            friendly_status = status_map.get(status, status)
+            files_info.append(f"{friendly_status}: {file_path}")
+    return {
+        "count": len(files_info),
+        "files": files_info
+    }
+def file_protect_main(repo_dir,protected_folder):
+    try:
+        run_git(["checkout", "good"],repo_dir)
+        run_git(["pull", "origin", "good"],repo_dir)
+        sync_protected_to_repo(repo_dir,protected_folder)
+        run_git(["add", "."],repo_dir)
+        diff_check = run_git(["diff", "--cached", "--quiet"],repo_dir)
+        changes = {}
+        if diff_check.returncode != 0:
+            try:
+                run_git(["stash"],repo_dir)
+                run_git(["checkout", "bad"],repo_dir)
+                run_git(["pull", "origin", "bad"],repo_dir)
+                stash_apply = run_git(["stash", "pop"],repo_dir)
+                if stash_apply.returncode != 0:
+                    run_git(["checkout", "--theirs", "."],repo_dir)
+                    run_git(["add", "."],repo_dir)
+                    run_git(["commit", "-m", f"auto-resolveconflict"],repo_dir)
+                run_git(["add", "."],repo_dir)
+                run_git(["commit", "-m", f"auto-malicious{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}"],repo_dir)
+                run_git(["push", "-u", "origin", "bad"],repo_dir)
+                changes = get_latest_commit_stats("bad",repo_dir)
+                run_git(["checkout", "good"],repo_dir)
+                if not DISARM:
+                    restore_protected_from_repo(repo_dir,protected_folder)
+                    return False, True, [f"File changes occurred and were successfully restored. Affected files {changes["count"]}: {changes["files"]}"]
+                else:
+                    return False, False, [f"File changes occurred, DISARMED. Affected files {changes["count"]}: {changes["files"]}"]
+            except Exception as E:
+                return False, False, [f"File changes occurred and failed to restore known good state: {E}"]
+        else:
+            return True,True,[]
+    except Exception as E:
+        return False, False, [f"Unexpected error when attempting to check file integrity status: {E}"]
 def service_audit(service):
     system = platform.system()
     if system == "Windows":
@@ -1146,7 +1246,7 @@ def service_audit_linux(service_name):
     systemctl_show_cmd = f"systemctl show --no-pager {service_name}"
     raw = run_bash(systemctl_show_cmd).strip()
     if not raw:
-        systemctl_check = run_bash(f"systemctl status {service_name}", noisy=False)
+        systemctl_check = run_bash(f"systemctl status {service_name}", noisy=True)
         if "not-found" in systemctl_check.lower():
             return False, False, [f"ServiceNotFound for service {service_name}."]
         else:
@@ -1164,12 +1264,13 @@ def service_audit_linux(service_name):
     oldStatus = is_running and is_enabled
     newStatus = oldStatus
     if not is_running:
-        start_cmd = f"sudo systemctl start {service_name}"
+        start_cmd = f"systemctl start {service_name}"
         if DISARM:
             issues.append(f"Service {service_name} is stopped, DISARMED.")
             newStatus = False
         else:
             if run_bash(start_cmd):
+                time.sleep(1)
                 verify_cmd = f"systemctl is-active {service_name}"
                 if run_bash(verify_cmd).strip() == "active":
                     issues.append(f"Service {service_name} was stopped, RESTORED to START state.")
@@ -1179,7 +1280,7 @@ def service_audit_linux(service_name):
             else:
                 issues.append(f"Service {service_name} was stopped, FAILED to execute start command.")
     if not is_enabled:
-        enable_cmd = f"sudo systemctl enable {service_name}"
+        enable_cmd = f"systemctl enable {service_name}"
         if DISARM:
             issues.append(f"Service {service_name} not set to automatic start (disabled), DISARMED.")
         else:
@@ -1268,17 +1369,17 @@ def service_uninstall_linux(service, package):
     service_present_initial = False
     if package:
         rpm_check_cmd = f"rpm -q {package}"
-        rpm_output = run_bash(rpm_check_cmd, noisy=False)
+        rpm_output = run_bash(rpm_check_cmd, noisy=True)
         if "is not installed" not in rpm_output and rpm_output != "":
             package_present_initial = True
             print_debug(f"Package {package} is installed.")
         else:
             if not DISARM:
-                install_cmd = f"sudo dnf install -y {package}"
+                install_cmd = f"dnf install -y {package}"
                 print_debug(f"Attempting to install package {package}...")
                 if run_bash(install_cmd):
                     issues.append(f"Missing required package {package}, RESTORED by installing package.")
-                    if "is not installed" not in run_bash(rpm_check_cmd, noisy=False) and run_bash(rpm_check_cmd, noisy=False) != "":
+                    if "is not installed" not in run_bash(rpm_check_cmd, noisy=True) and run_bash(rpm_check_cmd, noisy=True) != "":
                         package_present_after = True
                     else:
                         package_present_after = False
@@ -1294,7 +1395,7 @@ def service_uninstall_linux(service, package):
         package_present_after = True
     if service:
         svc_check_cmd = f"systemctl show --no-pager {service}"
-        svc_output = run_bash(svc_check_cmd, noisy=False)
+        svc_output = run_bash(svc_check_cmd, noisy=True)
         if "not-found" not in svc_output and svc_output != "":
             service_present_initial = True
             service_present_after = True 
@@ -1302,7 +1403,7 @@ def service_uninstall_linux(service, package):
             issues.append(f"Missing service unit file {service}.")
             service_present_after = False
             if not package_present_initial and package_present_after and service_present_initial == False:
-                 if "not-found" not in run_bash(svc_check_cmd, noisy=False) and run_bash(svc_check_cmd, noisy=False) != "":
+                 if "not-found" not in run_bash(svc_check_cmd, noisy=True) and run_bash(svc_check_cmd, noisy=True) != "":
                     service_present_after = True
                     issues.append(f"Service {service} restored by package installation.")
     else:
@@ -1454,6 +1555,9 @@ def service_integrity_linux(service_name, backupDict):
                 current_attrs["Requires"] = sorted([d.lower() for d in value.split()])
     expected_exec_start = backupDict.get("ExecStart", "").strip()
     expected_user = backupDict.get("User", "").strip()
+    expected_dependencies = backupDict.get("Dependencies", [])
+    if isinstance(expected_dependencies, str):
+        expected_dependencies = ast.literal_eval(expected_dependencies)
     expected_dependencies = sorted([d.lower() for d in backupDict.get("Dependencies", [])])
     current_exec_start = current_attrs.get("ExecStart", "").strip()
     if current_exec_start.lower() != expected_exec_start.lower():
@@ -1529,7 +1633,7 @@ def service_backup_linux(service_name):
             key, value = line.split('=', 1)
             systemd_attrs[key] = value
     systemctl_enabled_cmd = f"systemctl is-enabled {service_name}"
-    enable_state = run_bash(systemctl_enabled_cmd, noisy=False).strip().lower()
+    enable_state = run_bash(systemctl_enabled_cmd, noisy=True).strip().lower()
     exec_start_line = systemd_attrs.get("ExecStart", "")
     if exec_start_line:
         path_name = exec_start_line.split('=', 1)[-1].strip()
@@ -1598,7 +1702,7 @@ def service_lastrun_windows(service_name):
     oldStatus = False
     newStatus = False 
     ps_exit_code_query = fr"sc.exe qc {service_name}"
-    qc_output = run_powershell(ps_exit_code_query, noisy=False)
+    qc_output = run_powershell(ps_exit_code_query, noisy=True)
     if not qc_output:
         issues.append(f"Service Status: {current_status}. FAILED to query exit codes via sc.exe.")
         return oldStatus, newStatus, issues
@@ -1621,8 +1725,8 @@ def service_lastrun_linux(service_name):
     newStatus = True  
     issues = []
     systemctl_active_cmd = f"systemctl is-active {service_name}"
-    current_status = run_bash(systemctl_active_cmd, noisy=False).strip()
-    systemctl_check = run_bash(f"systemctl status {service_name}", noisy=False)
+    current_status = run_bash(systemctl_active_cmd, noisy=True).strip()
+    systemctl_check = run_bash(f"systemctl status {service_name}", noisy=True)
     if "not-found" in systemctl_check.lower():
         oldStatus = False
         newStatus = False
@@ -1633,7 +1737,7 @@ def service_lastrun_linux(service_name):
     oldStatus = False
     newStatus = False 
     show_cmd = f"systemctl show --no-pager {service_name}"
-    show_output = run_bash(show_cmd, noisy=False)
+    show_output = run_bash(show_cmd, noisy=True)
     exit_code = "N/A"
     data = {}
     for line in show_output.splitlines():
@@ -1645,8 +1749,8 @@ def service_lastrun_linux(service_name):
         exit_code_raw = data.get("ExecMainCode", data.get("ExecStopCode", None))
         if exit_code_raw is not None:
              exit_code = exit_code_raw
-    journal_cmd = f"sudo journalctl -u {service_name} -n 5 --no-pager"
-    journal_output = run_bash(journal_cmd, noisy=False).strip()
+    journal_cmd = f"journalctl -u {service_name} -n 5 --no-pager"
+    journal_output = run_bash(journal_cmd, noisy=True).strip()
     analysis_message = f"Service {service_name} Status: {current_status}."
     if current_status == "failed":
         analysis_message += " Service transitioned to a FAILED state."
@@ -1708,6 +1812,12 @@ def reregister():
     send_message(True,True,"reregister")
     return True
 def init_int_vars(interface=interface_get_primary()):
+    system = platform.system()
+    if system == "Windows":
+        return init_int_vars_windows(interface)
+    else:
+        return init_int_vars_linux(interface)
+def init_int_vars_windows(interface=interface_get_primary()):
     query_cmd = fr"""
         Get-NetIPConfiguration -InterfaceAlias '{interface}' | 
         Select-Object IPv4Address, IPv4DefaultGateway | ConvertTo-Json
@@ -1752,6 +1862,31 @@ def init_int_vars(interface=interface_get_primary()):
         gateway = None
     print_debug(f"init_int_vars({interface}): {ip_address} {prefix} {gateway}")
     return ip_address, prefix, gateway
+def init_int_vars_linux(interface):
+    ip_address = None
+    prefix = None
+    gateway = None
+    try:
+        cmd = ["ip", "-j", "addr", "show", interface]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        addr_data = json.loads(result.stdout)
+        if addr_data:
+            ipv4_infos = [addr for addr in addr_data[0].get("addr_info", []) if addr.get("family") == "inet"]
+            if ipv4_infos:
+                ip_address = ipv4_infos[0].get("local")
+                prefix = ipv4_infos[0].get("prefixlen")
+    except (subprocess.CalledProcessError, json.JSONDecodeError, IndexError) as e:
+        print_debug(f"init_int_vars_linux({interface}): Failed to query IP address. Error: {e}")
+    try:
+        cmd = ["ip", "-j", "route", "show", "default", "dev", interface]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        route_data = json.loads(result.stdout)
+        if route_data:
+            gateway = route_data[0].get("gateway")
+    except (subprocess.CalledProcessError, json.JSONDecodeError, IndexError) as e:
+        print_debug(f"init_int_vars_linux({interface}): Failed to query gateway. Error: {e}")
+    print_debug(f"init_int_vars_linux({interface}): {ip_address} {prefix} {gateway}")
+    return ip_address, prefix, gateway
 def test_network():
     interface = interface_get_primary() 
     ip_address,prefix,gateway = init_int_vars()
@@ -1767,6 +1902,12 @@ def test_main():
 def main(stop_event=None):
     global PAUSED
     ip_address,prefix,gateway = init_int_vars() 
+    systemInfo = get_system_details()
+    agent_id = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
+    repo_url = os.path.join(f"{SERVER_URL}git",f"{agent_id}.git")
+    repo_dir = f"{os.path.join(os.path.dirname(Path(__file__).resolve()),f"{agent_id}.git")}"
+    send_message(True,True,f"Register")
+    setup_git_agent(repo_dir,PROTECTED_FOLDERS[0]) 
     oldStatus = True
     newStatus = True
     oldIssues = []
@@ -1785,21 +1926,18 @@ def main(stop_event=None):
             if pausedEpochServer == 0:
                 if pausePreferServer:
                     with open(STATUSFILE,"w") as f:
-                        f.write("true")
-                        f.write("0")
+                        f.write(f"true\n0\n")
                     pausedStatus = False
                     pausedEpochLocal = 0
             else:
                 if pausedEpochServer == 1:
                     with open(STATUSFILE,"w") as f:
-                        f.write(str(pausePreferServer))
-                        f.write("0")
+                        f.write(f"{pausePreferServer}\n0\n")
                     pausedStatus = False
                     pausedEpochLocal = 0
                 else:
                     with open(STATUSFILE,"w") as f:
-                        f.write(str(pausePreferServer))
-                        f.write(str(pausedEpochServer))
+                        f.write(f"{pausePreferServer}\n{pausedEpochServer}\n")
                     pausedStatus = True
                     pausedEpochLocal = pausedEpochServer
         sent_msg = False
@@ -1848,6 +1986,24 @@ def main(stop_event=None):
                 newStatus = False
             for issue in result_issues:
                 newIssues.append(f"Service - {issue}")
+                print_debug(newIssues[-1])
+                if newIssues[-1] not in oldIssues:
+                    send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                    sent_msg = True
+                else:
+                    suppressed_send = True
+            print_debug(f"main(): running file checks")
+            result_issues_main = []
+            for protected_folder in PROTECTED_FOLDERS:
+                result_oldStatus, result_newStatus, result_issues = file_protect_main(repo_dir,protected_folder)
+                if not result_oldStatus:
+                    oldStatus = False
+                if not result_newStatus:
+                    newStatus = False
+                for issue in result_issues:
+                    result_issues_main.append(f"{issue}")
+            for issue in result_issues_main:
+                newIssues.append(f"File - {issue}")
                 print_debug(newIssues[-1])
                 if newIssues[-1] not in oldIssues:
                     send_message(result_oldStatus,result_newStatus,newIssues[-1])

@@ -1,0 +1,4 @@
+subnet,ip,hostname,os,services
+192.168.240.0/20,192.168.203.95,databasevm,Ubuntu 22.04 Desktop,MySQL
+192.168.240.0/20,192.168.199.103,wordpressvm,Ubuntu 22.04 Desktop,"Wordpress,Apache2"
+192.168.240.0/20,192.168.200.209,jumpboxandrew,Debian12,Desktop

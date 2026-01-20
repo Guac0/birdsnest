@@ -121,8 +121,8 @@ header p.lead{margin:0;color:var(--muted);font-size:14px;}
     <div class="stat-card">
       <h3>System Queues</h3>
       <p class="desc">Pending messages and outbound notifications.</p>
-      <p class="value" id="webhookCount">Webhooks: ..., Ansible: ...</p>
-      <p class="desc">Webhook Queue Size</p>
+      <p class="value" id="webhookCount">Webhooks: ...</p>
+      <p class="value" id="ansibleCount">Ansible: ...</p>
       <p class="desc">Total Messages: <span id="messagesTotal">...</span></p>
       <p class="desc">Activity (5m): <span id="messagesLast5">...</span></p>
     </div>
@@ -209,7 +209,8 @@ async function fetchStats(){
     updateStatsElement('agentsActive', data.agents?.active ?? 0);
     updateStatsElement('agentsStale', data.agents?.stale ?? 0);
     updateStatsElement('agentsPaused', data.agents?.paused ?? 0);
-    updateStatsElement('webhookCount', `Webhooks: ${data.webhooks?.queue_count ?? 0}, Ansible: ${data.webhooks?.ansible_count ?? 0}`);
+    updateStatsElement('webhookCount', `Webhooks: ${data.webhooks?.queue_count ?? 0}`);
+    updateStatsElement('ansibleCount', `Ansible: ${data.webhooks?.ansible_count ?? 0}`);
 
     // 2. Auth Records
     updateStatsElement('authTotal', data.auth_records.total);

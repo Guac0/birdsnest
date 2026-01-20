@@ -121,7 +121,7 @@ def draw_main(hosts,file_path,file_name,max_host_per_row = 4):
     file = drawpyo.File()
     file.file_path = file_path
     file.file_name = file_name
-    page = drawpyo.Page("""file=file""")
+    page = drawpyo.Page(file=file)
         #width=100, # will auto expand
         #height=100
     #)

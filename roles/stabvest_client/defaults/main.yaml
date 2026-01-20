@@ -4,14 +4,8 @@
 #stabvest_task_create: false
 #stabvest_task_name: "stabvest"
 #stabvest_task_interval: 300 #seconds. cron needs this to be an even minutes value (so divisible by 60)
-#stabvest_agent_executable: "agent_Windows_10.exe" # TODO: dynamic
 stabvest_agent_executable: "agent.py" 
-#stabvest_tester_executable: "agent_tester_Windows_10.exe" # TODO: dynamic
 stabvest_tester_executable: "agent_tester.py"
-#stabvest_agent_executable: "agent_ubuntu_24.04_Ubuntu.bin" # TODO: dynamic
-#stabvest_tester_executable: "agent_tester_ubuntu_24.04_Ubuntu.bin" # TODO: dynamic
-#stabvest_agent_executable: "agent_rocky_9.7_Rocky_Linux_9.7_(Blue_Onyx).bin" # TODO: dynamic
-#stabvest_tester_executable: "agent_rocky_9.7_Rocky_Linux_9.7_(Blue_Onyx)" # TODO: dynamic
 stabvest_include_tester: true
 stabvest_service_start: true
 
@@ -39,12 +33,6 @@ stabvest_service_backups:
   Dependencies: "['WAS','HTTP']"
   DisplayName: "World Wide Web Publishing Service"
   StartType: "Auto"
-#stabvest_service_backups:
-#  PathName: "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup"
-#  StartName: "LocalSystem"
-#  Dependencies: null
-#  DisplayName: "ActiveX Installer (AxInstSV)"
-#  StartType: "Manual"
 #stabvest_service_backups:
 #  PathName: "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup"
 #  StartName: "LocalSystem"
