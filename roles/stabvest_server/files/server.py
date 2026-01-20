@@ -2208,6 +2208,53 @@ def get_global_config():
     return jsonify({c.key: c.value for c in configs})
 
 # === FRONTEND DISPLAY ===
+
+@app.route("/api/dashboard_summary", methods=["POST"])
+@login_required
+def dashboard_summary():
+    try:
+        now = int(time.time())
+        one_hour_ago = now - 3600
+
+        # Subqueries for grouping
+        auth_config_counts = db.session.query(AuthConfig.entity_type, func.count(AuthConfig.id)).group_by(AuthConfig.entity_type).all()
+        auth_record_types = db.session.query(AuthRecord.login_type, func.count(AuthRecord.id)).group_by(AuthRecord.login_type).all()
+
+        stats = {
+            "agents": {
+                "total": Agent.query.count(),
+                "active": Agent.query.filter_by(lastStatus=True).count(),
+                "stale": Agent.query.filter_by(stale=True).count(),
+                "paused": Agent.query.filter(Agent.pausedUntil != "0").count()
+            },
+            "webhooks": {
+                "queue_count": WebhookQueue.query.count()
+            },
+            "auth_globals": {c.key: c.value for c in AuthConfigGlobal.query.all()},
+            "auth_configs": {t: count for t, count in auth_config_counts},
+            "auth_records": {
+                "total": AuthRecord.query.count(),
+                "by_type": {t: count for t, count in auth_record_types},
+                "recent_failed": AuthRecord.query.filter(AuthRecord.successful == False, AuthRecord.timestamp >= one_hour_ago).count(),
+                "recent_success": AuthRecord.query.filter(AuthRecord.successful == True, AuthRecord.timestamp >= one_hour_ago).count()
+            },
+            # Carry over previous logic
+            "incidents": {
+                "total": Incident.query.count(),
+                "new": Incident.query.filter_by(tag="New").count(),
+                "active": Incident.query.filter_by(tag="Active").count(),
+                "closed": Incident.query.filter_by(tag="Closed").count()
+            },
+            "users": {
+                "total": WebUser.query.count(),
+                "roles": {r[0]: r[1] for r in db.session.query(WebUser.role, func.count(WebUser.role)).group_by(WebUser.role).all()}
+            }
+        }
+        return jsonify(stats)
+    except Exception as e:
+        logger.error(f"Dashboard Error: {e}")
+        return jsonify({"error": str(e)}), 500
+    
 @app.route("/get_repo_history", methods=["POST"])
 @login_required
 def get_repo_history():
@@ -2268,7 +2315,6 @@ def get_commit_diff():
         logger.warning(f"/get_commit_diff - Failed connection from {current_user.id} at {request.remote_addr}. Git error: {str(E)}")
 
 @login_required
-@analyst_required
 @app.route('/list_authconfig', methods=['POST'])
 def list_authconfig():
     logger.info(f"/list_authconfig - Successful connection from {current_user.id} at {request.remote_addr}.")
