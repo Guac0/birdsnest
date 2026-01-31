@@ -830,22 +830,22 @@ def firewall_rules_audit_windows(port,direction="in",action="block"):
     $rules = Get-NetFirewallPortFilter |
         Where-Object {{
             $lp = $_.LocalPort
-
+            if ($lp -eq 'Any') {{ return $true }}
             if ($lp -like '*,*') {{
                 return $lp.Split(',') -contains '{port}'
             }}
 
             if ($lp -like '*-*') {{
-                $a, $b = $lp.Split('-')
+                $range = $lp.Split('-')
+                $a = [int]$range[0].Trim()
+                $b = [int]$range[1].Trim()
                 return ({port} -ge [int]$a -and {port} -le [int]$b)
             }}
-
             return $lp -eq '{port}'
         }} |
         Get-NetFirewallRule |
         Where-Object {{ $_.Direction -eq '{direction}' -and $_.Action -eq '{action}' }} |
         Select-Object Name, DisplayName, Action, Direction, Profile
-
     if (-not $rules) {{
         "none found"
     }} else {{
@@ -886,11 +886,12 @@ def firewall_rules_audit_linux(port, direction="in", action="block"):
                 port_definition = match.group('port_spec')
                 is_port_match = False
                 if port_definition:
+                    separator = ':' if ':' in port_definition else '-'
                     if ',' in port_definition and str(port) in port_definition.split(','):
                         is_port_match = True
-                    elif '-' in port_definition:
+                    if separator in port_definition:
                         try:
-                            a, b = map(int, port_definition.split('-'))
+                            a, b = map(int, port_definition.split(separator))
                             target_port = int(port)
                             if a <= target_port <= b:
                                 is_port_match = True
@@ -1151,6 +1152,7 @@ def apply_security_policy(target_path):
         for cmd in cmds:
             subprocess.run(cmd, capture_output=True)
     else:
+        os.chmod(target_path, 0o744)
         for root, dirs, files in os.walk(target_path):
             for d in dirs:
                 os.chmod(os.path.join(root, d), 0o744)
