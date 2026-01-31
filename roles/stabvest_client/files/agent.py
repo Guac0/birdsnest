@@ -1974,7 +1974,7 @@ def main(stop_event=None):
     systemInfo = get_system_details()
     agent_id = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
     repo_url = os.path.join(f"{SERVER_URL}git",f"{agent_id}.git")
-    repo_dir = f"{os.path.join(os.path.dirname(Path(__file__).resolve()),f"{agent_id}.git")}"
+    repo_dir = f"{os.path.join(os.path.dirname(Path(__file__).resolve()),f'{agent_id}.git')}"
     send_message(True,True,f"Register")
     setup_git_agent(repo_dir,PROTECTED_FOLDERS[0]) 
     oldStatus = True
