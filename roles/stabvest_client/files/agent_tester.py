@@ -456,6 +456,7 @@ def test_firewall_blockrule(port,dir):
     pass
 
 def test_firewall_blockrange(port,dir):
+    port=int(port)
     # implements w3-4
     if SYSTEM == "Windows":
         portrange=f"{port-10}-{port+10}"
@@ -662,9 +663,9 @@ def main():
         if test in ["quit","stop","exit"]:
             return
         try:
-            test, sep, after = test.partition(":")[0]
-            if not sep:
-                raise AssertionError("Failed to parse input - enter only the test name (such as 'f1')")
+            test = test.partition(":")[0]
+            #if not sep:
+            #    raise AssertionError("Failed to parse input - enter only the test name (such as 'f1')")
             if test not in OPTIONS:
                 raise AssertionError(f"Unknown test name: {test}")
             category = test[0]
@@ -683,7 +684,7 @@ def main():
             elif category == "w":
                 port = input("Enter the scored port number: ")
                 if port != "icmp":
-                    if port < 1 or port > 65535:
+                    if int(port) < 1 or int(port) > 65535:
                         raise AssertionError(f"Invalid port value {port}: must be between 1-65535, or 'icmp'")
                 test_firewall_main(test,port)
             elif category == "f":

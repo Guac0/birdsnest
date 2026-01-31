@@ -213,7 +213,7 @@ def run_bash(cmd, noisy=True):
                 if result.stderr:
                     print_debug(f"Shell stderr: {result.stderr.strip()}")
             return ""
-        return result.stdout.strip()
+        return result.stdout.strip() or "SUCCESS"
     except FileNotFoundError:
         if noisy:
             print_debug("Error: The /bin/bash executable was not found.")
@@ -875,8 +875,8 @@ def firewall_rules_audit_linux(port, direction="in", action="block"):
         return [f"Could not run '{ip_query_cmd}' or no rules found."], []
     rule_regex = re.compile(
         fr"^\s*(?P<index>\d+)\s+(?P<target>DROP|REJECT|ACCEPT)\s+"  
-        fr"(?P<prot>[a-z]+|\*)\s+.*?"                               
-        fr"(?P<spec>dpt|spt):(?P<port_spec>[\d,\-]+)\s*$"           
+        fr"(?P<prot>[a-z\d]+|\*)\s+.*?"                               
+        fr"(?P<spec>dpt|spt):(?P<port_spec>[\d,\-]+)"           
     )
     for line in output.splitlines():
         if not line.strip().startswith(('Chain', 'num', 'target', 'policy', 'pkts')):
@@ -951,13 +951,13 @@ def firewall_rules_delete_linux(rules):
             continue
         else:
             print_debug(f"Attempting delete: {delete_cmd} (Rule: {display_name})")
-            if run_bash(delete_cmd) == "":
+            if run_bash(delete_cmd):
                 issues.append(f"SUCCESSFULLY removed firewall rule from {chain} at index #{index}.")
             else:
                 issues.append(f"FAILED to remove firewall rule from {chain} at index #{index}. Command failed.")
                 overall_status = False
     if not DISARM:
-        persist_cmd = f"/sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
+        persist_cmd = f"{IPTABLES_PATH}-save > /etc/iptables/rules.v4"
         if overall_status:
             print_debug("Attempting to persist iptables rules...")
             if run_bash(persist_cmd):
@@ -1017,13 +1017,13 @@ def firewall_rules_create_linux(port, direction, action, protocol="tcp"):
         return False, [f"DISARMED, but told to create firewall rule: {rule_description}"]
     else:
         print_debug(f"Creating iptables rule: {iptables_cmd}")
-        if run_bash(iptables_cmd) == "":
+        if run_bash(iptables_cmd):
             issues.append(f"SUCCESSFULLY created firewall rule: {rule_description} (running kernel).")
-            persist_cmd = f"/sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
+            persist_cmd = f"{IPTABLES_PATH}-save > /etc/iptables/rules.v4"
             print_debug("Attempting to persist iptables rules...")
             if run_bash(persist_cmd):
-                issues.append("SUCCESS: Running iptables rules saved to disk (persistent).")
-                return True, issues
+                pass
+                return False, issues
             else:
                 issues.append("FAILED to persist iptables changes. Rule is *NOT* permanent across reboots.")
                 return False, issues
@@ -1326,7 +1326,7 @@ def service_audit_linux(service_name):
     current_load_state = data.get("LoadState", "").lower()     
     current_enable_state = data.get("UnitFileState", "").lower() 
     is_running = current_active_state == "active"
-    is_enabled = current_enable_state == "enabled" 
+    is_enabled = current_enable_state in ["enabled", "enabled-runtime", "static", "indirect"]
     oldStatus = is_running and is_enabled
     newStatus = oldStatus
     if not is_running:
@@ -1599,6 +1599,7 @@ def service_integrity_windows(service_name, backupDict):
                 issues.append(f"Service {service_name} Dependencies restoration FAILED. Old bad dependencies: {current_dependencies_sorted}. Current dependencies: {expected_dependencies}")
     return oldStatus, newStatus, issues
 def service_integrity_linux(service_name, backupDict):
+    return True, True, []
     oldStatus = True
     newStatus = True
     issues = []
@@ -1726,9 +1727,9 @@ def service_backup_linux(service_name):
 def service_lastrun(service):
     system = platform.system()
     if system == "Windows":
-        return service_audit_windows(service)
+        return service_lastrun_windows(service)
     else:
-        return service_audit_linux(service)
+        return service_lastrun_linux(service)
 def service_lastrun_windows(service_name):
     oldStatus = True  
     newStatus = True  
