@@ -60,7 +60,7 @@ all:
     active:
       children:
         ansible-controller:
-        new-test-deb12:
+        new-test-deb11:
         new-test-ubu24:
         #testing-alpine:
         new-test-rocky9:

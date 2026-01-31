@@ -1205,6 +1205,11 @@ def file_protect_main(repo_dir, protected_folders):
     try:
         run_git(["checkout", "good"], repo_dir)
         run_git(["pull", "origin", "good"], repo_dir)
+        for item in os.listdir(repo_dir):
+            if item == ".git": continue
+            path = os.path.join(repo_dir, item)
+            if os.path.isdir(path): shutil.rmtree(path)
+            else: os.remove(path)
         for folder in protected_folders:
             if os.path.exists(folder):
                 sync_protected_to_repo(repo_dir, folder)

@@ -22,7 +22,9 @@
 
 - name: Deploy Stabvest Client
   #hosts: iis-winserv22
-  hosts: testing-ubu24
+  hosts: new-test-deb11
+  #hosts: new-test-ubu24
+  #hosts: new-test-rocky9
   #hosts: testing-deb12
   #hosts: testing-centos8
   #hosts: testing-rocky9
