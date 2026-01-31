@@ -36,6 +36,15 @@ all:
         testing-ubu24:
           hosts:
             192.168.1.31:
+        new-test-deb12:
+          hosts:
+            10.1.1.10:
+        new-test-ubu24:
+          hosts:
+            10.1.1.11:
+        new-test-rocky9:
+          hosts:
+            10.1.1.12:
         testing-deb12:
           hosts:
             192.168.1.30:
@@ -51,4 +60,7 @@ all:
     active:
       children:
         ansible-controller:
-        testing-ubu24:
+        new-test-deb12:
+        new-test-ubu24:
+        #testing-alpine:
+        new-test-rocky9:
