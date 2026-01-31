@@ -1266,7 +1266,7 @@ def handle_beacon():
                 try:
                     run_git(["init", "--bare", f"{agent_id}.git"],GIT_PROJECT_ROOT)
                     run_git(["config", "-f", f"{agent_id}.git/config", "http.receivepack", "true"],GIT_PROJECT_ROOT)
-                    logger.info(f"/beacon: created repo {os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")}")
+                    logger.info(f"/beacon: created repo {os.path.join(GIT_PROJECT_ROOT,f'{agent_id}.git')}")
                 except subprocess.CalledProcessError as e:
                     logger.error(f"/beacon: Error occurred when creating {os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")} - {e.stderr}")
         else:
