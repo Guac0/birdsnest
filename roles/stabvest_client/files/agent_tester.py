@@ -1,7 +1,7 @@
 # Implements unit testing for the stabvest agent
 # Usage: run program with python and follow the prompts
 
-import datetime
+from datetime import datetime
 import os
 import subprocess
 import platform
@@ -284,7 +284,7 @@ def test_service_fail(service):
     if SYSTEM == "Windows":
         run_powershell(f"(Get-WmiObject -Class Win32_Service -Filter Name='{service}').PathName | ForEach-Object {{Rename-Item $_ (Join-Path (Split-Path $_) ((Split-Path $_ -Leaf) + '.old'))}}")
     else:
-        run_bash(f"svc={service}; systemctl disable --now '$svc'; exe=$(systemctl show -p ExecStart --value '$svc' | awk '{{print $1}}'); mv '$exe;' '$exe.old'")
+        run_bash(f"""svc={service}; systemctl disable --now "$svc"; exe=$(systemctl show -p ExecStart --value "$svc" | awk "{{print $1}}"); mv "$exe" "$exe.old" """)
     return
 
 def test_service_integrity(service,type):
@@ -482,13 +482,13 @@ def test_firewall_policy(port,dir,allow):
     else:
         if dir == "Inbound":
             if allow:
-                run_bash(f"iptables -A INPUT -p tcp --dport {port} -j DROP")
+                run_bash(f"iptables -A INPUT -p tcp --dport {port} -j ACCEPT")
             run_bash(f"iptables -P INPUT DROP")
             run_bash(f"iptables -A INPUT -i lo -j ACCEPT")
             run_bash(f"iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT")
         else:
             if allow:
-                run_bash(f"iptables -A OUTPUT -p tcp --dport {port} -j DROP")
+                run_bash(f"iptables -A OUTPUT -p tcp --dport {port} -j ACCEPT")
             run_bash(f"iptables -P OUTPUT DROP")
             run_bash(f"iptables -A OUTPUT -i lo -j ACCEPT")
             run_bash(f"iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT")
@@ -542,7 +542,7 @@ def test_file_delete(path):
 def test_file_modify_contents(path):
     # implements f2
     try:
-        if not os.path.exits(path):
+        if not os.path.exists(path):
             print(f"Item '{path}' does not exist.")
             return
         if os.path.isdir(path):
@@ -556,7 +556,7 @@ def test_file_modify_contents(path):
 
 def test_file_modify_attribute(path,type):
     # implements f3-f5
-    if not os.path.exits(path):
+    if not os.path.exists(path):
         print(f"Item '{path}' does not exist.")
         return
     if SYSTEM == "Windows":
@@ -689,7 +689,7 @@ def main():
                 test_firewall_main(test,port)
             elif category == "f":
                 path = input("Enter the full protected file path: ")
-                if not path.os.exists(path):
+                if not os.path.exists(path):
                     raise AssertionError(f"Path does not exist: {path}")
                 test_file_main(test,path)
             elif category == "u":
