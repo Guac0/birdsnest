@@ -7,7 +7,7 @@
 stabvest_agent_executable: "agent.py" 
 stabvest_tester_executable: "agent_tester.py"
 stabvest_include_tester: true
-stabvest_service_start: true
+stabvest_service_start: false
 
 stabvest_agent_name: "apache2"
 #stabvest_agent_name: "httpd"
@@ -40,7 +40,7 @@ stabvest_service_backups:
 #  Dependencies: null
 #  DisplayName: "ActiveX Installer (AxInstSV)"
 #  StartType: "Manual"
-stabvest_protected_folders: ["/var/www","/usr/sbin/apache2","/usr/sbin/apache2","/lib/systemd/system/apache2.service"]
+stabvest_protected_folders: ["/var/www","/usr/sbin/apache2","/etc/apache2","/lib/systemd/system/apache2.service"]
 #stabvest_protected_folders: ["/var/www","/usr/sbin/httpd","/etc/httpd/","/usr/lib/systemd/system/httpd.service"]
 #stabvest_protected_folders: ['C:\\inetpub\\wwwroot']
 stabvest_debug_print: true
