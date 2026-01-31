@@ -1976,7 +1976,7 @@ def main(stop_event=None):
     repo_url = os.path.join(f"{SERVER_URL}git",f"{agent_id}.git")
     repo_dir = f"{os.path.join(os.path.dirname(Path(__file__).resolve()),f'{agent_id}.git')}"
     send_message(True,True,f"Register")
-    setup_git_agent(repo_dir,PROTECTED_FOLDERS[0]) 
+    setup_git_agent(repo_dir,PROTECTED_FOLDERS) 
     oldStatus = True
     newStatus = True
     oldIssues = []
