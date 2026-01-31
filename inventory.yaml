@@ -36,6 +36,9 @@ all:
         testing-ubu24:
           hosts:
             192.168.1.31:
+        new-test-deb11:
+          hosts:
+            172.16.1.10:
         new-test-deb12:
           hosts:
             10.1.1.10:

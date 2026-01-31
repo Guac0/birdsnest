@@ -1239,8 +1239,15 @@ def file_protect_main(repo_dir, protected_folders):
                 changes = get_latest_commit_stats("bad", repo_dir)
                 run_git(["checkout", "good"], repo_dir)
                 if not DISARM:
+                    win = platform.system() == "Windows"
+                    for s in SERVICES:
+                        cmd = ["net", "stop", s] if win else ["service", s, "stop"]
+                        subprocess.run(cmd, capture_output=True)
                     for folder in protected_folders:
                         restore_protected_from_repo(repo_dir, folder)
+                    for s in SERVICES:
+                        cmd = ["net", "start", s] if win else ["service", s, "start"]
+                        subprocess.run(cmd, capture_output=True)
                     msg = f"SECURITY ALERT: {changes['count']} unauthorized changes restored across protected paths: {changes['files']}"
                     return False, True, [msg]
                 else:
