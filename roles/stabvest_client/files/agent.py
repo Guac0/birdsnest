@@ -100,6 +100,32 @@ def load_config(path):
 
     return config
 
+def get_iptables_save_path():
+    # 1. Check for Alpine (uses /etc/conf.d/iptables or rules-save)
+    if os.path.exists("/etc/alpine-release"):
+        return "/etc/iptables/rules-save"
+    
+    # 2. Check for RHEL-based (Rocky, CentOS, Alma)
+    if os.path.exists("/etc/redhat-release"):
+        return "/etc/sysconfig/iptables"
+    
+    # 3. Check for Debian/Ubuntu (Standard location for iptables-persistent)
+    # Note: Requires 'iptables-persistent' package to be installed
+    try:
+        dist_info = platform.freedesktop_os_release()
+        id_like = dist_info.get("ID_LIKE", "").lower()
+        dist_id = dist_info.get("ID", "").lower()
+        
+        if "debian" in id_like or "ubuntu" in dist_id:
+            return "/etc/iptables/rules.v4"
+    except (AttributeError, OSError):
+        # Fallback for older Python versions or minimal environments
+        if os.path.exists("/etc/debian_version"):
+            return "/etc/iptables/rules.v4"
+
+    # Default fallback (manual export)
+    return "/etc/iptables.rules"
+
 CONFIG = load_config("config.json") # relative to cwd!
 DISARM = CONFIG["DISARM"]
 IPTABLES_PATH = CONFIG["IPTABLES_PATH"]
@@ -125,7 +151,7 @@ SERVICE_BACKUPS = CONFIG["SERVICE_BACKUPS"]
 PROTECTED_FOLDERS = CONFIG["PROTECTED_FOLDERS"]
 if isinstance(PROTECTED_FOLDERS, str):
     PROTECTED_FOLDERS = ast.literal_eval(PROTECTED_FOLDERS)
-
+IPTABLES_SAVE_PATH = get_iptables_save_path()
 PAUSED = False
 
 #REGISTRY_HIVE = winreg.HKEY_LOCAL_MACHINE
@@ -373,7 +399,7 @@ def run_bash(cmd, noisy=True):
                     print_debug(f"Shell stderr: {result.stderr.strip()}")
             return ""
             
-        return result.stdout.strip()
+        return result.stdout.strip() or "SUCCESS"
     except FileNotFoundError:
         if noisy:
             print_debug("Error: The /bin/bash executable was not found.")
@@ -1492,13 +1518,15 @@ def firewall_rules_audit_windows(port,direction="in",action="block"):
     $rules = Get-NetFirewallPortFilter |
         Where-Object {{
             $lp = $_.LocalPort
-
+            if ($lp -eq 'Any') {{ return $true }}
             if ($lp -like '*,*') {{
                 return $lp.Split(',') -contains '{port}'
             }}
 
             if ($lp -like '*-*') {{
-                $a, $b = $lp.Split('-')
+                $range = $lp.Split('-')
+                $a = [int]$range[0].Trim()
+                $b = [int]$range[1].Trim()
                 return ({port} -ge [int]$a -and {port} -le [int]$b)
             }}
 
@@ -1573,8 +1601,8 @@ def firewall_rules_audit_linux(port, direction="in", action="block"):
     # Example line: 1    DROP       all  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:80
     rule_regex = re.compile(
         fr"^\s*(?P<index>\d+)\s+(?P<target>DROP|REJECT|ACCEPT)\s+"  # Index and Target
-        fr"(?P<prot>[a-z]+|\*)\s+.*?"                               # Protocol (* or tcp/udp/icmp)
-        fr"(?P<spec>dpt|spt):(?P<port_spec>[\d,\-]+)\s*$"           # dpt/spt and Port Spec (optional, uses non-greedy match)
+        fr"(?P<prot>[a-z\d]+|\*)\s+.*?"                               # Protocol (* or tcp/udp/icmp)
+        fr"(?P<spec>[sd]ports?)\s*:?\s*(?P<port_spec>[\d,\-]+)"           # dpt/spt and Port Spec (optional, uses non-greedy match)
     )
 
     for line in output.splitlines():
@@ -1596,11 +1624,12 @@ def firewall_rules_audit_linux(port, direction="in", action="block"):
                 is_port_match = False
                 if port_definition:
                     # Logic to check single port, range, or list (same as previous implementation)
+                    separator = ':' if ':' in port_definition else '-'
                     if ',' in port_definition and str(port) in port_definition.split(','):
                         is_port_match = True
-                    elif '-' in port_definition:
+                    elif separator in port_definition:
                         try:
-                            a, b = map(int, port_definition.split('-'))
+                            a, b = map(int, port_definition.split(separator))
                             target_port = int(port)
                             if a <= target_port <= b:
                                 is_port_match = True
@@ -1718,7 +1747,7 @@ def firewall_rules_delete_linux(rules):
             
             print_debug(f"Attempting delete: {delete_cmd} (Rule: {display_name})")
             
-            if run_bash(delete_cmd) == "":
+            if run_bash(delete_cmd):
                 # Success (iptables returns empty output on success)
                 issues.append(f"SUCCESSFULLY removed firewall rule from {chain} at index #{index}.")
             else:
@@ -1728,12 +1757,13 @@ def firewall_rules_delete_linux(rules):
 
     # 2. Persist the changes (Crucial for iptables)
     if not DISARM:
-        persist_cmd = f"/sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
+        persist_cmd = f"{IPTABLES_PATH}-save > {IPTABLES_SAVE_PATH}"
         
         if overall_status:
             print_debug("Attempting to persist iptables rules...")
             if run_bash(persist_cmd):
-                issues.append("SUCCESS: Running iptables rules saved (persistent).")
+                #issues.append("SUCCESS: Running iptables rules saved (persistent).")
+                pass
             else:
                 issues.append("WARNING: FAILED to persist iptables changes. Rule deletion is *NOT* permanent.")
                 overall_status = False 
@@ -1851,16 +1881,16 @@ def firewall_rules_create_linux(port, direction, action, protocol="tcp"):
     else:
 
         print_debug(f"Creating iptables rule: {iptables_cmd}")
-        if run_bash(iptables_cmd) == "":
+        if run_bash(iptables_cmd):
             issues.append(f"SUCCESSFULLY created firewall rule: {rule_description} (running kernel).")
             
             # 4. Persist the change (Crucial for iptables)
-            persist_cmd = f"/sbin/{IPTABLES_PATH}-save > /etc/sysconfig/iptables"
+            persist_cmd = f"{IPTABLES_PATH}-save > {IPTABLES_SAVE_PATH}"
             
             print_debug("Attempting to persist iptables rules...")
             if run_bash(persist_cmd):
-                issues.append("SUCCESS: Running iptables rules saved to disk (persistent).")
-                return True, issues
+                #issues.append("SUCCESS: Running iptables rules saved to disk (persistent).")
+                return False, issues
             else:
                 issues.append("FAILED to persist iptables changes. Rule is *NOT* permanent across reboots.")
                 return False, issues
@@ -2084,6 +2114,7 @@ def apply_security_policy(target_path):
     else:
         # Unix-like (Debian, Ubuntu, RHEL, Alpine, FreeBSD)
         # 7 = rwx (Owner), 4 = r (Group), 4 = r (Others)
+        os.chmod(target_path, 0o744)
         for root, dirs, files in os.walk(target_path):
             for d in dirs:
                 os.chmod(os.path.join(root, d), 0o744)
@@ -2105,10 +2136,10 @@ def sync_protected_to_repo(repo_dir, protected_folder):
     # Apply security policy before copying
     apply_security_policy(protected_folder)
     
-    # If it's a single file, use copy2; if directory, use copytree
+    # If it's a single file, use copy; if directory, use copytree
     if os.path.isfile(protected_folder):
         os.makedirs(dest_in_repo, exist_ok=True)
-        shutil.copy2(protected_folder, os.path.join(dest_in_repo, os.path.basename(protected_folder)))
+        shutil.copy(protected_folder, os.path.join(dest_in_repo, os.path.basename(protected_folder)))
     else:
         shutil.copytree(protected_folder, dest_in_repo, dirs_exist_ok=True)
     
@@ -2122,10 +2153,10 @@ def restore_protected_from_repo(repo_dir, protected_folder):
     if not os.path.exists(source_in_repo):
         return
         
-    if os.path.isfile(protected_folder):
+    if os.path.basename(protected_folder) in os.listdir(source_in_repo):
         # Extract the file from the slug directory
         file_name = os.path.basename(protected_folder)
-        shutil.copy2(os.path.join(source_in_repo, file_name), protected_folder)
+        shutil.copy(os.path.join(source_in_repo, file_name), protected_folder)
     else:
         shutil.copytree(source_in_repo, protected_folder, dirs_exist_ok=True)
     
@@ -2169,6 +2200,15 @@ def file_protect_main(repo_dir, protected_folders):
         # 1. Pull latest 'good' state from remote
         run_git(["checkout", "good"], repo_dir)
         run_git(["pull", "origin", "good"], repo_dir)
+
+        for item in os.listdir(repo_dir):
+            if item == ".git":
+                continue
+            path = os.path.join(repo_dir, item)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
         
         # 2. Sync all protected folders to their sub-directories in the repo
         for folder in protected_folders:
@@ -2224,9 +2264,16 @@ def file_protect_main(repo_dir, protected_folders):
                 # 4. RESTORATION
                 run_git(["checkout", "good"], repo_dir)
                 if not DISARM:
+                    win = platform.system() == "Windows"
+                    for s in SERVICES:
+                        cmd = ["net", "stop", s] if win else ["service", s, "stop"]
+                        subprocess.run(cmd, capture_output=True)
                     # Restore every protected folder from its 'good' repo sub-folder
                     for folder in protected_folders:
                         restore_protected_from_repo(repo_dir, folder)
+                    for s in SERVICES:
+                        cmd = ["net", "start", s] if win else ["service", s, "start"]
+                        subprocess.run(cmd, capture_output=True)
                     
                     msg = f"SECURITY ALERT: {changes['count']} unauthorized changes restored across protected paths: {changes['files']}"
                     return False, True, [msg]
@@ -2395,7 +2442,7 @@ def service_audit_linux(service_name):
 
     # If the service is loaded but not enabled (manual start type), or if it's not running
     is_running = current_active_state == "active"
-    is_enabled = current_enable_state == "enabled" # Equivalent to Automatic start type
+    is_enabled = current_enable_state in ["enabled", "enabled-runtime", "static", "indirect"] # Equivalent to Automatic start type
     
     oldStatus = is_running and is_enabled
     
@@ -2880,7 +2927,7 @@ def service_integrity_linux(service_name, backupDict):
 
     Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
     """
-    
+    return True, True, []
     oldStatus = True
     newStatus = True
     issues = []
@@ -3130,9 +3177,9 @@ def service_lastrun(service):
     system = platform.system()
 
     if system == "Windows":
-        return service_audit_windows(service)
+        return service_lastrun_windows(service)
     else:
-        return service_audit_linux(service)
+        return service_lastrun_linux(service)
         #return False, False, [f"service_lastrun(): not implemented for system {system}."] # TODO
 
 def service_lastrun_windows(service_name):
@@ -3594,13 +3641,14 @@ def test_main():
     test_service()
 
 def main(stop_event=None):
+    # TODO daemon-reload if service file was changed!
     global PAUSED
     ip_address,prefix,gateway = init_int_vars() # TODO
 
     systemInfo = get_system_details()
     agent_id = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
     repo_url = os.path.join(f"{SERVER_URL}git",f"{agent_id}.git")
-    repo_dir = f"{os.path.join(os.path.dirname(Path(__file__).resolve()),f"{agent_id}.git")}"
+    repo_dir = f"{os.path.join(os.path.dirname(os.path(__file__).resolve()),f'{agent_id}.git')}"
 
     send_message(True,True,f"Register")
     
@@ -3624,6 +3672,8 @@ def main(stop_event=None):
     print_debug(f"main(): System details - {get_system_details()}")
 
     while True:
+        oldStatus = True
+        newStatus = True
 
         pausedEpochServer = get_pause_state_server()
 

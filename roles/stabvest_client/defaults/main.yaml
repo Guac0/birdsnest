@@ -28,7 +28,7 @@ stabvest_packages:
 #  - "IIS-WebServerRole"
   - "apache2"
 #  - "httpd"
-stabvest_service_backups:
+stabvest_service_backups: # REPLACE WITH AUTO
   PathName: "C:\\\\Windows\\\\system32\\\\svchost.exe -k iissvcs"
   StartName: "localSystem"
   Dependencies: "['WAS','HTTP']"
