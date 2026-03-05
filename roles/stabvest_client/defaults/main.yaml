@@ -41,7 +41,7 @@ stabvest_service_backups:
 #  DisplayName: "ActiveX Installer (AxInstSV)"
 #  StartType: "Manual"
 stabvest_protected_folders: ["/var/www","/usr/sbin/apache2","/etc/apache2","/lib/systemd/system/apache2.service"]
-#stabvest_protected_folders: ["/var/www","/usr/sbin/httpd","/etc/httpd/","/usr/lib/systemd/system/httpd.service"]
+#stabvest_protected_folders: ["/var/www","/usr/sbin/httpd","/etc/httpd/conf","/etc/httpd/conf.d","/etc/httpd/conf.modules.d","/etc/httpd/modules","/usr/lib/systemd/system/httpd.service"]
 #stabvest_protected_folders: ['C:\\inetpub\\wwwroot']
 stabvest_debug_print: true
 stabvest_backupdir: ""

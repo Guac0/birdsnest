@@ -490,7 +490,7 @@ def test_firewall_policy(port,dir,allow):
             if allow:
                 run_bash(f"iptables -A OUTPUT -p tcp --dport {port} -j ACCEPT")
             run_bash(f"iptables -P OUTPUT DROP")
-            run_bash(f"iptables -A OUTPUT -i lo -j ACCEPT")
+            run_bash(f"iptables -A OUTPUT -o lo -j ACCEPT")
             run_bash(f"iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT")
     pass
 
