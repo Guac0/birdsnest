@@ -30,7 +30,8 @@ add_test_data_incidents_custom, add_test_data_auth_records, add_test_data_auth_c
 run_git, hash_id, create_incident, clean_and_join_path, get_git_stats, find_incident, find_incident_db
 )
 
-SQLALCHEMY_DATABASE_URI = f'sqlite:///{SAVEFILE}'
+#SQLALCHEMY_DATABASE_URI = f'sqlite:///{SAVEFILE}'
+SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://birdsnest:birdsnestpwd@database:5432/birdsnestdb"
 app = Flask(__name__)
 app.config['SECRET_KEY'] = CONFIG["SECRET_KEY"]
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI

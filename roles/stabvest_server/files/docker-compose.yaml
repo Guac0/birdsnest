@@ -1,0 +1,46 @@
+version: '3.8'
+# log.txt must be present before running!
+
+services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - webserver
+
+  webserver:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+    depends_on:
+      - database
+  
+  worker:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    depends_on:
+      - database
+
+  database:
+    image: postgres:latest
+    restart: always
+    environment:
+      POSTGRES_USER: birdsnest
+      POSTGRES_PASSWORD: birdsnestpwd
+      POSTGRES_DB: birdsnestdb
+    expose:
+      - "5432" 
+    volumes:
+      - pgdata:/var/lib/postgresql/data

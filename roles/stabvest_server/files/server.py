@@ -56,7 +56,8 @@ from modules.owlet_agent import (
 )
 
 # === Set Flask Config ===
-SQLALCHEMY_DATABASE_URI = f'sqlite:///{SAVEFILE}'
+#SQLALCHEMY_DATABASE_URI = f'sqlite:///{SAVEFILE}'
+SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://birdsnest:birdsnestpwd@database:5432/birdsnestdb"
 app = Flask(__name__)
 app.config['SECRET_KEY'] = CONFIG["SECRET_KEY"]
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI

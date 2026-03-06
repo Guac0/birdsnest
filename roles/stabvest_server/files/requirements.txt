@@ -2,10 +2,11 @@ flask
 flask-login
 Flask-Session
 Flask-SQLAlchemy
+psycopg2 
 pyopenssl
 #nuitka
 htmlmin
 jsmin
 gunicorn
 concurrent-log-handler
-sdnotify
+#sdnotify
