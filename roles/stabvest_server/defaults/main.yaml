@@ -10,15 +10,14 @@ stabvest_service_start: true
 stabvest_gunicorn_workers: 3
 
 
-stabvest_host: "192.168.1.18"
+stabvest_host: "192.168.1.18" # public URL of server. is NOT used for starting the server listener (that is always 0.0.0.0)
 stabvest_port: 8000
 
 # Derived values can still be overridden if needed
 public_url: "https://{{ stabvest_host }}:{{ stabvest_port }}"
 logfile: "log.txt"
-savefile: "save.db"
 
-secret_key: "changeme"
+secret_key: "{{ lookup('ansible.builtin.password', '/dev/null length=32 chars=ascii_letters,digits,special') }}"
 stale_time: 300
 default_webhook_sleep_time: 0.25
 max_webhook_msg_per_minute: 50

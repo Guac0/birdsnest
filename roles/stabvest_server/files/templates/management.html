@@ -65,10 +65,12 @@
   <div>
     <a href="/">Back to Home</a>
   </div>
+  <!--
   <div>
     <button id="manualSaveBtn">Trigger Manual Save</button>
     <button id="exportSaveBtn">Export Save</button>
   </div>
+  -->
 </header>
 
 <main>
@@ -307,34 +309,6 @@ async function refreshLogs() {
 }
 
 document.getElementById('refreshLogsBtn').onclick = refreshLogs;
-
-// Manual Save
-async function manualSave() {
-  try {
-    const logs = await apiCall('/web/save_manual', {});
-    alert(`Manual Save Completed`);
-  } catch (err) {
-    console.log('Manual Save Error:', err);
-  }
-}
-
-document.getElementById('manualSaveBtn').onclick = manualSave;
-//document.getElementById('manualSaveBtn').disabled = true;
-
-// Export Save
-async function exportSave() {
-  try {
-    const logs = await apiCall('/web/save_export', {});
-    copyTextToClipboard(JSON.stringify(logs, null, 2));
-    alert(`Save data copied to clipboard and to console`);
-    console.log('Export Save Success:', logs);
-  } catch (err) {
-    console.log('Export Save Error:', err);
-  }
-}
-
-document.getElementById('exportSaveBtn').onclick = exportSave;
-//document.getElementById('exportSaveBtn').disabled = true;
 
 // Initial load
 refreshUsers();

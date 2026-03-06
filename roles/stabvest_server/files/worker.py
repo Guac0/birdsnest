@@ -13,7 +13,7 @@ import subprocess
 from flask import Flask
 
 from shared import (
-setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, SAVEFILE, SAVE_INTERVAL, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
+setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
 MAX_WEBHOOK_MSG_PER_MINUTE, WEBHOOK_URL, INITIAL_AGENT_AUTH_TOKENS, INITIAL_WEBGUI_USERS, AUTHCONFIG_STRICT_IP,
 AUTHCONFIG_STRICT_USER, AUTHCONFIG_CREATE_INCIDENT, AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL, CREATE_TEST_DATA, SECRET_KEY,
 GIT_PROJECT_ROOT, GIT_BACKEND
@@ -30,7 +30,7 @@ add_test_data_incidents_custom, add_test_data_auth_records, add_test_data_auth_c
 run_git, hash_id, create_incident, clean_and_join_path, get_git_stats, find_incident, find_incident_db
 )
 
-#SQLALCHEMY_DATABASE_URI = f'sqlite:///{SAVEFILE}'
+#SQLALCHEMY_DATABASE_URI = f'sqlite:///save.db'
 SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://birdsnest:birdsnestpwd@database:5432/birdsnestdb"
 app = Flask(__name__)
 app.config['SECRET_KEY'] = CONFIG["SECRET_KEY"]
@@ -444,7 +444,6 @@ if __name__ == "__main__":
 
     # Start the same threads you had before
     threads = [
-        #threading.Thread(target=periodic_autosave, daemon=True),
         threading.Thread(target=webhook_main, daemon=True),
         threading.Thread(target=periodic_stale, daemon=True),
         threading.Thread(target=periodic_ansible, daemon=True)#,

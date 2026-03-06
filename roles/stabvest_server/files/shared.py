@@ -15,9 +15,7 @@ CONFIG_DEFAULTS = {
     "PORT": 8000,
     "PUBLIC_URL": "https://{HOST}:{PORT}",
     "LOGFILE": "log_{timestamp}.txt",
-    "SAVEFILE": "save_{timestamp}.db",
     "SECRET_KEY": "changemeplease",
-    "SAVE_INTERVAL": 60,
     "STALE_TIME": 300,
     "DEFAULT_WEBHOOK_SLEEP_TIME": 0.25,
     "MAX_WEBHOOK_MSG_PER_MINUTE": 50,
@@ -75,7 +73,6 @@ def load_config(path):
 
     #config["PUBLIC_URL"] = f"http://{config['HOST']}:{config['PORT']}"
     #config["LOGFILE"] = f"log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
-    #config["SAVEFILE"] = f"save_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
 
     return config
 
@@ -84,8 +81,6 @@ HOST = CONFIG["HOST"]
 PORT = CONFIG["PORT"]
 PUBLIC_URL = CONFIG["PUBLIC_URL"]
 LOGFILE = CONFIG["LOGFILE"]
-SAVEFILE = CONFIG["SAVEFILE"]
-SAVE_INTERVAL = CONFIG["SAVE_INTERVAL"]
 STALE_TIME = CONFIG["STALE_TIME"]
 DEFAULT_WEBHOOK_SLEEP_TIME = CONFIG["DEFAULT_WEBHOOK_SLEEP_TIME"]
 MAX_WEBHOOK_MSG_PER_MINUTE = CONFIG["MAX_WEBHOOK_MSG_PER_MINUTE"]

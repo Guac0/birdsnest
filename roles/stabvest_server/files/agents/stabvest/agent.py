@@ -96,7 +96,6 @@ def load_config(path):
 
     #config["PUBLIC_URL"] = f"http://{config['HOST']}:{config['PORT']}"
     #config["LOGFILE"] = f"log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
-    #config["SAVEFILE"] = f"save_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
 
     return config
 

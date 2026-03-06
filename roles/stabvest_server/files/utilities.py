@@ -18,7 +18,7 @@ Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from shared import (
-setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, SAVEFILE, SAVE_INTERVAL, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
+setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
 MAX_WEBHOOK_MSG_PER_MINUTE, WEBHOOK_URL, INITIAL_AGENT_AUTH_TOKENS, INITIAL_WEBGUI_USERS, AUTHCONFIG_STRICT_IP,
 AUTHCONFIG_STRICT_USER, AUTHCONFIG_CREATE_INCIDENT, AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL, CREATE_TEST_DATA, SECRET_KEY,
 GIT_PROJECT_ROOT, GIT_BACKEND
@@ -105,18 +105,17 @@ def insert_initial_data():
 
 def create_db_tables(app):
 
-    db_exists = os.path.exists(os.path.join("instance",SAVEFILE))
     # Use the application context to ensure Flask extensions are configured
     with app.app_context():
-        # This checks the database file defined in SQLALCHEMY_DATABASE_URI.
-        # If the file (server.db) doesn't exist, it creates it.
+        # This checks the database defined in SQLALCHEMY_DATABASE_URI.
         # If the tables defined in your models don't exist, it creates them.
         db.create_all()
+        db_exists = WebUser.query.first()
         if not db_exists:
             insert_initial_data()
-            logger.info(f"Initialized database with initial data at {SAVEFILE}")
+            logger.info(f"Initialized database with initial data inserted.")
         else:
-            logger.info(f"Initialized database at {SAVEFILE}")
+            logger.info(f"Initialized database.")
 
 def serialize_model(instance):
     """
@@ -335,7 +334,7 @@ def add_test_data_incidents_custom(num=5,createAlert=True):
                 "IR - Write report on Doubletap scheduled task.",
                 "Inject - Implement HTTPS for {check} scorecheck on {hostname} / {ipaddress} by {time}.",
                 "Uptime - Fix failed {check} scorecheck on {hostname} / {ipaddress}.",
-                "Server - Save Exported by User {user}",
+                #"Server - Save Exported by User {user}",
                 "Server - User Added With Username {username} and Role {role} by User {current_user.id}"
             ]),
             "sla": random.choice([0,get_random_time_offset_epoch(90)])

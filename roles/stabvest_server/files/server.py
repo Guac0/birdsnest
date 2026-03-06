@@ -15,7 +15,7 @@ Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from shared import (
-setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, SAVEFILE, SAVE_INTERVAL, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
+setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
 MAX_WEBHOOK_MSG_PER_MINUTE, WEBHOOK_URL, INITIAL_AGENT_AUTH_TOKENS, INITIAL_WEBGUI_USERS, AUTHCONFIG_STRICT_IP,
 AUTHCONFIG_STRICT_USER, AUTHCONFIG_CREATE_INCIDENT, AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL, CREATE_TEST_DATA, SECRET_KEY,
 GIT_PROJECT_ROOT, GIT_BACKEND
@@ -32,7 +32,7 @@ from modules.generic_web import (
     list_users, list_users_simple, list_tokens, 
     list_tokens_number, list_agents, list_messages, 
     list_incidents, list_ansiblevars, list_logfile,
-    list_ansibleresult, save_export, set_ansiblevars, 
+    list_ansibleresult, set_ansiblevars, 
     agent_pause, agent_resume, add_incident, add_user,
     delete_token, update_incident_tag, update_incident_assignee,
     update_incident_sla, add_ansible, add_token, delete_user
@@ -56,7 +56,7 @@ from modules.owlet_agent import (
 )
 
 # === Set Flask Config ===
-#SQLALCHEMY_DATABASE_URI = f'sqlite:///{SAVEFILE}'
+#SQLALCHEMY_DATABASE_URI = f'sqlite:///save.db'
 SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://birdsnest:birdsnestpwd@database:5432/birdsnestdb"
 app = Flask(__name__)
 app.config['SECRET_KEY'] = CONFIG["SECRET_KEY"]
@@ -336,12 +336,6 @@ def list_logfile_redirect(filepath=LOGFILE, lines=50):
 def list_ansibleresult_redirect():
     return list_ansibleresult()
 
-@app.route("/web/save_export", methods=["POST"])
-@login_required
-@admin_required
-def save_export_redirect(filepath=SAVEFILE):
-    return save_export(filepath)
-
 # === FRONTEND INTERACTION ===
 
 @app.route("/web/set_ansiblevars", methods=["POST"])
@@ -469,13 +463,6 @@ def update_incident_sla_redirect():
 @analyst_required
 def add_ansible_redirect():
     return add_ansible()
-
-@app.route("/web/save_manual", methods=["POST"])
-@login_required
-@analyst_required
-def save_manual():
-    logger.info(f"/save_manual - Accessed from {current_user.id} at {request.remote_addr}")
-    return jsonify({"error": "Deprecated"}), 500
 
 # =================================
 # ============= MAIN ==============
