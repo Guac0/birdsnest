@@ -1,0 +1,134 @@
+# Endpoints and support functions for agent interaction
+
+from flask import request, jsonify
+import subprocess
+import time
+import os
+
+from models import (
+db,
+Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
+AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
+)
+from shared import (
+setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, SAVEFILE, SAVE_INTERVAL, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
+MAX_WEBHOOK_MSG_PER_MINUTE, WEBHOOK_URL, INITIAL_AGENT_AUTH_TOKENS, INITIAL_WEBGUI_USERS, AUTHCONFIG_STRICT_IP,
+AUTHCONFIG_STRICT_USER, AUTHCONFIG_CREATE_INCIDENT, AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL, CREATE_TEST_DATA, SECRET_KEY,
+GIT_PROJECT_ROOT, GIT_BACKEND
+)
+from utilities import (
+insert_initial_data, create_db_tables, serialize_model, is_safe_path,
+get_random_time_offset_epoch, add_test_data_agents, add_test_data_messages, add_test_data_incidents,
+add_test_data_incidents_custom, add_test_data_auth_records, add_test_data_auth_config,
+run_git, hash_id, create_incident, clean_and_join_path, get_git_stats, find_incident, find_incident_db
+)
+
+logger = setup_logging("web")
+
+
+def git_backend(repo_name, git_path):
+    # Log IMMEDIATELY with all inputs
+    #logger.info(f"/git: START git_backend: repo={repo_name}, path={git_path}, method={request.method}")
+
+    try:
+        # Check if the cleaning function is the culprit
+        try:
+            # If this function crashes, it usually happens here
+            git_path = clean_and_join_path(git_path)
+        except Exception as e:
+            logger.eoor(f"/git: CRASH in clean_and_join_path: {str(e)}")
+            return f"Path cleaning failed: {str(e)}", 500
+
+        # Build Environment
+        env = {
+            'REQUEST_METHOD': request.method,
+            'GIT_PROJECT_ROOT': GIT_PROJECT_ROOT,
+            'GIT_HTTP_EXPORT_ALL': '1',
+            #'PATH_INFO': f"{repo_name}.git/{git_path}",
+            'PATH_INFO': f"/{repo_name}.git/{git_path}" if git_path else f"/{repo_name}.git/",
+            #'PATH_TRANSLATED': os.path.join(GIT_PROJECT_ROOT, repo_name + ".git", git_path),
+            'QUERY_STRING': request.query_string.decode('utf-8') if request.query_string else '',
+            'CONTENT_TYPE': request.headers.get('Content-Type', ''),
+            'CONTENT_LENGTH': request.headers.get('Content-Length', ''),
+            'REMOTE_ADDR': request.remote_addr,
+            'REMOTE_USER': 'git_user',
+        }
+
+        #logger.info(f"/git: GIT_BACKEND - {GIT_BACKEND}, env - {env}.")
+
+        # Validate GIT_BACKEND exists before trying to run it
+        if not os.path.exists(GIT_BACKEND):
+            logger.critical(f"/git: CRITICAL: GIT_BACKEND binary not found at {GIT_BACKEND}")
+            return "Backend binary missing", 500
+
+        # Subprocess execution
+        process = subprocess.Popen(
+            [GIT_BACKEND],
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        stdout, stderr = process.communicate(input=request.data)
+
+        if process.returncode != 0:
+            logger.warning(f"/git: Git binary returned {process.returncode}. Stderr: {stderr.decode('utf-8')}")
+
+        # Header parsing
+        header_end = stdout.find(b'\r\n\r\n')
+        if header_end == -1:
+            header_end = stdout.find(b'\n\n')
+            sep_len = 2
+        else:
+            sep_len = 4
+
+        if header_end == -1:
+            # If no headers found, the binary likely produced an error on stdout
+            logger.warning(f"/git: CGI ERROR: No header separator. Raw Output: {stdout[:200]}")
+            return "Invalid response from Git backend", 500
+
+        header_section = stdout[:header_end].decode('utf-8')
+        response_body = stdout[header_end + sep_len:]
+
+        # 3. Attempt to parse headers
+        header_end = stdout.find(b'\r\n\r\n')
+        sep_len = 4
+        if header_end == -1:
+            header_end = stdout.find(b'\n\n')
+            sep_len = 2
+
+        if header_end == -1:
+            logger.warning(f"/git: CGI Header Parse Error: No header separator found in binary output. Raw output start: {stdout[:50]}")
+            return "Internal Server Error: Invalid CGI Response", 500
+
+        header_section = stdout[:header_end].decode('utf-8')
+        response_body = stdout[header_end + sep_len:]
+
+        headers_dict = {}
+        status_code = 200
+        for line in header_section.splitlines():
+            if ':' in line:
+                key, value = line.split(':', 1)
+                k = key.strip().lower()
+                v = value.strip()
+                if k == 'status':
+                    try:
+                        status_code = int(v.split(' ')[0])
+                    except ValueError:
+                        logger.warning(f"/git: Malformed Status header: {v}")
+                else:
+                    headers_dict[key.strip()] = v
+        #logger.info(f"/git: returning response_body {response_body}, status_code {status_code}, headers_dict {headers_dict}.")
+        logger.info(f"/git - Successful connection from {request.remote_addr}.")
+        return response_body, status_code, headers_dict
+
+    except FileNotFoundError:
+        logger.error(f"/git: GIT_BACKEND binary not found at: {GIT_BACKEND}")
+        return "Internal Server Error: Backend Binary Missing", 500
+    except PermissionError:
+        logger.error(f"/git: Permission denied when executing GIT_BACKEND: {GIT_BACKEND}")
+        return "Internal Server Error: Backend Permission Denied", 500
+    except Exception as e:
+        logger.error(f"/git: Unexpected error in git_backend: {str(e)}")
+        return "Internal Server Error", 500

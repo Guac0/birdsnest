@@ -1,3 +1,6 @@
+# Implements the background worker due periodic polling tasks
+# Note: initializes a Flask app for code similarity, but does not expose any routes
+
 import threading
 import time
 import sdnotify

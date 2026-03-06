@@ -1,3 +1,6 @@
+# Contains the main logic for the webserver
+# This should only contain critical web functionality and route definitions
+
 from flask_login import LoginManager, login_required, logout_user, current_user, current_user
 from flask import Flask, request, jsonify, render_template, redirect, url_for, abort, send_from_directory
 from functools import wraps
@@ -23,23 +26,33 @@ get_random_time_offset_epoch, add_test_data_agents, add_test_data_messages, add_
 add_test_data_incidents_custom, add_test_data_auth_records, add_test_data_auth_config,
 run_git, hash_id, create_incident, clean_and_join_path, get_git_stats, find_incident, find_incident_db
 )
-from web import (
+from modules.generic_web import (
     login,
-    dashboard_summary, get_repo_history, get_commit_diff, 
-    list_authconfig, list_auth_records, list_git_overall, 
-    ping_login, list_users, list_users_simple, list_tokens, 
+    dashboard_summary,
+    list_users, list_users_simple, list_tokens, 
     list_tokens_number, list_agents, list_messages, 
-    list_incidents, list_ansiblevars, 
-    list_logfile, list_ansibleresult, save_export, 
-    set_ansiblevars, save_git_note, set_good_branch, update_global_config, 
-    add_authconfig, update_authconfig_status, delete_authconfig, 
-    authrecord_update_notes, bulk_authconfig, bulk_auth_records, 
+    list_incidents, list_ansiblevars, list_logfile,
+    list_ansibleresult, save_export, set_ansiblevars, 
     agent_pause, agent_resume, add_incident, add_user,
     delete_token, update_incident_tag, update_incident_assignee,
     update_incident_sla, add_ansible, add_token, delete_user
 )
-from agents import (
-    handle_beacon, get_pause, git_backend, get_config, get_global_config
+from modules.generic_agent import (
+    handle_beacon, get_pause
+)
+from modules.stabvest_web import (
+    list_git_overall, get_repo_history, get_commit_diff, save_git_note, set_good_branch
+)
+from modules.stabvest_agent import (
+    git_backend
+)
+from modules.owlet_web import (
+    list_authconfig, list_auth_records, update_global_config, 
+    add_authconfig, update_authconfig_status, delete_authconfig, 
+    authrecord_update_notes, bulk_authconfig, bulk_auth_records
+)
+from modules.owlet_agent import (
+    get_config, get_global_config
 )
 
 # === Set Flask Config ===
@@ -259,8 +272,10 @@ def list_git_overall_redirect():
 
 @login_required
 @app.route("/ping_login", methods=["POST"])
-def ping_login_redirect():
-    return ping_login()
+def ping_login():
+    # Provides an endpoint for the client to check that they can reach the server fine. Does not check auth.
+    logger.info(f"/ping_login - Successful connection from {current_user.id} at {request.remote_addr}")
+    return "ok", 200
 
 @app.route("/list_users", methods=["POST"])
 @login_required

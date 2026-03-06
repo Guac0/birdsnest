@@ -1,3 +1,5 @@
+# Contains various helper functions that must be referenced by multiple other files
+
 from datetime import datetime
 import re
 import os

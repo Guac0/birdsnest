@@ -1,3 +1,5 @@
+# Contains the definitions for the database tables
+
 from flask_sqlalchemy import SQLAlchemy
 import time
 from datetime import datetime
