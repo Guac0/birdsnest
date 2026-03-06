@@ -86,7 +86,7 @@ tbody tr:hover{background:var(--row-hover)}
 </footer>
 
 <script>
-const ENDPOINT = '/list_git_overall';
+const ENDPOINT = '/web/list_git_overall';
 let gitData = [], columns = [], filters = {}, sortState = {key:null, dir:1}, searchTimer;
 let columnWidths = {};
 let historyMode = false;
@@ -140,7 +140,7 @@ async function enterHistoryMode(rec) {
     document.getElementById('infoHost').innerText = rec.hostname;
     document.getElementById('infoIP').innerText = rec.ip;
     
-    const res = await fetch('/get_repo_history', { 
+    const res = await fetch('/web/get_repo_history', { 
         method: 'POST', 
         headers: {'Content-Type': 'application/json'}, 
         body: JSON.stringify({repo_name: rec.repo_name}) 
@@ -158,7 +158,7 @@ function exitHistoryMode() {
 }
 
 async function viewDiff(hash) {
-    const res = await fetch('/get_commit_diff', { 
+    const res = await fetch('/web/get_commit_diff', { 
         method: 'POST', 
         headers: {'Content-Type': 'application/json'}, 
         body: JSON.stringify({repo_name: selectedRepo, hash: hash}) 
@@ -176,7 +176,7 @@ async function viewDiff(hash) {
 
 async function setGood(hash) {
     if(!confirm("Restore repository to this state? This will create a new commit on 'good' and sync 'bad' to match.")) return;
-    const res = await fetch('/set_good_branch', { 
+    const res = await fetch('/web/set_good_branch', { 
         method: 'POST', 
         headers: {'Content-Type': 'application/json'}, 
         body: JSON.stringify({repo_name: selectedRepo, hash: hash}) 
@@ -200,7 +200,7 @@ async function editNote(hash, currentNote) {
     if (newNote === null) return;
     
     try {
-        const res = await fetch('/save_git_note', {
+        const res = await fetch('/web/save_git_note', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({repo_name: selectedRepo, hash: hash, note: newNote})
@@ -209,7 +209,7 @@ async function editNote(hash, currentNote) {
         if(res.ok) {
             showToast("Note Saved");
             // Re-fetch history to update the view with the new note immediately
-            const historyRes = await fetch('/get_repo_history', { 
+            const historyRes = await fetch('/web/get_repo_history', { 
                 method: 'POST', 
                 headers: {'Content-Type': 'application/json'}, 
                 body: JSON.stringify({repo_name: selectedRepo}) 

@@ -180,9 +180,9 @@ async function refreshConfig() {
     try {
         await verifyClientContext();
         // Fetch indicators
-        masterData = await apiCall('/list_authconfig', {});
+        masterData = await apiCall('/web/list_authconfig', {});
         // Fetch global policies
-        const policies = await apiCall('/list_authconfigglobal', {});
+        const policies = await apiCall('/web/list_authconfigglobal', {});
         
         document.getElementById('createIncidentToggle').checked = !!policies.create_incident;
         document.getElementById('logAttemptSuccessfulToggle').checked = !!policies.log_attempt_successful;
@@ -195,7 +195,7 @@ async function refreshConfig() {
 }
 
 async function updatePolicy(key, value) {
-    await apiCall('/update_authconfigglobal', { key, value });
+    await apiCall('/web/update_authconfigglobal', { key, value });
     console.log(`Policy ${key} updated to ${value}`);
 }
 
@@ -232,32 +232,32 @@ async function addEntry(type) {
     const val = document.getElementById(type === 'IP' ? 'newIpValue' : 'newUserValue').value.trim();
     const disp = document.getElementById(type === 'IP' ? 'newIpDisp' : 'newUserDisp').value;
     if (!val) return;
-    await apiCall('/add_authconfig', { entity_value: val, entity_type: type, disposition: disp });
+    await apiCall('/web/add_authconfig', { entity_value: val, entity_type: type, disposition: disp });
     document.getElementById(type === 'IP' ? 'newIpValue' : 'newUserValue').value = '';
     refreshConfig();
 }
 
 async function toggleStatus(id) {
-    await apiCall('/update_authconfig_status', { id });
+    await apiCall('/web/update_authconfig_status', { id });
     refreshConfig();
 }
 
 async function deleteEntry(id) {
-    if (confirm("Delete?")) { await apiCall('/delete_authconfig', { id }); refreshConfig(); }
+    if (confirm("Delete?")) { await apiCall('/web/delete_authconfig', { id }); refreshConfig(); }
 }
 
 function openBulk() { document.getElementById('bulkModal').style.display = 'block'; }
 function closeBulk() { document.getElementById('bulkModal').style.display = 'none'; }
 
 async function bulkExport() {
-    const data = await apiCall('/bulk_authconfig', { action: 'export' });
+    const data = await apiCall('/web/bulk_authconfig', { action: 'export' });
     document.getElementById('bulkText').value = JSON.stringify(data, null, 2);
 }
 
 async function bulkImport() {
     try {
         const data = JSON.parse(document.getElementById('bulkText').value);
-        await apiCall('/bulk_authconfig', { action: 'import', data: data });
+        await apiCall('/web/bulk_authconfig', { action: 'import', data: data });
         refreshConfig();
         closeBulk();
     } catch (e) { alert("Invalid JSON"); }

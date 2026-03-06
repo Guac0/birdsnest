@@ -167,7 +167,7 @@ async function apiCall(url, payload) {
 // Users
 async function refreshUsers() {
   try {
-    const users = await apiCall('/list_users', {});
+    const users = await apiCall('/web/list_users', {});
     await verifyClientContext();
     const container = document.getElementById('userList');
     container.innerHTML = '';
@@ -182,7 +182,7 @@ async function refreshUsers() {
       `;
       card.querySelector('button').onclick = async () => {
         if (confirm(`Are you sure you want to delete user "${username}"?`)) {
-          await apiCall('/delete_user', { username });
+          await apiCall('/web/delete_user', { username });
           refreshUsers();
         }
       };
@@ -199,7 +199,7 @@ document.getElementById('addUserBtn').onclick = async () => {
     const password = document.getElementById('newPassword').value.trim();
     const role = document.getElementById('newRole').value;
     if (!username || !password) return alert('Missing username or password');
-    await apiCall('/add_user', { username, password, role });
+    await apiCall('/web/add_user', { username, password, role });
     document.getElementById('newUsername').value = '';
     document.getElementById('newPassword').value = '';
     refreshUsers();
@@ -211,7 +211,7 @@ document.getElementById('addUserBtn').onclick = async () => {
 // Tokens
 async function refreshTokens() {
   try {
-    const tokens = await apiCall('/list_tokens', {});
+    const tokens = await apiCall('/web/list_tokens', {});
     const container = document.getElementById('tokenList');
     container.innerHTML = '';
     Object.entries(tokens).forEach(([token, info]) => {
@@ -227,7 +227,7 @@ async function refreshTokens() {
       `;
       card.querySelector('button').onclick = async () => {
         if (confirm(`Are you sure you want to delete token "${token}"?`)) {
-          await apiCall('/delete_token', { token });
+          await apiCall('/web/delete_token', { token });
           refreshTokens();
         }
       };
@@ -287,7 +287,7 @@ document.getElementById('addTokenBtn').onclick = async () => {
   try {
     const token = document.getElementById('newToken').value.trim();
     if (!token) return alert('Missing token');
-    await apiCall('/add_token', { token });
+    await apiCall('/web/add_token', { token });
     document.getElementById('newToken').value = '';
     refreshTokens();
   } catch (err) {
@@ -298,7 +298,7 @@ document.getElementById('addTokenBtn').onclick = async () => {
 // Logs
 async function refreshLogs() {
   try {
-    const logs = await apiCall('/list_logfile', { lines: 50 });
+    const logs = await apiCall('/web/list_logfile', { lines: 50 });
     const logText = document.getElementById('logText');
     logText.value = logs.join('');
   } catch (err) {
@@ -311,7 +311,7 @@ document.getElementById('refreshLogsBtn').onclick = refreshLogs;
 // Manual Save
 async function manualSave() {
   try {
-    const logs = await apiCall('/save_manual', {});
+    const logs = await apiCall('/web/save_manual', {});
     alert(`Manual Save Completed`);
   } catch (err) {
     console.log('Manual Save Error:', err);
@@ -324,7 +324,7 @@ document.getElementById('manualSaveBtn').onclick = manualSave;
 // Export Save
 async function exportSave() {
   try {
-    const logs = await apiCall('/save_export', {});
+    const logs = await apiCall('/web/save_export', {});
     copyTextToClipboard(JSON.stringify(logs, null, 2));
     alert(`Save data copied to clipboard and to console`);
     console.log('Export Save Success:', logs);

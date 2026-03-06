@@ -121,9 +121,9 @@ textarea { width: 100%; height: 250px; background: #000; color: #0f0; font-famil
 
 <script>
 const ENDPOINTS = { 
-    listAuth:'/list_auth_records', 
-    updateNotes:'/authrecord_update_notes',
-    bulk: '/bulk_auth_records' 
+    listAuth:'/web/list_auth_records', 
+    updateNotes:'/web/authrecord_update_notes',
+    bulk: '/web/bulk_auth_records' 
 };
 let authData = {}, columns = [], filters = {}, sortState = {key:null, dir:1}, searchTimer;
 let columnWidths = {};

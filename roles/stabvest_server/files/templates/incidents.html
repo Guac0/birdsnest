@@ -490,11 +490,11 @@ const utils = (function(){
    ------------------------------ */
 const api = (function(){
   // base paths - adapt if your server sits under a prefix
-  const LIST_PATH = '/list_incidents';
-  const LIST_AGENTS_PATH = '/list_agents';
-  const UPDATE_TAG_PATH = '/update_incident_tag';
+  const LIST_PATH = '/web/list_incidents';
+  const LIST_AGENTS_PATH = '/web/list_agents';
+  const UPDATE_TAG_PATH = '/web/update_incident_tag';
 
-  const UPDATE_SLA_PATH = '/update_incident_sla';
+  const UPDATE_SLA_PATH = '/web/update_incident_sla';
 
   async function updateIncidentSLA(incident_id, new_epoch) {
     try {
@@ -731,7 +731,7 @@ const ui = (function(){
       const incident_id = id;
       
       try {
-        const res = await fetch('/update_incident_assignee', {
+        const res = await fetch('/web/update_incident_assignee', {
           method: 'POST',
           headers: { 'Content-Type':'application/json' },
           body: JSON.stringify({ incident_id, assignee: newAssignee })
@@ -1140,7 +1140,7 @@ document.getElementById('ai_submit').onclick = async () => {
     }
 
     try {
-        const res = await fetch('/add_incident', {
+        const res = await fetch('/web/add_incident', {
             method: 'POST',
             headers: { 'Content-Type':'application/json' },
             body: JSON.stringify({ newStatus, message, assignee, createAlert, sla })

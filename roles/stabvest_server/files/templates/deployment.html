@@ -397,12 +397,12 @@
 // --- JAVASCRIPT LOGIC (Unchanged from original, still modular) ---
 
 // 1. CONFIGURATION
-const ENDPOINT = '/add_ansible';
+const ENDPOINT = '/web/add_ansible';
 const FORM_ID = 'ansibleForm';
 
 document.addEventListener('DOMContentLoaded', function() {
     // 1. Fetch the data from your Flask endpoint
-    fetch('/list_ansiblevars')
+    fetch('/web/list_ansiblevars')
         .then(response => {
             if (!response.ok) {
                 throw new Error('Network response was not ok');
@@ -680,7 +680,7 @@ function pollForResults(taskID) {
                 taskID: taskID,
             };
 
-            const response = await fetch("/list_ansibleresult", {
+            const response = await fetch("/web/list_ansibleresult", {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -720,7 +720,7 @@ function pollForResults(taskID) {
 
 async function pingLogin() {
     try {
-        const response = await fetch("/ping_login", {
+        const response = await fetch("/web/ping_login", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

@@ -233,105 +233,109 @@ def git_backend_redirect(repo_name, git_path):
 def get_config_redirect():
     return get_config()
 
-# Also used for frontend
 @app.route('/list_authconfigglobal', methods=['POST'])
 def get_global_config_redirect():
     return get_global_config()
 
 # === FRONTEND DISPLAY ===
 
-@app.route("/dashboard_summary", methods=["POST"])
+@app.route('/web/list_authconfigglobal', methods=['POST'])
+@login_required
+def get_global_config_redirect():
+    return get_global_config()
+
+@app.route("/web/dashboard_summary", methods=["POST"])
 @login_required
 def dashboard_summary_redirect():
     return dashboard_summary()
 
-@app.route("/get_repo_history", methods=["POST"])
+@app.route("/web/get_repo_history", methods=["POST"])
 @login_required
 def get_repo_history_redirect():
     return get_repo_history()
 
-@app.route("/get_commit_diff", methods=["POST"])
+@app.route("/web/get_commit_diff", methods=["POST"])
 @login_required
 def get_commit_diff_redirect():
     return get_commit_diff()
 
 @login_required
-@app.route('/list_authconfig', methods=['POST'])
+@app.route('/web/list_authconfig', methods=['POST'])
 def list_authconfig_redirect():
     return list_authconfig()
 
 @login_required
-@app.route('/list_auth_records', methods=['POST'])
+@app.route('/web/list_auth_records', methods=['POST'])
 def list_auth_records_redirect():
     return list_auth_records()
 
 @login_required
-@app.route("/list_git_overall", methods=["POST"])
+@app.route("/web/list_git_overall", methods=["POST"])
 def list_git_overall_redirect():
     return list_git_overall()
 
 @login_required
-@app.route("/ping_login", methods=["POST"])
+@app.route("/web/ping_login", methods=["POST"])
 def ping_login():
     # Provides an endpoint for the client to check that they can reach the server fine. Does not check auth.
     logger.info(f"/ping_login - Successful connection from {current_user.id} at {request.remote_addr}")
     return "ok", 200
 
-@app.route("/list_users", methods=["POST"])
+@app.route("/web/list_users", methods=["POST"])
 @login_required
 @admin_required
 def list_users_redirect():
     return list_users()
 
-@app.route("/list_users_simple", methods=["POST"])
+@app.route("/web/list_users_simple", methods=["POST"])
 @login_required
 def list_users_simple_redirect():
     return list_users_simple()
 
-@app.route("/list_tokens", methods=["POST"])
+@app.route("/web/list_tokens", methods=["POST"])
 @login_required
 @admin_required
 def list_tokens_redirect():
     return list_tokens()
 
-@app.route("/list_tokens_number", methods=["POST"])
+@app.route("/web/list_tokens_number", methods=["POST"])
 @login_required
 def list_tokens_number_redirect():
     return list_tokens_number()
 
-@app.route("/list_agents", methods=["POST"])
+@app.route("/web/list_agents", methods=["POST"])
 @login_required
 def list_agents_redirect():
     return list_agents()
 
-@app.route("/list_messages", methods=["POST"])
+@app.route("/web/list_messages", methods=["POST"])
 @login_required
 def list_messages_redirect():
     return list_messages()
 
-@app.route("/list_incidents", methods=["POST"])
+@app.route("/web/list_incidents", methods=["POST"])
 @login_required
 def list_incidents_redirect():
     return list_incidents()
 
-@app.route("/list_ansiblevars", methods=["GET"]) # TODO standardize on POST
+@app.route("/web/list_ansiblevars", methods=["GET"]) # TODO standardize on POST
 @login_required
 def list_ansiblevars_redirect():
     return list_ansiblevars()
 
-@app.route("/list_logfile", methods=["POST"])
+@app.route("/web/list_logfile", methods=["POST"])
 @login_required
 @admin_required
 def list_logfile_redirect(filepath=LOGFILE, lines=50):
     return list_logfile(filepath, lines)
 
-@app.route("/list_ansibleresult", methods=["POST"])
+@app.route("/web/list_ansibleresult", methods=["POST"])
 @login_required
 @analyst_required
 def list_ansibleresult_redirect():
     return list_ansibleresult()
 
-@app.route("/save_export", methods=["POST"])
+@app.route("/web/save_export", methods=["POST"])
 @login_required
 @admin_required
 def save_export_redirect(filepath=SAVEFILE):
@@ -339,133 +343,133 @@ def save_export_redirect(filepath=SAVEFILE):
 
 # === FRONTEND INTERACTION ===
 
-@app.route("/set_ansiblevars", methods=["POST"])
+@app.route("/web/set_ansiblevars", methods=["POST"])
 @login_required
 @analyst_required
 def set_ansiblevars_redirect():
     return set_ansiblevars()
 
-@app.route("/save_git_note", methods=["POST"])
+@app.route("/web/save_git_note", methods=["POST"])
 @login_required
 @analyst_required
 def save_git_note_redirect():
     return save_git_note()
 
-@app.route("/set_good_branch", methods=["POST"])
+@app.route("/web/set_good_branch", methods=["POST"])
 @login_required
 @analyst_required
 def set_good_branch_redirect():
     return set_good_branch()
 
-@app.route('/update_authconfigglobal', methods=['POST'])
+@app.route('/web/update_authconfigglobal', methods=['POST'])
 @login_required
 @analyst_required
 def update_global_config_redirect():
     return update_global_config()
 
-@app.route('/add_authconfig', methods=['POST'])
+@app.route('/web/add_authconfig', methods=['POST'])
 @login_required
 @analyst_required
 def add_authconfig_redirect():
     return add_authconfig()
 
-@app.route('/update_authconfig_status', methods=['POST'])
+@app.route('/web/update_authconfig_status', methods=['POST'])
 @login_required
 @analyst_required
 def update_authconfig_status_redirect():
     return update_authconfig_status()
 
-@app.route('/delete_authconfig', methods=['POST'])
+@app.route('/web/delete_authconfig', methods=['POST'])
 @login_required
 @analyst_required
 def delete_authconfig_redirect():
     return delete_authconfig()
 
-@app.route('/authrecord_update_notes', methods=['POST'])
+@app.route('/web/authrecord_update_notes', methods=['POST'])
 @login_required
 @analyst_required
 def authrecord_update_notes_redirect():
     return authrecord_update_notes()
 
-@app.route('/bulk_authconfig', methods=['POST'])
+@app.route('/web/bulk_authconfig', methods=['POST'])
 @login_required
 @analyst_required
 def bulk_authconfig_redirect():
     return bulk_authconfig()
 
-@app.route('/bulk_auth_records', methods=['POST'])
+@app.route('/web/bulk_auth_records', methods=['POST'])
 @login_required
 @analyst_required
 def bulk_auth_records_redirect():
     return bulk_auth_records()
 
-@app.route("/agent_pause", methods=["POST"])
+@app.route("/web/agent_pause", methods=["POST"])
 @login_required
 @analyst_required
 def agent_pause_redirect():
     return agent_pause()
 
-@app.route("/agent_resume", methods=["POST"])
+@app.route("/web/agent_resume", methods=["POST"])
 @login_required
 @analyst_required
 def agent_resume_redirect():
     return agent_resume()
 
-@app.route("/add_incident", methods=["POST"])
+@app.route("/web/add_incident", methods=["POST"])
 @login_required
 @analyst_required
 def add_incident_redirect():
     return add_incident()
 
-@app.route("/add_user", methods=["POST"])
+@app.route("/web/add_user", methods=["POST"])
 @login_required
 @admin_required
 def add_user_redirect():
     return add_user()
 
-@app.route("/delete_user", methods=["POST"])
+@app.route("/web/delete_user", methods=["POST"])
 @login_required
 @admin_required
 def delete_user_redirect():
     return delete_user()
 
-@app.route("/add_token", methods=["POST"])
+@app.route("/web/add_token", methods=["POST"])
 @login_required
 @admin_required
 def add_token_redirect():
     return add_token()
 
-@app.route("/delete_token", methods=["POST"])
+@app.route("/web/delete_token", methods=["POST"])
 @login_required
 @admin_required
 def delete_token_redirect():
     return delete_token()
 
-@app.route("/update_incident_tag", methods=["POST"])
+@app.route("/web/update_incident_tag", methods=["POST"])
 @login_required
 @analyst_required
 def update_incident_tag_redirect():
     return update_incident_tag()
 
-@app.route("/update_incident_assignee", methods=["POST"])
+@app.route("/web/update_incident_assignee", methods=["POST"])
 @login_required
 @analyst_required
 def update_incident_assignee_redirect():
     return update_incident_assignee()
 
-@app.route("/update_incident_sla", methods=["POST"])
+@app.route("/web/update_incident_sla", methods=["POST"])
 @login_required
 @analyst_required
 def update_incident_sla_redirect():
     return update_incident_sla()
 
-@app.route("/add_ansible", methods=["POST"])
+@app.route("/web/add_ansible", methods=["POST"])
 @login_required
 @analyst_required
 def add_ansible_redirect():
     return add_ansible()
 
-@app.route("/save_manual", methods=["POST"])
+@app.route("/web/save_manual", methods=["POST"])
 @login_required
 @analyst_required
 def save_manual():
