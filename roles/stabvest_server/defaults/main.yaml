@@ -11,7 +11,7 @@ stabvest_gunicorn_workers: 3
 
 
 stabvest_host: "192.168.1.18"
-stabvest_port: 8081
+stabvest_port: 8000
 
 # Derived values can still be overridden if needed
 public_url: "https://{{ stabvest_host }}:{{ stabvest_port }}"

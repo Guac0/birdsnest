@@ -10,7 +10,7 @@ owlet_auth_token: "testtoken"
 owlet_auth_log_path: ""
 owlet_auth_parser: ""
 owlet_sleeptime: 60
-owlet_server_url: "https://192.168.1.18:8081/"
+owlet_server_url: "https://127.0.0.1:8000/"
 owlet_server_timeout: 5
 owlet_debug_print: true
 owlet_agent_type: "owlet"
