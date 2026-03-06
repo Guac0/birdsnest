@@ -3,7 +3,6 @@ import time
 import sdnotify
 from datetime import datetime
 import math
-from urllib.parse import urlparse, unquote_plus
 import urllib.request
 import urllib.error
 import json

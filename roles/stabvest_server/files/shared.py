@@ -1,5 +1,5 @@
 # Holds shared logic like configuration values and logging
-import os, json, logging, time
+import os, json, logging
 from datetime import datetime, timedelta
 from concurrent_log_handler import ConcurrentRotatingFileHandler
 import platform

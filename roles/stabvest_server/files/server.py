@@ -1,13 +1,9 @@
-from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin, current_user
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, abort, send_from_directory, session
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager, login_required, logout_user, current_user, current_user
+from flask import Flask, request, jsonify, render_template, redirect, url_for, abort, send_from_directory
 from functools import wraps
-from datetime import datetime, timedelta
+from datetime import timedelta
 import time
 import os
-from collections import deque
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func
 import subprocess
 
 from models import (

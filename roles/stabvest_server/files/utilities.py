@@ -7,7 +7,7 @@ import platform
 import time
 import random
 from sqlalchemy.orm import class_mapper
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash
 from urllib.parse import urlparse, unquote_plus
 
 from models import (
