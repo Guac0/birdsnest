@@ -1,6 +1,5 @@
 ---
-#stabvest_deploy_dir_win: "C:\\stabvest"
-#stabvest_deploy_dir_unix: "/stabvest"
+# Ansible Deployment Vars
 #stabvest_task_create: false
 #stabvest_task_name: "stabvest"
 #stabvest_task_interval: 300 #seconds. cron needs this to be an even minutes value (so divisible by 60)
@@ -8,7 +7,10 @@ stabvest_agent_executable: "agent.py"
 stabvest_tester_executable: "agent_tester.py"
 stabvest_include_tester: true
 stabvest_service_start: false
+#stabvest_deploy_dir: "C:\\stabvest\\{{ stabvest_agent_name }}\\"
+stabvest_deploy_dir: "/stabvest/{{ stabvest_agent_name }}/"
 
+# Agent Config Options (you probably need to change these for each deployed instance)
 stabvest_agent_name: "apache2"
 #stabvest_agent_name: "httpd"
 stabvest_auth_token: "testtoken"
@@ -16,8 +18,8 @@ stabvest_server_url: "https://127.0.0.1:8000/"
 stabvest_server_timeout: 5
 stabvest_sleeptime: 60
 stabvest_disarm: false
+stabvest_debug_print: true
 stabvest_iptables_path: "iptables"
-
 stabvest_ports:
   - 80
 stabvest_services:
@@ -28,7 +30,7 @@ stabvest_packages:
 #  - "IIS-WebServerRole"
   - "apache2"
 #  - "httpd"
-stabvest_service_backups: # REPLACE WITH AUTO
+stabvest_service_backups: # TODO REPLACE WITH AUTO
   PathName: "C:\\\\Windows\\\\system32\\\\svchost.exe -k iissvcs"
   StartName: "localSystem"
   Dependencies: "['WAS','HTTP']"
@@ -43,8 +45,9 @@ stabvest_service_backups: # REPLACE WITH AUTO
 stabvest_protected_folders: ["/var/www","/usr/sbin/apache2","/etc/apache2","/lib/systemd/system/apache2.service"]
 #stabvest_protected_folders: ["/var/www","/usr/sbin/httpd","/etc/httpd/conf","/etc/httpd/conf.d","/etc/httpd/conf.modules.d","/etc/httpd/modules","/usr/lib/systemd/system/httpd.service"]
 #stabvest_protected_folders: ['C:\\inetpub\\wwwroot']
-stabvest_debug_print: true
-stabvest_backupdir: ""
+
+# More Agent Config Options - You probably shouldn't be changing these
+stabvest_backupdir: "" # unused, just perma defaults to same dir as the agent executable
 stabvest_logfile: "log.txt"
 stabvest_statusfile: "status.txt"
 stabvest_mtu_min: 1200
@@ -52,6 +55,3 @@ stabvest_mtu_default: 1300
 stabvest_mtu_max: 1514
 stabvest_linux_default_ttl: 64
 stabvest_agent_type: "stabvest"
-
-#stabvest_deploy_dir: "C:\\stabvest\\{{ stabvest_agent_name }}\\"
-stabvest_deploy_dir: "/stabvest/{{ stabvest_agent_name }}/"

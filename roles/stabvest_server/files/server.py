@@ -233,7 +233,6 @@ def get_config_redirect():
 def get_global_config_redirect():
     return get_global_config()
 
-# Note: not under /agent
 @app.route('/agent/git/<repo_name>.git/<path:git_path>', methods=['GET', 'POST', 'PROPFIND'])
 @app.route('/agent/git/<repo_name>.git/', defaults={'git_path': ''}, methods=['GET', 'POST', 'PROPFIND'])
 def git_backend_redirect(repo_name, git_path):

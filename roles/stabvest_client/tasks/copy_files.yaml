@@ -60,7 +60,6 @@
   vars:
     base_dir: "{{ (ansible_facts.os_family == 'Windows') | ternary('python -m venv --with-pip', 'python3 -m venv --with-pip') }}"
   when: ansible_facts.os_family != "Windows"
-  #ignore_errors: true
 
 - name: Copy agent executable to target
   copy:

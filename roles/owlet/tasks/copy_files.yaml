@@ -74,7 +74,6 @@
   vars:
     base_dir: "{{ (ansible_facts.os_family == 'Windows') | ternary('python -m venv --with-pip', 'python3 -m venv --with-pip') }}"
   when: ansible_facts.os_family != "Windows"
-  #ignore_errors: true
 
 - name: Create venv and install requirements (Windows)
   ansible.windows.win_shell: |

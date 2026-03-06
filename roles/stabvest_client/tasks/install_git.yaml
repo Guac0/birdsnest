@@ -25,11 +25,7 @@
 - name: Install Git on Windows (Silent)
   ansible.windows.win_package:
     path: '{{ ansible_env.TEMP }}\git_installer.exe'
-    # /VERYSILENT: No UI
-    # /NORESTART: Prevent auto-reboot
-    # /NOCANCEL: Disable cancel button
-    # /SP-: Disables the "This will install..." prompt
-    arguments: '/VERYSILENT /NORESTART /NOCANCEL /SP-'
+    arguments: '/VERYSILENT /NORESTART /NOCANCEL /SP-' # super duper silent and no reboot
     state: present
   when: 
     - ansible_os_family == "Windows"
@@ -39,6 +35,14 @@
   ansible.windows.win_path:
     elements: 'C:\Program Files\Git\cmd'
     state: present
+  when: 
+    - ansible_os_family == "Windows"
+    - git_check.rc != 0
+
+- name: Remove installer
+  ansible.windows.win_file:
+    path: '{{ ansible_env.TEMP }}\git_installer.exe'
+    state: absent
   when: 
     - ansible_os_family == "Windows"
     - git_check.rc != 0
