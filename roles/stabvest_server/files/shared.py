@@ -12,7 +12,7 @@ from flask_login import UserMixin
 
 CONFIG_DEFAULTS = {
     "HOST": "0.0.0.0",
-    "PORT": 8080,
+    "PORT": 8000,
     "PUBLIC_URL": "https://{HOST}:{PORT}",
     "LOGFILE": "log_{timestamp}.txt",
     "SAVEFILE": "save_{timestamp}.db",

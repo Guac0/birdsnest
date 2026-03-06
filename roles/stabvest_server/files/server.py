@@ -211,32 +211,33 @@ def whoami():
 
 # === BEACONS ===
 
-@app.route("/ping", methods=["POST"])
+@app.route("/agent/ping", methods=["POST"])
 def ping():
     # Provides an endpoint for the client to check that they can reach the server fine. Does not check auth.
     logger.info(f"/ping - Successful connection from {request.remote_addr}")
     return "ok", 200
 
-@app.route("/beacon", methods=["POST"])
+@app.route("/agent/beacon", methods=["POST"])
 def handle_beacon_redirect():
     return handle_beacon()
 
-@app.route("/get_pause", methods=["POST"])
+@app.route("/agent/get_pause", methods=["POST"])
 def get_pause_redirect():
     return get_pause()
 
-@app.route('/git/<repo_name>.git/<path:git_path>', methods=['GET', 'POST', 'PROPFIND'])
-@app.route('/git/<repo_name>.git/', defaults={'git_path': ''}, methods=['GET', 'POST', 'PROPFIND'])
-def git_backend_redirect(repo_name, git_path):
-    return git_backend()
-
-@app.route('/list_authconfig_agent', methods=['GET'])
+@app.route('/agent/list_authconfig_agent', methods=['GET'])
 def get_config_redirect():
     return get_config()
 
-@app.route('/list_authconfigglobal', methods=['POST'])
+@app.route('/agent/list_authconfigglobal', methods=['POST'])
 def get_global_config_redirect():
     return get_global_config()
+
+# Note: not under /agent
+@app.route('/agent/git/<repo_name>.git/<path:git_path>', methods=['GET', 'POST', 'PROPFIND'])
+@app.route('/agent/git/<repo_name>.git/', defaults={'git_path': ''}, methods=['GET', 'POST', 'PROPFIND'])
+def git_backend_redirect(repo_name, git_path):
+    return git_backend()
 
 # === FRONTEND DISPLAY ===
 

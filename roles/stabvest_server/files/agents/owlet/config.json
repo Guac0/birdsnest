@@ -4,7 +4,7 @@
     "AUTH_LOG_PATH": "",
     "AUTH_PARSER": "",
     "SLEEPTIME": 60,
-    "SERVER_URL": "https://127.0.0.1:8080/",
+    "SERVER_URL": "https://127.0.0.1:8000/",
     "SERVER_TIMEOUT": 5,
     "DEBUG_PRINT": true,
     "LOGFILE": "log.txt",

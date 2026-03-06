@@ -1,7 +1,7 @@
 {
     "AGENT_NAME": "test1",
     "AUTH_TOKEN": "testtoken",
-    "SERVER_URL": "https://127.0.0.1:8080/",
+    "SERVER_URL": "https://127.0.0.1:8000/",
     "SERVER_TIMEOUT": 5,
     "SLEEPTIME": 60,
     "DISARM": true,

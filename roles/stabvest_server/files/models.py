@@ -14,6 +14,7 @@ GIT_PROJECT_ROOT, GIT_BACKEND
 db = SQLAlchemy()
 logger = setup_logging("web")
 
+
 ##########################
 # === DATABASE TABLES == #
 ##########################
@@ -149,7 +150,7 @@ class AnsibleVars(db.Model):
     stabvest_agent_name = db.Column(db.String(16), default="", nullable=False)
     stabvest_auth_token = db.Column(db.String(128), default="testtoken", nullable=False)
     stabvest_agent_type = db.Column(db.String(32), default="stabvest", nullable=False)
-    stabvest_server_url = db.Column(db.String(128), default="https://127.0.0.1:8080/", nullable=False)
+    stabvest_server_url = db.Column(db.String(128), default="https://127.0.0.1:8000/", nullable=False)
     stabvest_server_timeout = db.Column(db.Integer, default=5, nullable=False)
     stabvest_sleeptime = db.Column(db.Integer, default=60, nullable=False)
     stabvest_disarm = db.Column(db.Boolean, default=True, nullable=False)

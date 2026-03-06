@@ -450,7 +450,7 @@ if __name__ == "__main__":
         threading.Thread(target=periodic_ansible, daemon=True)#,
         # all in one testing only!
         #threading.Thread(target=start_server, daemon=True)
-        #gunicorn --certfile=cert.pem --keyfile=key.pem --workers 4 --bind 0.0.0.0:8080 server:app 
+        #gunicorn --certfile=cert.pem --keyfile=key.pem --workers 4 --bind 0.0.0.0:8000 server:app 
     ]
 
     for t in threads:

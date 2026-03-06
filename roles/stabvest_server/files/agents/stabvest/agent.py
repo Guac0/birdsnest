@@ -33,7 +33,7 @@ import ast
 CONFIG_DEFAULTS = {
     "AGENT_NAME": "test1",
     "AUTH_TOKEN": "testtoken",
-    "SERVER_URL": "https://127.0.0.1:8080/",
+    "SERVER_URL": "https://127.0.0.1:8000/",
     "SERVER_TIMEOUT": 5,
     "SLEEPTIME": 60,
     "DISARM": True,
@@ -432,7 +432,7 @@ def setup_git_agent(repo_dir, protected_folders, systemInfo=None):
         # 1. Clone or Init Repo
         if not os.path.exists(repo_dir):
             agent_hash = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
-            repo_url = f"{SERVER_URL}git/{agent_hash}.git"
+            repo_url = f"{SERVER_URL}agent/git/{agent_hash}.git"
             run_git(["clone", repo_url, Path(repo_dir).name], os.path.dirname(Path(repo_dir).resolve()))
         
         run_git(["config", "user.name", "Agent"], repo_dir)
@@ -529,7 +529,7 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
         # Server comms are intentionally disabled
         # Maybe redirect to print_debug instead?
         return True
-    url = SERVER_URL + "beacon"
+    url = SERVER_URL + "agent/beacon"
 
     # Prep payload
     payload = {
@@ -590,7 +590,7 @@ def get_pause_state_server(systemInfo=get_system_details()):
         # Maybe redirect to print_debug instead?
         return True
     
-    url = SERVER_URL + "get_pause"
+    url = SERVER_URL + "agent/get_pause"
 
     # Prep payload
     payload = {
@@ -3647,7 +3647,7 @@ def main(stop_event=None):
 
     systemInfo = get_system_details()
     agent_id = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
-    repo_url = os.path.join(f"{SERVER_URL}git",f"{agent_id}.git")
+    repo_url = os.path.join(f"{SERVER_URL}agent/git",f"{agent_id}.git")
     repo_dir = f"{os.path.join(os.path.dirname(os.path(__file__).resolve()),f'{agent_id}.git')}"
 
     send_message(True,True,f"Register")

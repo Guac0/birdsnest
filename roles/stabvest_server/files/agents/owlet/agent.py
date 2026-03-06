@@ -38,7 +38,7 @@ CONFIG_DEFAULTS = {
     "AUTH_LOG_PATH": "",
     "AUTH_PARSER": "",
     "SLEEPTIME": 60,
-    "SERVER_URL": "https://127.0.0.1:8080/",
+    "SERVER_URL": "https://127.0.0.1:8000/",
     "SERVER_TIMEOUT": 5,
     "DEBUG_PRINT": True,
     "LOGFILE": "log.txt",
@@ -445,7 +445,7 @@ def send_message(oldStatus,newStatus,message,authInfo=None,systemInfo=get_system
         # Server comms are intentionally disabled
         # Maybe redirect to print_debug instead?
         return True
-    url = SERVER_URL + "beacon"
+    url = SERVER_URL + "agent/beacon"
 
     # Prep payload
     if authInfo != None:
@@ -526,7 +526,7 @@ def get_pause_state_server(systemInfo=get_system_details()):
         # Maybe redirect to print_debug instead?
         return True
     
-    url = SERVER_URL + "get_pause"
+    url = SERVER_URL + "agent/get_pause"
 
     # Prep payload
     payload = {
@@ -844,7 +844,7 @@ class AuthWatcher:
         
         # 1. Fetch Entity Lists (GET)
         try:
-            with urllib.request.urlopen(SERVER_URL + "list_authconfig_agent", timeout=SERVER_TIMEOUT, context=CTX) as r:
+            with urllib.request.urlopen(SERVER_URL + "agent/list_authconfig_agent", timeout=SERVER_TIMEOUT, context=CTX) as r:
                 base_config.update(json.loads(r.read().decode()))
         except Exception as e:
             print_debug(f"Error fetching entity lists: {e}")
@@ -852,7 +852,7 @@ class AuthWatcher:
         # 2. Fetch Global Policy Settings (POST)
         try:
             req = urllib.request.Request(
-                SERVER_URL + "list_authconfigglobal", 
+                SERVER_URL + "agent/list_authconfigglobal", 
                 data=json.dumps({}).encode(), # Sending empty JSON for POST
                 headers={"Content-Type": "application/json"},
                 method="POST"
