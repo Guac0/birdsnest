@@ -27,8 +27,12 @@ from modules.generic_agent import beacon_generic
 logger = setup_logging("web")
 
 def beacon_owlet():
+    
+    returnMsg, returnCode, registered, agent_id, current_time = beacon_generic("/agent/beacon/owlet")
+    if returnCode != 200:
+        return returnMsg, returnCode
+    
     data = request.json
-
     oldStatus = data.get("oldStatus",False) # Client old status. ex: false if client has detected malicious activity or has had an internal error, true if nothing has been detected
     newStatus = data.get("newStatus",False) # Client new status. Always TRUE if oldStatus is TRUE. Otherwise, serves as an indicator if the issue in oldStatus has been automatically remediated successfully.
     message = data.get("message","") # Custom string message. Used for incident descriptions.
@@ -38,10 +42,6 @@ def beacon_owlet():
     srcip = data.get("srcip","")
     login_type = data.get("login_type","")
     successful = data.get("successful",False)
-    
-    returnMsg, returnCode, registered, agent_id, current_time = beacon_generic("/agent/beacon/owlet")
-    if returnCode != 200:
-        return returnMsg, returnCode
     
     # update messages table
     try:

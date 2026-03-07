@@ -27,15 +27,15 @@ from modules.generic_agent import beacon_generic
 logger = setup_logging("web")
 
 def beacon_stabvest():
-    data = request.json
 
-    oldStatus = data.get("oldStatus",False) # Client old status. ex: false if client has detected malicious activity or has had an internal error, true if nothing has been detected
-    newStatus = data.get("newStatus",False) # Client new status. Always TRUE if oldStatus is TRUE. Otherwise, serves as an indicator if the issue in oldStatus has been automatically remediated successfully.
-    message = data.get("message","") # Custom string message. Used for incident descriptions.
-    
     returnMsg, returnCode, registered, agent_id, current_time = beacon_generic("/agent/beacon/stabvest")
     if returnCode != 200:
         return returnMsg, returnCode
+    
+    data = request.json
+    oldStatus = data.get("oldStatus",False) # Client old status. ex: false if client has detected malicious activity or has had an internal error, true if nothing has been detected
+    newStatus = data.get("newStatus",False) # Client new status. Always TRUE if oldStatus is TRUE. Otherwise, serves as an indicator if the issue in oldStatus has been automatically remediated successfully.
+    message = data.get("message","") # Custom string message. Used for incident descriptions.
     
     # update messages table
     try:
