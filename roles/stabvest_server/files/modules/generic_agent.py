@@ -25,13 +25,29 @@ logger = setup_logging("web")
 
 def beacon_generic_handler():
     # Helper on top of beacon_generic if you want to call it directly from a route and return immediately for some reason
-    returnMsg, returnCode, registered, agent_id, current_time = beacon_generic("/agent/beacon")
+    # Also serves as a general template of how to set up a new beacon endpoint.
 
+    ###############
+    # Perform generic beacon handling that is identical for all clients (see beacon_generic() docstring for more information)
+    ###############
+    returnMsg, returnCode, registered, agent_id, current_time = beacon_generic("/agent/beacon")
+    if returnCode != 200:
+        return returnMsg, returnCode
+    
+    ###############
+    # Perform specific parsing needed for this beacon type
+    ###############
+    # For this example beacon, this just grabs the message (if any) and adds it to the messages table.
+    # Note that this should be done for every beacon but is not placed in beacon_generic() in case you want to do custom parsing before saving the message.
+
+    # Grab relevant fields from the agent's request
     data = request.json
     oldStatus = data.get("oldStatus",True), # Client old status. ex: false if client has detected malicious activity or has had an internal error, true if nothing has been detected
     newStatus = data.get("newStatus",True), # Client new status. Always TRUE if oldStatus is TRUE. Otherwise, serves as an indicator if the issue in oldStatus has been automatically remediated successfully.
     message = data.get("message","") # Custom string message. Used for incident descriptions.
+    # You can do a failure case here if they're missing, but all of these have good defaults so not necessary.
 
+    # If the agent's request has a message item attached, log it in the messages database
     if message:
         try:
             message_id = hash_id(current_time, agent_id)
@@ -48,13 +64,12 @@ def beacon_generic_handler():
         except Exception as e:
             db.session.rollback()
             logger.error(f"/agent/beacon - Failed to create message for agent {agent_id}: {e}")
-            # Not returning an error, as this is secondary to agent update/auth
+            # Not returning an error, as this is not critical enough for that. Besides, what're you gonna do except log it to the server log anyways?
             pass
 
-    if returnCode == 200:
-        logger.info(f"/agent/beacon - Successful connection from {request.remote_addr}. Full details: {request.json}")
-        
-    return returnMsg, returnCode
+    # Log the connection before returning with HTTP syntx "custom message", httpReturnCode
+    logger.info(f"/agent/beacon - Successful connection from {request.remote_addr}. Full details: {request.json}") # TODO - dynamically grab the route from Flask instead of manually typing it. I know how to do this but holding off on doing this to all several dozen instances until i get bored.
+    return "ok", 200
 
 def beacon_generic(endpoint):
     """
