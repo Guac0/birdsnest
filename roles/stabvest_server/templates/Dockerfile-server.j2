@@ -1,0 +1,12 @@
+FROM {{ stabvest_python_container }}
+
+RUN apk add --no-local-cache python3 py3-pip
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
+
+CMD ["gunicorn", "--bind", "0.0.0.0:{{ stabvest_port }}", "--workers", "{{ stabvest_gunicorn_workers }}", "--certfile=cert.pem", "--keyfile=key.pem", "--worker-tmp-dir", "/dev/shm", "server:app"]
+#CMD ["python3", "server.py"]

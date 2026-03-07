@@ -1,14 +1,19 @@
 ---
 stabvest_deploy_dir: "/stabvest_server"
-#stabvest_deploy_dir_win: "C:\\stabvest_server"
-#stabvest_deploy_dir_unix: "/stabvest_server"
-stabvest_task_create: true
-stabvest_task_name: "stabvest_server"
-stabvest_task_interval: 300 #seconds. cron needs this to be an even minutes value (so divisible by 60)
-stabvest_agent_executable: "server.py"
-stabvest_service_start: true
-stabvest_gunicorn_workers: 3
-
+stabvest_gunicorn_workers: 1 # per replica
+stabvest_webserver_replicas: 3
+stabvest_proxy_container: "nginx:latest"
+stabvest_database_image: "postgres:latest"
+stabvest_python_container: "alpine:3.19"
+stabvest_database_user: "birdsnest"
+stabvest_database_db: "birdsnestdb"
+stabvest_database_password: "birdsnestpwd"
+stabvest_allow_ips_web:
+  - 127.0.0.1
+  - 172.16.0.0/12
+stabvest_allow_ips_agent:
+  - 127.0.0.1
+  - 10.0.0.0/8
 
 stabvest_host: "192.168.1.18" # public URL of server. is NOT used for starting the server listener (that is always 0.0.0.0)
 stabvest_port: 8000

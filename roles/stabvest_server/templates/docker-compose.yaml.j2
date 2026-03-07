@@ -2,29 +2,33 @@ version: '3.8'
 # log.txt must be present before running!
 
 services:
-  nginx:
-    image: nginx:latest
+  proxy:
+    image: {{ stabvest_proxy_container }}
     ports:
-      - "80:80"
+      - "{{ stabvest_port }}:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - webserver
 
   webserver:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile-server
     volumes:
       - .:/app
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
     deploy:
-      replicas: 3
+      replicas: {{ stabvest_webserver_replicas }}
     depends_on:
       - database
   
   worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile-worker
     volumes:
       - .:/app
     environment:
@@ -34,12 +38,12 @@ services:
       - database
 
   database:
-    image: postgres:latest
+    image: {{ stabvest_database_image }}
     restart: always
     environment:
-      POSTGRES_USER: birdsnest
-      POSTGRES_PASSWORD: birdsnestpwd
-      POSTGRES_DB: birdsnestdb
+      POSTGRES_USER: {{ stabvest_database_user }}
+      POSTGRES_PASSWORD: {{ stabvest_database_password }}
+      POSTGRES_DB: {{ stabvest_database_db }}
     expose:
       - "5432" 
     volumes:
