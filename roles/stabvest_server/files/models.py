@@ -24,7 +24,7 @@ class Agent(db.Model):
     __tablename__ = 'agents'
 
     # Primary Key
-    agent_id = db.Column(db.String(128), primary_key=True, nullable=False)
+    agent_id = db.Column(db.String(65), primary_key=True, nullable=False)
 
     # Agent details
     agent_name = db.Column(db.String(128))
@@ -51,7 +51,7 @@ class Message(db.Model):
     __tablename__ = 'messages'
 
     message_id = db.Column(db.String(128), primary_key=True, nullable=False)
-    agent_id = db.Column(db.String(128), db.ForeignKey('agents.agent_id'), nullable=False)
+    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
     
     # Message-specific fields
     timestamp = db.Column(db.Integer, default=lambda: int(time.time()), nullable=False)
@@ -70,7 +70,7 @@ class Incident(db.Model):
     
     # Incident fields
     timestamp = db.Column(db.Integer, default=lambda: int(time.time()), nullable=False)
-    agent_id = db.Column(db.String(128), db.ForeignKey('agents.agent_id'), nullable=False)
+    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
     
     tag = db.Column(db.String(10), default="New", nullable=False) # "New", "Active", "Closed"
     oldStatus = db.Column(db.Boolean, nullable=False)
@@ -208,7 +208,7 @@ class AuthRecord(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     message_id = db.Column(db.String(128), db.ForeignKey('messages.message_id'), nullable=False)
-    agent_id = db.Column(db.String(128), db.ForeignKey('agents.agent_id'), nullable=False)
+    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
 
     user = db.Column(db.String(100), nullable=False)
     login_type = db.Column(db.String(32), nullable=False)

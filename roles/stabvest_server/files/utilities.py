@@ -11,6 +11,7 @@ import random
 from sqlalchemy.orm import class_mapper
 from werkzeug.security import generate_password_hash
 from urllib.parse import urlparse, unquote_plus
+import hashlib
 
 from models import (
 db,
@@ -475,12 +476,10 @@ def run_git(args, cwd=GIT_PROJECT_ROOT):
     return result
 
 def hash_id(*args):
-    # hash any number of args so that we have a single value to use as the id that remains unique if multiple items have similar fields
-    # Does not need to be secure
+    # Hash any number of args so that we have a single value to use as the id that remains unique if multiple items have similar fields. Does not need to be secure
     combined = "|".join(map(str, args))
-    encoded = base64.b64encode(combined.encode("utf-8")).decode("utf-8")
-    return encoded
-    #return hashlib.sha256(f"{ip}|{hostname}".encode()).hexdigest() #sha256 hash - too complex to use on frontend
+    return hashlib.sha256(combined.encode("utf-8")).hexdigest() # hex digest returns a fixed-length 64-char string regardless of input size
+    #return base64.b64encode(combined.encode("utf-8")).decode("utf-8")
 
 def create_incident(messageDict,tag="New",assignee="",createAlert=True):
     """
