@@ -528,7 +528,7 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
         # Server comms are intentionally disabled
         # Maybe redirect to print_debug instead?
         return True
-    url = SERVER_URL + "agent/beacon"
+    url = SERVER_URL + "agent/beacon/stabvest"
 
     # Prep payload
     payload = {

@@ -444,7 +444,7 @@ def send_message(oldStatus,newStatus,message,authInfo=None,systemInfo=get_system
         # Server comms are intentionally disabled
         # Maybe redirect to print_debug instead?
         return True
-    url = SERVER_URL + "agent/beacon"
+    url = SERVER_URL + "agent/beacon/owlet"
 
     # Prep payload
     if authInfo != None:

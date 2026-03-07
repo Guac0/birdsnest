@@ -2,8 +2,8 @@
 
 from flask import request, jsonify
 import subprocess
-import time
 import os
+import shutil
 
 from models import (
 db,
@@ -22,9 +22,70 @@ get_random_time_offset_epoch, add_test_data_agents, add_test_data_messages, add_
 add_test_data_incidents_custom, add_test_data_auth_records, add_test_data_auth_config,
 run_git, hash_id, create_incident, clean_and_join_path, get_git_stats, find_incident, find_incident_db
 )
+from modules.generic_agent import beacon_generic
 
 logger = setup_logging("web")
 
+def beacon_stabvest():
+    data = request.json
+
+    oldStatus = data.get("oldStatus",False) # Client old status. ex: false if client has detected malicious activity or has had an internal error, true if nothing has been detected
+    newStatus = data.get("newStatus",False) # Client new status. Always TRUE if oldStatus is TRUE. Otherwise, serves as an indicator if the issue in oldStatus has been automatically remediated successfully.
+    message = data.get("message","") # Custom string message. Used for incident descriptions.
+    
+    returnMsg, returnCode, registered, agent_id, current_time = beacon_generic("/agent/beacon/stabvest")
+    if returnCode != 200:
+        return returnMsg, returnCode
+    
+    # update messages table
+    try:
+        message_id = hash_id(current_time, agent_id)
+        new_message = Message(
+            message_id = message_id,
+            timestamp=current_time,
+            agent_id=agent_id,
+            oldStatus=oldStatus,
+            newStatus=newStatus,
+            message=message
+        )
+        db.session.add(new_message)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/beacon_stabvest - Failed to create message for agent {agent_id}: {e}")
+        # Not returning an error, as this is secondary / recoverable (hopefully...)
+
+    if registered:
+        # Create (new) git repo
+        repo_path = os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")
+        if os.path.exists(repo_path):
+            if os.path.isdir(repo_path):
+                shutil.rmtree(repo_path)
+                logger.info(f"/beacon_stabvest: removed existing repo at {repo_path} as part of re-registration logic")
+            else:
+                os.remove(repo_path)
+                logger.warning(f"/beacon_stabvest: removed existing repo at {repo_path} as part of re-registration logic - but it was a file instead of a folder?")
+        try:
+            run_git(["init", "--bare", f"{agent_id}.git"],GIT_PROJECT_ROOT)
+            run_git(["config", "-f", f"{agent_id}.git/config", "http.receivepack", "true"],GIT_PROJECT_ROOT)
+            logger.info(f"/beacon_stabvest: created repo {os.path.join(GIT_PROJECT_ROOT,f'{agent_id}.git')}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"/beacon_stabvest: Error occurred when creating {repo_path} - {e.stderr}")
+            return "error when creating git repo", 500
+
+    # Trigger Incident if Status Change is Critical
+    if oldStatus == False:
+        incident_data = {
+            "timestamp": current_time,
+            "agent_id": agent_id,
+            "oldStatus": oldStatus,
+            "newStatus": newStatus,
+            "message": message,
+            "sla": 0
+        }
+        create_incident(incident_data)
+
+    return "ok", 200
 
 def git_backend(repo_name, git_path):
     # Log IMMEDIATELY with all inputs

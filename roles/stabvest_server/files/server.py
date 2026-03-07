@@ -38,13 +38,13 @@ from modules.generic_web import (
     update_incident_sla, add_ansible, add_token, delete_user
 )
 from modules.generic_agent import (
-    handle_beacon, get_pause
+    beacon_generic_handler, beacon_generic, get_pause
 )
 from modules.stabvest_web import (
     list_git_overall, get_repo_history, get_commit_diff, save_git_note, set_good_branch
 )
 from modules.stabvest_agent import (
-    git_backend
+    beacon_stabvest, git_backend
 )
 from modules.owlet_web import (
     list_authconfig, list_auth_records, update_global_config, 
@@ -52,7 +52,7 @@ from modules.owlet_web import (
     authrecord_update_notes, bulk_authconfig, bulk_auth_records
 )
 from modules.owlet_agent import (
-    get_config, get_global_config
+    beacon_owlet, get_config, get_global_config
 )
 
 # === Set Flask Config ===
@@ -218,8 +218,17 @@ def ping():
     return "ok", 200
 
 @app.route("/agent/beacon", methods=["POST"])
-def handle_beacon_redirect():
-    return handle_beacon()
+def beacon_generic_redirect():
+    # This endpoint shouldn't actually be used. However, it is kept for future proofing a generic callback of some kind.
+    return beacon_generic_handler()
+
+@app.route("/agent/beacon/stabvest", methods=["POST"])
+def beacon_stabvest_redirect():
+    return beacon_stabvest()
+
+@app.route("/agent/beacon/owlet", methods=["POST"])
+def beacon_owlet_redirect():
+    return beacon_owlet()
 
 @app.route("/agent/get_pause", methods=["POST"])
 def get_pause_redirect():
