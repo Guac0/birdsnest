@@ -23,7 +23,7 @@
     dest: "{{ stabvest_deploy_dir }}/"
   with_items:
     - models.py
-    - requirements.txt
+    #- requirements.txt
     - server.py
     - shared.py
     - utilities.py
@@ -37,16 +37,6 @@
   template:
     src: nginx.conf.j2
     dest: "{{ stabvest_deploy_dir }}/nginx.conf"
-
-- name: Deploy Dockerfile Server
-  template:
-    src: Dockerfile-server.j2
-    dest: "{{ stabvest_deploy_dir }}/Dockerfile-server"
-
-- name: Deploy Dockerfile Worker
-  template:
-    src: Dockerfile-worker.j2
-    dest: "{{ stabvest_deploy_dir }}/Dockerfile-worker"
 
 - name: Deploy Docker Compose config file
   template:
@@ -77,5 +67,5 @@
 - name: Pull and Build Docker Images
   community.docker.docker_compose_v2:
     project_src: "{{ stabvest_deploy_dir }}"
-    build: always
+    build: policy
     state: present
