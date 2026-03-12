@@ -1,6 +1,6 @@
 {
-  "HOST": "127.0.0.1",
-  "PORT": 8000,
+  "HOST": "0.0.0.0",
+  "PORT": 80,
   "PUBLIC_URL": "https://{HOST}:{PORT}",
   "LOGFILE": "log.txt",
   "SECRET_KEY": "changeme",

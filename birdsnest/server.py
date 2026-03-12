@@ -8,6 +8,7 @@ from datetime import timedelta
 import time
 import os
 import subprocess
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from models import (
 db,
@@ -59,6 +60,7 @@ from modules.owlet_agent import (
 #SQLALCHEMY_DATABASE_URI = f'sqlite:///save.db'
 SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://birdsnest:birdsnestpwd@database:5432/birdsnestdb"
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.config['SECRET_KEY'] = CONFIG["SECRET_KEY"]
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Silence the deprecation warning
@@ -82,7 +84,9 @@ db.init_app(app)
 # See load_user() for the following
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'  # redirect to login page if not authenticated
+login_manager.login_view = 'login_redirect'  # redirect to login page if not authenticated
+login_manager.login_message = "Please log in to access this page."
+login_manager.login_message_category = "info"
 
 create_db_tables(app)
 
@@ -125,85 +129,86 @@ def load_user(id):
 # === BASIC WEBSITE FUNCTIONALITY ===
 
 @app.route("/")
-@app.route("/dashboard")
+@app.route("/web/")
+@app.route("/web/dashboard")
 @login_required
 def page_dashboard():
     logger.info(f"/dashboard - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("dashboard.html")
 
-@app.route("/agents")
+@app.route("/web/agents")
 @login_required
 def page_agents():
     logger.info(f"/agents - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("agents.html")
 
-@app.route("/messages")
+@app.route("/web/messages")
 @login_required
 def page_messages():
     logger.info(f"/messages - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("messages.html")
 
-@app.route("/configmgmt")
+@app.route("/web/configmgmt")
 @login_required
 def page_configmgmt():
     logger.info(f"/configmgmt - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("configmgmt.html")
 
-@app.route("/deployment")
+@app.route("/web/deployment")
 @login_required
 @analyst_required
 def page_deployment():
     logger.info(f"deployment - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("deployment.html")
 
-@app.route("/incidents")
+@app.route("/web/incidents")
 @login_required
 def page_incidents():
     logger.info(f"/incidents - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("incidents.html")
 
-@app.route("/management")
+@app.route("/web/management")
 @login_required
 @admin_required
 def page_management():
     logger.info(f"management - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("management.html")
 
-@app.route("/authrecords")
+@app.route("/web/authrecords")
 @login_required
 def page_authrecords():
     logger.info(f"/authrecords - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("authrecords.html")
 
-@app.route("/authconfig")
+@app.route("/web/authconfig")
 @login_required
 @analyst_required
 def page_authconfig():
     logger.info(f"/authconfig - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("authconfig.html")
 
-@app.route('/favicon.ico')
+@app.route('/web/favicon.ico')
 def favicon():
     logger.info(f"favicon.ico - Successful connection at {request.remote_addr}")
     return send_from_directory(os.path.join(app.root_path, 'static'),'favicon.ico',mimetype='image/vnd.microsoft.icon')
 
-@app.route('/background.jpg')
+@app.route('/web/background.jpg')
 def background():
     logger.info(f"/background.jpg - Successful connection at {request.remote_addr}")
     return send_from_directory(os.path.join(app.root_path, 'static'),'background.jpg',mimetype='image/vnd.microsoft.icon')
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/web/login', methods=['GET', 'POST'])
 def login_redirect():
     return login()
 
-@app.route('/logout')
+@app.route('/web/logout')
 @login_required
 def logout():
     logger.info(f"/logout - Logging out user {current_user.id} at {request.remote_addr}")
     logout_user()
-    return redirect(url_for('login'))
+    return redirect(url_for('login_redirect'))
 
-@app.route('/whoami')
+@app.route('/web/whoami')
 @login_required
 def whoami():
     logger.info(f"/whoami - Successful connection for {current_user.id} at {request.remote_addr}")
@@ -239,7 +244,7 @@ def get_config_redirect():
     return get_config()
 
 @app.route('/agent/list_authconfigglobal', methods=['POST'])
-def get_global_config_redirect():
+def get_global_config_agent_redirect():
     return get_global_config()
 
 @app.route('/agent/git/<repo_name>.git/<path:git_path>', methods=['GET', 'POST', 'PROPFIND'])
@@ -251,7 +256,7 @@ def git_backend_redirect(repo_name, git_path):
 
 @app.route('/web/list_authconfigglobal', methods=['POST'])
 @login_required
-def get_global_config_redirect():
+def get_global_config_web_redirect():
     return get_global_config()
 
 @app.route("/web/dashboard_summary", methods=["POST"])

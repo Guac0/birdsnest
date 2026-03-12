@@ -70,21 +70,21 @@ header p.lead{margin:0;color:var(--muted);font-size:14px;}
 <div class="container">
   <header>
     <div class="header-container">
-      <img src="../static/favicon.ico" alt="RIT Tiger" class="header-icon">
+      <img src="{{ url_for('favicon') }}" alt="RIT Tiger" class="header-icon">
       <h1>Stabvest Homepage</h1>
       <p class="lead">Central Monitoring & Management Hub</p>
     </div>
   </header>
 
   <section class="dashboard-links">
-    <a href="incidents">Incidents Dashboard</a>
-    <a href="configmgmt">Config Mgmt</a>
-    <a href="authrecords">Auth Records</a>
-    <a href="authconfig">Auth Config</a>
-    <a href="agents">Agents</a>
-    <a href="messages">Messages</a>
-    <a href="deployment">Deployment</a>
-    <a href="management">Management</a>
+    <a href="/web/incidents">Incidents Dashboard</a>
+    <a href="/web/configmgmt">Config Mgmt</a>
+    <a href="/web/authrecords">Auth Records</a>
+    <a href="/web/authconfig">Auth Config</a>
+    <a href="/web/agents">Agents</a>
+    <a href="/web/messages">Messages</a>
+    <a href="/web/deployment">Deployment</a>
+    <a href="/web/management">Management</a>
   </section>
 
   <section class="stats-grid">

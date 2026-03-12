@@ -78,9 +78,9 @@ textarea { width: 100%; height: 250px; background: #000; color: #0f0; font-famil
   <header>
     <div style="display:flex;flex-direction:column">
       <div class="header-container">
-        <img src="../static/favicon.ico" alt="RIT Tiger" class="header-icon" id="headerIcon">
+        <img src="{{ url_for('favicon') }}" alt="RIT Tiger" class="header-icon" id="headerIcon">
         <h1>Auth Records Dashboard</h1>
-        <a href="/" style="color:var(--accent); font-size: 13px; margin-left:15px; text-decoration:none;">Back to Home</a>
+        <a href="/web/" style="color:var(--accent); font-size: 13px; margin-left:15px; text-decoration:none;">Back to Home</a>
       </div>
       <p class="lead">Monitoring all authentication activity on endpoints. Click 'Notes' cells to edit notes directly.</p>
     </div>

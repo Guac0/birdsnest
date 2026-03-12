@@ -184,9 +184,9 @@
 <div class="container">
     <div style="display:flex;flex-direction:column">
         <div class="header-container">
-            <img src="../static/favicon.ico" alt="RIT Tiger" class="header-icon">
+            <img src="{{ url_for('favicon') }}" alt="RIT Tiger" class="header-icon">
             <h1>Deployment Dashboard</h1>
-            <a href="/">Back to Home</a>
+            <a href="/web/">Back to Home</a>
         </div>
     </div>
     <p>Adjust the parameters below and hit submit to deploy a new Stabvest Agent via Ansible.</p>

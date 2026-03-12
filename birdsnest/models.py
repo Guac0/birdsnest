@@ -12,7 +12,7 @@ GIT_PROJECT_ROOT, GIT_BACKEND
 )
 
 db = SQLAlchemy()
-logger = setup_logging("web")
+logger = setup_logging()
 
 
 ##########################
@@ -97,7 +97,7 @@ class WebUser(db.Model):
     
     username = db.Column(db.String(64), primary_key=True, nullable=False)
     
-    password = db.Column(db.String(128), nullable=False) 
+    password = db.Column(db.String(192), nullable=False) 
     role = db.Column(db.String(20), nullable=False) # "admin", "analyst", or "guest"
 
     def __repr__(self):
@@ -138,16 +138,16 @@ class AnsibleVars(db.Model):
     ansible_password = db.Column(db.String(256), default="", nullable=False)
     ansible_become_password = db.Column(db.String(256), default="", nullable=False)
 
-    stabvest_deploy_dir_win = db.Column(db.String(16), default="C:\\stabvest", nullable=False)
-    stabvest_deploy_dir_unix = db.Column(db.String(16), default="/stabvest", nullable=False)
-    stabvest_agent_executable = db.Column(db.String(16), default="agent_Windows_10.exe", nullable=False)
-    stabvest_tester_executable = db.Column(db.String(16), default="agent_tester_Windows_10.exe", nullable=False)
-    stabvest_task_name = db.Column(db.String(16), default="stabvest", nullable=False)
+    stabvest_deploy_dir_win = db.Column(db.String(512), default="C:\\stabvest", nullable=False)
+    stabvest_deploy_dir_unix = db.Column(db.String(512), default="/stabvest", nullable=False)
+    stabvest_agent_executable = db.Column(db.String(128), default="agent_Windows_10.exe", nullable=False)
+    stabvest_tester_executable = db.Column(db.String(128), default="agent_tester_Windows_10.exe", nullable=False)
+    stabvest_task_name = db.Column(db.String(32), default="stabvest", nullable=False)
     stabvest_task_interval = db.Column(db.Integer, default=60, nullable=False)
     stabvest_task_create = db.Column(db.Boolean, default=True, nullable=False)
     stabvest_include_tester = db.Column(db.Boolean, default=True, nullable=False)
 
-    stabvest_agent_name = db.Column(db.String(16), default="", nullable=False)
+    stabvest_agent_name = db.Column(db.String(32), default="", nullable=False)
     stabvest_auth_token = db.Column(db.String(128), default="testtoken", nullable=False)
     stabvest_agent_type = db.Column(db.String(32), default="stabvest", nullable=False)
     stabvest_server_url = db.Column(db.String(128), default="https://127.0.0.1:8000/", nullable=False)

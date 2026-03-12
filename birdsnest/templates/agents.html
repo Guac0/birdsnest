@@ -79,9 +79,9 @@
     <header>
       <div style="display:flex;flex-direction:column">
         <div class="header-container">
-          <img src="../static/favicon.ico" alt="RIT Tiger" class="header-icon">
+          <img src="{{ url_for('favicon') }}" alt="RIT Tiger" class="header-icon">
           <h1>Agents Dashboard</h1>
-          <a href="/">Back to Home</a>
+          <a href="/web/">Back to Home</a>
         </div>
         <p class="lead">All agents recorded by the server. Times shown in your local timezone. Auto-refreshes every 60 seconds.</p>
         <p class="lead">Click column headers to sort. Type in the filters under headers to refine results per-column.</p>

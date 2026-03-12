@@ -251,9 +251,9 @@ Security & production notes:
   <div class="container" id="app">
     <header>
       <div class="header-container">
-        <img src="../static/favicon.ico" alt="RIT Tiger" class="header-icon">
+        <img src="{{ url_for('favicon') }}" alt="RIT Tiger" class="header-icon">
         <h1>Incidents Dashboard</h1>
-        <a href="/" style="padding-left: 20px;">Back to Home</a>
+        <a href="/web/" style="padding-left: 20px;">Back to Home</a>
         <div style="padding-left: 20px;">
           <div class="sub">Click <strong>Claim</strong> to tag an incident as <em>Active</em>, <strong>Resolve</strong> to tag as <em>Closed</em>, or <strong>Reopen</strong> to mark as <em>New</em>. You must have <code>Analyst</code> permissions to do this.</div>
           <div class="sub">Issue Colors: <span class="color-firewall">Firewall</strong>, <span class="color-interface">Interface</span>, <span class="color-service-generic">Service Generic</span>, <span class="color-service-custom">Service Custom</span>, <span class="color-file">File</span>, <span class="color-agent-alert">Agent Alert</span>, <span class="color-ir">IR</span>, <span class="color-inject">Inject</span>, <span class="color-uptime">Uptime</span>, <span class="color-server">Server</span>, <span class="color-unknown">Other</span>.</div>

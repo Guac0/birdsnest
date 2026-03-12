@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+<link rel="shortcut icon" href="{{ url_for('favicon') }}">
 <head>
   <title>
     Login
@@ -11,7 +11,7 @@
       background-image: url('https://blenderartists.org/uploads/default/original/4X/e/a/a/eaa2e74e337f526490e0f5a17cafc71103177605.jpeg');
       background-image: url('https://media.discordapp.net/attachments/847666234111426592/1389613630584131687/mg_9744.jpg?ex=6869368b&is=6867e50b&hm=55344a8791f08476948b9fdad8086f6b44662808d3b4395fe7070d631c835bce&=&format=webp&width=1564&height=1042');
       */
-      background-image: url("{{ url_for('static', filename='background.jpg') }}");
+      background-image: url("{{ url_for('background') }}");
       /*background-size: contain;*/     /* Ensures full image is visible */
       background-size: cover;       /* Fills the screen, may crop */
       background-repeat: no-repeat; /* Prevents tiling */
@@ -26,7 +26,7 @@
 </head>
 <body class="container pt-5">
     <h2>Login</h2>
-    <form method="post" action="{{ url_for('login') }}">
+    <form method="post" action="{{ url_for('login_redirect') }}">
         <div class="mb-3">
             <label for="username" class="form-label">Username</label>
             <input name="username" id="username" class="form-control" required>

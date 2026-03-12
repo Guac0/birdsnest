@@ -105,18 +105,26 @@ GIT_PROJECT_ROOT = os.path.join(os.path.dirname(Path(__file__).resolve()),"repos
 if not os.path.exists(GIT_PROJECT_ROOT):
     os.mkdir(GIT_PROJECT_ROOT)
 
-def setup_logging(name="default"):
+def setup_logging(argname="default"): #note that argname is now unused
+    # Get the context (SERVER or WORKER) from the environment
+    context = os.environ.get("APP_CONTEXT", "DEFAULT")
+    
+    # If no name is provided, use the module's __name__ (best practice)
+    # This turns 'default' into 'SERVER.models' or 'WORKER.tasks'
+    #name = f"{context}.{name}" if name else context
+    name = context
+
     # 1. Create a logger instance
     logger = logging.getLogger(name)
     
     # If the logger already has handlers, don't add more (prevents duplicate entries)
     if logger.handlers:
-        logger.info(f"setup_logging(): logger already exists, returning existing logger")
+        #logger.info(f"setup_logging(): logger already exists, returning existing logger")
         return logger
 
     logger.setLevel(logging.INFO)
 
-    # 2. Use ConcurrentRotatingFileHandler
+    # Use ConcurrentRotatingFileHandler
     # This handles multiple processes (Gunicorn workers + Worker.py) 
     # and manages the .lock file automatically to prevent rotation crashes.
     handler = ConcurrentRotatingFileHandler(
@@ -127,7 +135,7 @@ def setup_logging(name="default"):
         encoding='utf-8'
     )
     
-    # 3. Define the log format
+    # Define the log format
     formatter = logging.Formatter(
         '[%(asctime)s] [%(name)s] [%(process)d] %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
@@ -138,7 +146,7 @@ def setup_logging(name="default"):
     
     handler.setFormatter(formatter)
     
-    # 4. Add the handler to the logger
+    # Add the handler to the logger
     logger.addHandler(handler)
     
     # Optional: Prevent logs from bubbling up to the root logger

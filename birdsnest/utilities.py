@@ -48,19 +48,23 @@ def insert_initial_data():
             add_test_data_auth_records(20)
             add_test_data_auth_config()
 
-        if not db.session.get(AuthConfigGlobal,"strict_user"):
+        #if not db.session.get(AuthConfigGlobal,"strict_user"):
+        if not db.session.execute(db.select(AuthConfigGlobal).filter_by(key="strict_user")).scalar_one_or_none():
             config = AuthConfigGlobal(key="strict_user", value=AUTHCONFIG_STRICT_USER)
             db.session.add(config)
             logger.info(f"Initialized default strict_user={AUTHCONFIG_STRICT_USER}.")
-        if not db.session.get(AuthConfigGlobal,"strict_ip"):
+        #if not db.session.get(AuthConfigGlobal,"strict_ip"):
+        if not db.session.execute(db.select(AuthConfigGlobal).filter_by(key="strict_ip")).scalar_one_or_none():
             config = AuthConfigGlobal(key="strict_ip", value=AUTHCONFIG_STRICT_IP)
             db.session.add(config)
             logger.info(f"Initialized default strict_ip={AUTHCONFIG_STRICT_IP}.")
-        if not db.session.get(AuthConfigGlobal,"create_incident"):
+        #if not db.session.get(AuthConfigGlobal,"create_incident"):
+        if not db.session.execute(db.select(AuthConfigGlobal).filter_by(key="create_incident")).scalar_one_or_none():
             config = AuthConfigGlobal(key="create_incident", value=AUTHCONFIG_CREATE_INCIDENT)
             db.session.add(config)
             logger.info(f"Initialized default create_incident={AUTHCONFIG_CREATE_INCIDENT}.")
-        if not db.session.get(AuthConfigGlobal,"log_attempt_successful"):
+        #if not db.session.get(AuthConfigGlobal,"log_attempt_successful"):
+        if not db.session.execute(db.select(AuthConfigGlobal).filter_by(key="log_attempt_successful")).scalar_one_or_none():
             config = AuthConfigGlobal(key="log_attempt_successful", value=AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL)
             db.session.add(config)
             logger.info(f"Initialized default log_attempt_successful={AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL}.")
@@ -111,12 +115,14 @@ def create_db_tables(app):
         # This checks the database defined in SQLALCHEMY_DATABASE_URI.
         # If the tables defined in your models don't exist, it creates them.
         db.create_all()
-        db_exists = WebUser.query.first()
-        if not db_exists:
-            insert_initial_data()
-            logger.info(f"Initialized database with initial data inserted.")
-        else:
-            logger.info(f"Initialized database.")
+        context = os.environ.get("APP_CONTEXT", "DEFAULT")
+        if context == "WORKER":
+            db_exists = WebUser.query.first()
+            if not db_exists:
+                insert_initial_data()
+                logger.info(f"Initialized database with initial data inserted.")
+            else:
+                logger.info(f"Initialized database.")
 
 def serialize_model(instance):
     """
@@ -324,10 +330,12 @@ def add_test_data_incidents(num=15,createAlert=True):
     logger.info(f"Successfully added {num} test incidents to the database.")
 
 def add_test_data_incidents_custom(num=5,createAlert=True):
+    all_agents = Agent.query.all()
     for i in range(1, num + 1):
+        agent_id = random.choice(all_agents).agent_id
         incident_data = {
             "timestamp": time.time() - ((num - i) * 100),
-            "agent_id":f"custom",
+            "agent_id":agent_id,
             "oldStatus": random.choice([False,True]),
             "newStatus": random.choice([False,True]),
             "message": random.choice([

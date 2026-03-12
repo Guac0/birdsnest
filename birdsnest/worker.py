@@ -3,7 +3,7 @@
 
 import threading
 import time
-import sdnotify
+#import sdnotify
 from datetime import datetime
 import math
 import urllib.request
@@ -11,6 +11,7 @@ import urllib.error
 import json
 import subprocess
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from shared import (
 setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
@@ -33,6 +34,7 @@ run_git, hash_id, create_incident, clean_and_join_path, get_git_stats, find_inci
 #SQLALCHEMY_DATABASE_URI = f'sqlite:///save.db'
 SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://birdsnest:birdsnestpwd@database:5432/birdsnestdb"
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.config['SECRET_KEY'] = CONFIG["SECRET_KEY"]
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Silence the deprecation warning
@@ -435,6 +437,23 @@ def periodic_ansible(interval=5):
         # Optional: small rest between back-to-back tasks
         time.sleep(1)
 
+def periodic_cleanup():
+    # Periodically removes expired Flask-Sessions from the database
+    while True:
+        try:
+            with app.app_context():
+                session_interface = app.session_interface
+                if hasattr(session_interface, 'sql_session_model'):
+                    model = session_interface.sql_session_model
+                    expired = model.query.filter(model.expiry < datetime.utcnow()).delete()
+                    db.session.commit()
+                    if expired:
+                        logger.info(f"Background Task: Deleted {expired} expired sessions.")
+        except Exception as e:
+            logger.error(f"Cleanup Error: {e}")
+            
+        time.sleep(900)
+
 if __name__ == "__main__":
     logger = setup_logging("worker")
     logger.info("Starting background worker threads...")
@@ -446,6 +465,7 @@ if __name__ == "__main__":
     threads = [
         threading.Thread(target=webhook_main, daemon=True),
         threading.Thread(target=periodic_stale, daemon=True),
+        threading.Thread(target=periodic_cleanup, daemon=True),
         threading.Thread(target=periodic_ansible, daemon=True)#,
         # all in one testing only!
         #threading.Thread(target=start_server, daemon=True)
@@ -457,6 +477,8 @@ if __name__ == "__main__":
     
     #notifier.notify("READY=1")
     logger.info("Started background worker threads.")
+    with open("/tmp/worker_ready", "w") as f:
+        f.write("ready")
 
     # Keep the main process alive
     try:

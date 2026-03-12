@@ -56,9 +56,9 @@
 
 <header>
   <div style="display:flex; align-items:center;">
-    <img src="../static/favicon.ico" alt="Tiger" class="header-icon" id="headerIcon">
+    <img src="{{ url_for('favicon') }}" alt="Tiger" class="header-icon" id="headerIcon">
     <h1 style="margin:0; font-size:1.4rem;">Auth Config Management</h1>
-    <a href="/" style="margin-left:20px; color:var(--muted); font-size:0.8rem;">[Back to Home]</a>
+    <a href="/web/" style="margin-left:20px; color:var(--muted); font-size:0.8rem;">[Back to Home]</a>
   </div>
   <div style="text-align:right">
     <button class="btn-ghost" onclick="openBulk()">Mass Actions</button>

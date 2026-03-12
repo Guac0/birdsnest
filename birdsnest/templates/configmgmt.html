@@ -47,9 +47,9 @@ tbody tr:hover{background:var(--row-hover)}
   <header>
     <div style="display:flex;flex-direction:column">
       <div style="display:flex;align-items:center;gap:10px">
-        <img src="../static/favicon.ico" alt="Icon" style="width:40px;height:40px;">
+        <img src="{{ url_for('favicon') }}" alt="Icon" style="width:40px;height:40px;">
         <h1>Git Repository Dashboard</h1>
-        <a href="/" style="color:var(--accent);text-decoration:none;font-size:13px;margin-left:10px">Back to Home</a>
+        <a href="/web/" style="color:var(--accent);text-decoration:none;font-size:13px;margin-left:10px">Back to Home</a>
       </div>
       <p class="lead">Latest branch statistics across all agent repositories.</p>
     </div>

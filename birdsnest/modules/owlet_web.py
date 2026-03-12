@@ -1,6 +1,6 @@
 # Endpoints and support functions for the web frontend
-from flask_login import current_app, login_user, current_user, current_user
-from flask import request, jsonify, render_template, redirect, url_for, flash, session
+from flask_login import login_user, current_user, current_user
+from flask import current_app, request, jsonify, render_template, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import time

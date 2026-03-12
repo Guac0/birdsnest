@@ -2,7 +2,8 @@ flask
 flask-login
 Flask-Session
 Flask-SQLAlchemy
-psycopg2 
+#psycopg2
+psycopg2-binary
 pyopenssl
 #nuitka
 htmlmin

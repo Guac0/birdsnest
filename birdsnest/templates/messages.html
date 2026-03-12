@@ -71,9 +71,9 @@ th.sortable .sort-ind{font-size:11px;color:var(--muted)}
   <header>
     <div style="display:flex;flex-direction:column">
       <div class="header-container">
-        <img src="../static/favicon.ico" alt="RIT Tiger" class="header-icon">
+        <img src="{{ url_for('favicon') }}" alt="RIT Tiger" class="header-icon">
         <h1>Messages Dashboard</h1>
-        <a href="/">Back to Home</a>
+        <a href="/web/">Back to Home</a>
       </div>
       <p class="lead">All messages recorded by the server. Times shown in your local timezone. Auto-refreshes every 90 seconds.</p>
     </div>
