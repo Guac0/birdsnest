@@ -1,0 +1,15 @@
+name: Birdsnest Container Build
+
+on: 
+  push
+
+jobs:
+  build_and_publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build and push Image
+        run: |
+          docker login --username Guac0 --password ${{ secrets.DOCKER_ACTION_SECRET }} ghcr.io
+          docker build birdsnest/ -t ghcr.io/ccdc-rit/birdsnest:latest
+          docker push ghcr.io/ccdc-rit/birdsnest:latest

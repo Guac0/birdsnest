@@ -2,8 +2,8 @@
 stabvest_deploy_dir: "/stabvest_server"
 stabvest_gunicorn_workers: 1 # per replica
 stabvest_webserver_replicas: 3
-stabvest_proxy_container: "nginx:latest"
-stabvest_database_image: "postgres:latest"
+stabvest_proxy_container: "nginx:1.28.2"
+stabvest_database_image: "postgres:18.3"
 stabvest_python_container: "alpine:3.19"
 stabvest_database_user: "birdsnest"
 stabvest_database_db: "birdsnestdb"

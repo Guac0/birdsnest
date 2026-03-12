@@ -2,16 +2,10 @@
 
 services:
   nginx:
-    image: nginx:latest
+    image: nginx:1.28.2
     ports:
-      #- "80:80"
-      #- "443:443"
-      - target: 80
-        published: 80
-        protocol: tcp
-        mode: host
       - target: 443
-        published: 443
+        published: 443 #external
         protocol: tcp
         mode: host
     volumes:
@@ -22,18 +16,14 @@ services:
       - webserver
 
   webserver:
-    build:
-      context: .
-      dockerfile: Dockerfile-server
+    image: ghcr.io/ccdc-rit/birdsnest:latest
     volumes:
       - .:/app
-    #ports:
-    #  - "8001:80"
-    #  - "8002:8002"
     environment:
       - PYTHONUNBUFFERED=1
       - APP_CONTEXT=SERVER
     restart: unless-stopped
+    command: ["gunicorn", "--bind", "0.0.0.0:443", "--workers", "1", "--worker-tmp-dir", "/dev/shm", "server:app"]
     deploy:
       replicas: 1
     depends_on:
@@ -41,15 +31,14 @@ services:
         condition: service_healthy
   
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile-worker
+    image: ghcr.io/ccdc-rit/birdsnest:latest
     volumes:
       - .:/app
     environment:
       - PYTHONUNBUFFERED=1
       - APP_CONTEXT=WORKER
     restart: unless-stopped
+    command: ["python3", "worker.py"]
     depends_on:
       database:
         condition: service_healthy
@@ -61,14 +50,12 @@ services:
       start_period: 10s
 
   database:
-    image: postgres:latest
+    image: postgres:18.3
     restart: always
     environment:
       POSTGRES_USER: birdsnest
       POSTGRES_PASSWORD: birdsnestpwd
       POSTGRES_DB: birdsnestdb
-    #expose:
-    #  - "5432" 
     ports:
       - "5432:5432"
     volumes:
