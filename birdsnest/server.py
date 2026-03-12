@@ -214,6 +214,22 @@ def whoami():
     logger.info(f"/whoami - Successful connection for {current_user.id} at {request.remote_addr}")
     return jsonify({"username": current_user.id, "role": current_user.role})
 
+@app.route('/web/ip')
+@login_required
+def ip_web():
+    logger.info(f"/web/ip - Successful connection for {current_user.id} at {request.remote_addr}")
+    return {
+        "remote_addr": request.remote_addr,
+        "x_forwarded_for": request.headers.get('X-Forwarded-For'),
+        "environ_remote_addr": request.environ.get('REMOTE_ADDR')
+    }
+
+@app.route('/web/exception')
+@login_required
+def exception_web():
+    logger.info(f"/web/exception - Successful connection for {current_user.id} at {request.remote_addr}")
+    raise Exception("test web exception")
+
 # === BEACONS ===
 
 @app.route("/agent/ping", methods=["POST"])
@@ -251,6 +267,22 @@ def get_global_config_agent_redirect():
 @app.route('/agent/git/<repo_name>.git/', defaults={'git_path': ''}, methods=['GET', 'POST', 'PROPFIND'])
 def git_backend_redirect(repo_name, git_path):
     return git_backend()
+
+@app.route('/agen/ip')
+@login_required
+def ip_web():
+    logger.info(f"/agent/ip - Successful connection for {current_user.id} at {request.remote_addr}")
+    return {
+        "remote_addr": request.remote_addr,
+        "x_forwarded_for": request.headers.get('X-Forwarded-For'),
+        "environ_remote_addr": request.environ.get('REMOTE_ADDR')
+    }
+
+@app.route('/agent/exception')
+@login_required
+def exception_agent():
+    logger.info(f"/agent/exception - Successful connection at {request.remote_addr}")
+    raise Exception("test agent exception")
 
 # === FRONTEND DISPLAY ===
 

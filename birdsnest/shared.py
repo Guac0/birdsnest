@@ -7,6 +7,7 @@ from concurrent_log_handler import ConcurrentRotatingFileHandler
 import platform
 from pathlib import Path
 from flask_login import UserMixin
+import sys
 
 #os.umask(0) # 666/777
 
@@ -106,27 +107,16 @@ if not os.path.exists(GIT_PROJECT_ROOT):
     os.mkdir(GIT_PROJECT_ROOT)
 
 def setup_logging(argname="default"): #note that argname is now unused
-    # Get the context (SERVER or WORKER) from the environment
     context = os.environ.get("APP_CONTEXT", "DEFAULT")
-    
-    # If no name is provided, use the module's __name__ (best practice)
-    # This turns 'default' into 'SERVER.models' or 'WORKER.tasks'
-    #name = f"{context}.{name}" if name else context
     name = context
-
-    # 1. Create a logger instance
     logger = logging.getLogger(name)
-    
-    # If the logger already has handlers, don't add more (prevents duplicate entries)
+
     if logger.handlers:
         #logger.info(f"setup_logging(): logger already exists, returning existing logger")
         return logger
 
     logger.setLevel(logging.INFO)
 
-    # Use ConcurrentRotatingFileHandler
-    # This handles multiple processes (Gunicorn workers + Worker.py) 
-    # and manages the .lock file automatically to prevent rotation crashes.
     handler = ConcurrentRotatingFileHandler(
         LOGFILE,        # LOGFILE path
         "a",              # append mode
@@ -134,23 +124,26 @@ def setup_logging(argname="default"): #note that argname is now unused
         10,               # backupCount: keep 10 old logs
         encoding='utf-8'
     )
+    stream_handler = logging.StreamHandler(sys.stdout)
     
-    # Define the log format
     formatter = logging.Formatter(
         '[%(asctime)s] [%(name)s] [%(process)d] %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    # Note: Added [%(process)d] to the format above. 
-    # This helps you identify which Gunicorn worker or background thread 
-    # sent the message when debugging.
-    
     handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
     
-    # Add the handler to the logger
     logger.addHandler(handler)
+    logger.addHandler(stream_handler)
     
     # Optional: Prevent logs from bubbling up to the root logger
     logger.propagate = False
+
+    if context == "SERVER":
+        gunicorn_logger = logging.getLogger("gunicorn.error")
+        gunicorn_logger.addHandler(handler)
+    # Optional: Catch all other library logs (SQLAlchemy, etc.)
+    logging.getLogger().addHandler(stream_handler)
     
     return logger
 
