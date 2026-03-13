@@ -383,11 +383,18 @@ def run_bash(cmd, noisy=True):
     # string comes from an untrusted source, as it enables shell injection. 
     # Use with caution.
     
+    executable_path = shutil.which("bash")
+        
+    # Fallback to standard sh if bash isn't installed
+    if not executable_path:
+        executable_path = "/bin/sh"
+
     try:
+        
         result = subprocess.run(
             cmd,
             shell=True,
-            executable="/bin/bash", # Explicitly use bash for consistency
+            executable=executable_path, # Explicitly use bash for consistency
             capture_output=True, 
             text=True,
             check=False # Do not raise a CalledProcessError on non-zero exit code
@@ -403,7 +410,7 @@ def run_bash(cmd, noisy=True):
         return result.stdout.strip() or "SUCCESS"
     except FileNotFoundError:
         if noisy:
-            print_debug("Error: The /bin/bash executable was not found.")
+            print_debug(f"Error: The {executable_path} executable was not found.")
         return ""
 
 def run_git(args, cwd):
@@ -627,45 +634,50 @@ def interface_get_primary_windows(ip):
 
 def interface_get_primary_linux(ip):
     """
-    Gets interface name on linux using "ip" or "ifconfig"
-    TODO: make this not be AI slop
-    Returns: interface(String) or None
+    Unified getter for Linux (Debian, RHEL, Alpine) and FreeBSD.
+    Uses shutil.which to locate binaries dynamically across different distributions.
     """
-    # Try "ip address"
-    try:
-        output = subprocess.check_output(["ip", "-4", "addr"], text=True)
-        iface = None
-        for line in output.splitlines():
-            line = line.strip()
+    system = platform.system()
+    
+    # 1. Try 'ip addr' first (Standard for modern Linux: Debian, RHEL, Alpine)
+    # We check for the 'ip' binary regardless of the 'system' being Linux, 
+    # but specifically skip for FreeBSD as 'ip' usually refers to something else there.
+    if system == "Linux":
+        ip_bin = shutil.which("ip")
+        if ip_bin:
+            try:
+                output = subprocess.check_output([ip_bin, "-4", "addr"], text=True)
+                iface = None
+                for line in output.splitlines():
+                    # Match interface headers: "2: eth0: <BROADCAST...>"
+                    header_match = re.match(r"^\d+:\s+([^:@\s]+)", line.strip())
+                    if header_match:
+                        iface = header_match.group(1)
+                    # Match the IP line associated with the above interface
+                    if "inet " in line and ip in line:
+                        return iface
+            except Exception:
+                pass
 
-            # Match interface header: "2: ens33:"
-            m = re.match(r"\d+:\s+([^:]+):", line)
-            if m:
-                iface = m.group(1)
-                continue
-
-            # Match "inet 192.168.1.10/24"
-            if line.startswith("inet ") and ip in line:
-                return iface
-    except Exception:
-        pass
-
-    # Fallback: try "ifconfig"
-    try:
-        output = subprocess.check_output(["ifconfig"], text=True)
-        iface = None
-        for line in output.splitlines():
-            # Interface header: "eth0: flags=..."
-            m = re.match(r"^([a-zA-Z0-9._-]+):\s", line)
-            if m:
-                iface = m.group(1)
-                continue
-
-            # "inet 192.168.1.10"
-            if "inet " in line and ip in line:
-                return iface
-    except Exception:
-        pass
+    # 2. Try 'ifconfig' (Primary for FreeBSD, fallback for Alpine/BusyBox)
+    ifconfig_bin = shutil.which("ifconfig")
+    if ifconfig_bin:
+        try:
+            output = subprocess.check_output([ifconfig_bin], text=True)
+            iface = None
+            
+            for line in output.splitlines():
+                # Headers start at the beginning of the line: "eth0: ..." or "em0: ..."
+                # This regex works for both BSD-style and Linux-style ifconfig output.
+                header_match = re.match(r"^([a-zA-Z0-9._-]+)[:\s]", line)
+                if header_match:
+                    iface = header_match.group(1)
+                
+                # Check for the IP in the indented lines following the header
+                if "inet " in line and ip in line:
+                    return iface
+        except Exception:
+            pass
 
     return None
 
@@ -2095,18 +2107,43 @@ def restore_protected_from_repo(repo_dir, protected_folder):
     """Restores a specific folder from its slug-folder in the repo."""
     slug = get_path_slug(protected_folder)
     source_in_repo = os.path.join(repo_dir, slug)
+    status = True
     
     if not os.path.exists(source_in_repo):
-        return
-        
-    if os.path.basename(protected_folder) in os.listdir(source_in_repo):
-        # Extract the file from the slug directory
-        file_name = os.path.basename(protected_folder)
-        shutil.copy(os.path.join(source_in_repo, file_name), protected_folder)
-    else:
-        shutil.copytree(source_in_repo, protected_folder, dirs_exist_ok=True)
+        return status
     
-    apply_security_policy(protected_folder)
+    try:
+        if os.path.basename(protected_folder) in os.listdir(source_in_repo):
+            file_name = os.path.basename(protected_folder)
+            shutil.copy(os.path.join(source_in_repo, file_name), protected_folder)
+        else:
+            shutil.copytree(source_in_repo, protected_folder, dirs_exist_ok=True)
+        
+        apply_security_policy(protected_folder)
+
+        # Minimal logic to reload and restart services
+        if platform.system() != "Windows":
+            path_str = str(protected_folder).lower()
+            if any(x in path_str for x in ['systemd/system', 'init.d', 'rc.d']):
+                # Extract service name (e.g., /etc/init.d/ssh -> ssh)
+                service_name = os.path.basename(protected_folder).replace('.service', '')
+
+                if os.path.exists('/usr/bin/systemctl') or os.path.exists('/bin/systemctl'):
+                    if not run_bash("systemctl daemon-reload"):
+                        status = False
+                    #run_bash(f"systemctl restart {service_name}")
+                elif os.path.exists('/sbin/openrc'): # Alpine
+                    if not run_bash("rc-update -u"):
+                        status = False
+                    #run_bash(f"rc-service {service_name} restart")
+                elif os.path.exists('/etc/rc.d'): # FreeBSD
+                    # FreeBSD services usually require 'onerestart' if not explicitly enabled in rc.conf
+                    #run_bash(f"service {service_name} onerestart")
+                    pass
+    except Exception as E:
+        print_debug(f"restore_protected_from_repo(): restore failed on {protected_folder}, error: {E}")
+        status = False
+    return status
 
 def get_latest_commit_stats(branch_name,repo_dir):
     """
@@ -2210,19 +2247,26 @@ def file_protect_main(repo_dir, protected_folders):
                 # 4. RESTORATION
                 run_git(["checkout", "good"], repo_dir)
                 if not DISARM:
+                    status = True
+                    issues = [f"{changes['count']} unauthorized changes restored across protected paths: {changes['files']}"]
                     win = platform.system() == "Windows"
                     for s in SERVICES:
                         cmd = ["net", "stop", s] if win else ["service", s, "stop"]
-                        subprocess.run(cmd, capture_output=True)
+                        if not run_bash(cmd):
+                            status = False
+                            issues.append(f"Failed to stop service {s} before restoring files")
                     # Restore every protected folder from its 'good' repo sub-folder
                     for folder in protected_folders:
-                        restore_protected_from_repo(repo_dir, folder)
+                        if not restore_protected_from_repo(repo_dir, folder):
+                            status = False
+                            issues.append(f"Failed to restore folder {folder}")
                     for s in SERVICES:
                         cmd = ["net", "start", s] if win else ["service", s, "start"]
-                        subprocess.run(cmd, capture_output=True)
+                        if not run_bash(cmd):
+                            status = False
+                            issues.append(f"Failed to start service {s} after restoring files")
                     
-                    msg = f"SECURITY ALERT: {changes['count']} unauthorized changes restored across protected paths: {changes['files']}"
-                    return False, True, [msg]
+                    return False, status, issues
                 else:
                     msg = f"SECURITY ALERT: {changes['count']} changes detected (DISARMED): {changes['files']}"
                     return False, False, [msg]
@@ -3591,13 +3635,11 @@ def signal_handler(sig, frame):
     sys.exit(0)
 
 def main(stop_event=None):
-    # TODO daemon-reload if service file was changed!
-
     # force the working directory to the script's location
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
     global PAUSED
-    ip_address,prefix,gateway = init_int_vars() # TODO
+    ip_address,prefix,gateway = init_int_vars()
 
     systemInfo = get_system_details()
     agent_id = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
@@ -3606,7 +3648,7 @@ def main(stop_event=None):
 
     send_message("agent/beacon/stabvest",True,True,f"Register")
     
-    setup_git_agent(repo_dir,PROTECTED_FOLDERS) # todo works for multiple folders
+    setup_git_agent(repo_dir,PROTECTED_FOLDERS)
 
     #test_main()
     #return

@@ -374,13 +374,13 @@ def run_bash(cmd, noisy=True):
     # string comes from an untrusted source, as it enables shell injection. 
     # Use with caution.
     
-    try:
-        executable_path = shutil.which("bash")
+    executable_path = shutil.which("bash")
         
-        # Fallback to standard sh if bash isn't installed
-        if not executable_path:
-            executable_path = "/bin/sh"
+    # Fallback to standard sh if bash isn't installed
+    if not executable_path:
+        executable_path = "/bin/sh"
 
+    try:
         result = subprocess.run(
             cmd,
             shell=True,
@@ -391,7 +391,7 @@ def run_bash(cmd, noisy=True):
         )
     except FileNotFoundError:
         if noisy:
-            print_debug("Error: The /bin/bash executable was not found.")
+            print_debug(f"Error: The {executable_path} executable was not found.")
         return ""
     
     if result.returncode != 0:
