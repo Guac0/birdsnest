@@ -748,7 +748,6 @@ def interface_get_primary():
 def interface_get_primary_windows(ip):
     """
     Gets interface name on linux using "ip" or "ifconfig"
-    TODO: make this not be AI slop
     Returns: interface(String) or None
     """
     query = f"Get-NetIPAddress -IPAddress '{ip}' | Select-Object -ExpandProperty InterfaceAlias"
@@ -806,7 +805,6 @@ def interface_address(interface,ip_address,subnet,gateway):
         return interface_address_windows(interface,ip_address,subnet,gateway)
     else:
         return interface_address_linux(interface,ip_address,subnet,gateway)
-        #return False, False, [f"interface_address(): not implemented for system {system}."] # TODO
 
 def interface_address_windows(interface,ip_address,subnet,gateway):
     """
@@ -987,7 +985,6 @@ def interface_mtu(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maxi
         return interface_mtu_windows(interface,mtu_minimum,mtu_maximum,mtu_default)
     else:
         return interface_mtu_linux(interface,mtu_minimum,mtu_maximum,mtu_default)
-        #return False, False, [f"interface_mtu(): not implemented for system {system}."] # TODO
 
 def interface_mtu_windows(interface=interface_get_primary(),mtu_minimum=MTU_MIN,mtu_maximum=MTU_MAX,mtu_default=MTU_DEFAULT):
     """
@@ -1277,7 +1274,6 @@ def interface_down(interface=interface_get_primary()):
         return interface_down_windows(interface)
     else:
         return interface_down_linux(interface)
-        #return False, False, [f"interface_down(): not implemented for system {system}."] # TODO
 
 def interface_down_windows(interface=interface_get_primary()):
     """
@@ -1363,7 +1359,7 @@ def interface_down_linux(interface=interface_get_primary()):
     return False, False, [f"Interface {interface} was DOWN, FAILED to restore."]
 
 def interface_uninstall():
-    # Not fully implemented
+    # TODO - Not fully implemented
     """
     Wrapper for interface_uninstall_*
 
@@ -1378,7 +1374,7 @@ def interface_uninstall():
     if system == "Windows":
         return interface_uninstall_windows()
     else:
-        return False, False, [f"interface_uninstall(): not implemented for system {system}."] # TODO
+        return False, False, [f"interface_uninstall(): not implemented for system {system}."]
 
 def interface_uninstall_windows(interface_name,ipv4_address,prefix_length,gateway,dns_servers):
     # Heavily vibecoded, just left as a placeholder/idea for now
@@ -1509,7 +1505,6 @@ def firewall_rules_audit(port,direction="in",action="block"):
         return firewall_rules_audit_windows(port,direction,action)
     else:
         return firewall_rules_audit_linux(port,direction,action)
-        #return [f"firewall_rules_audit(): not implemented for system {system}."], dict() # TODO
 
 def firewall_rules_audit_windows(port,direction="in",action="block"):
     """
@@ -1678,7 +1673,6 @@ def firewall_rules_delete(rules,port):
         return firewall_rules_delete_windows(rules,port)
     else:
         return firewall_rules_delete_linux(rules)
-        #return False, [f"firewall_rules_delete(): not implemented for system {system}."] # TODO
 
 def firewall_rules_delete_windows(rules,port):
     """
@@ -1787,7 +1781,6 @@ def firewall_rules_create(port,direction,action):
         return firewall_rules_create_windows(port,direction,action)
     else:
         return firewall_rules_create_linux(port,direction,action)
-        #return False, [f"firewall_rules_create(): not implemented for system {system}."] # TODO
 
 def firewall_rules_create_windows(port,direction,action):
     """
@@ -1914,7 +1907,6 @@ def firewall_policy_audit(direction):
         return firewall_policy_audit_windows(direction)
     else:
         return firewall_policy_audit_linux(direction)
-        #return False, False, [f"firewall_policy_audit(): not implemented for system {system}."] # TODO
 
 def firewall_policy_audit_windows(direction):
     """
@@ -2309,7 +2301,6 @@ def service_audit(service):
         return service_audit_windows(service)
     else:
         return service_audit_linux(service)
-        #return False, False, [f"service_audit(): not implemented for system {system}."] # TODO
 
 def service_audit_windows(service_name):
     """
@@ -2469,7 +2460,6 @@ def service_uninstall(service,package):
         return service_uninstall_windows(service,package)
     else:
         return service_uninstall_linux(service,package)
-        #return False, False, [f"service_uninstall(): not implemented for system {system}."] # TODO
 
 def service_uninstall_windows(service, package):
     """
@@ -2781,7 +2771,6 @@ def service_lastrun(service):
         return service_lastrun_windows(service)
     else:
         return service_lastrun_linux(service)
-        #return False, False, [f"service_lastrun(): not implemented for system {system}."] # TODO
 
 def service_lastrun_windows(service_name):
     """
