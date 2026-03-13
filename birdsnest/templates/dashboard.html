@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+<link rel="shortcut icon" href="{{ url_for('favicon') }}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -132,7 +133,8 @@ header p.lead{margin:0;color:var(--muted);font-size:14px;}
       <p class="desc">Registered web interface accounts and roles.</p>
       <p class="value" id="usersTotal">...</p>
       <p class="desc" id="usersRoles">...</p>
-      <p class="desc">Active Tokens: <span id="tokensTotal">...</span></p>
+      <p class="desc">Active Registration Tokens: <span id="tokensTotal">...</span></p>
+      <p class="desc">Active Agent Tokens: <span id="tokensAgentTotal">...</span></p>
     </div>
   </section>
 </div>
@@ -244,6 +246,7 @@ async function fetchStats(){
     const roleStr = Object.entries(data.users.roles).map(([k,v])=>`${k}: ${v}`).join(', ');
     updateStatsElement('usersRoles', roleStr);
     updateStatsElement('tokensTotal', data.tokens);
+    updateStatsElement('tokensAgentTotal', data.tokensAgent);
 
     showToast();
   }catch(err){console.error("Dashboard Refresh Failed:", err);}

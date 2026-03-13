@@ -21,7 +21,7 @@ GIT_PROJECT_ROOT, GIT_BACKEND
 )
 from models import (
 db,
-Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from utilities import (
@@ -329,7 +329,7 @@ def periodic_stale(interval=60):
 
         with app.app_context():
             try:
-                agents_records = Agent.query.all()
+                agents_records = Agent.query.filter(Agent.agent_id != 'custom').all()
                 agents_updated = False
 
                 for agent in agents_records:

@@ -7,7 +7,7 @@ import os
 
 from models import (
 db,
-Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from shared import (
@@ -104,9 +104,27 @@ def beacon_owlet():
             }
             create_incident(incident_data)
 
-    return "ok", 200
+    return returnMsg, 200
 
 def get_config():
+    data = request.json
+    agent_name = data.get("name","")
+    agent_type = data.get("agent_type","")
+    hostname = data.get("hostname","")
+    ip = data.get("ip","")
+    os_name = data.get("os","")
+    executionUser = data.get("executionUser","")
+    executionAdmin = data.get("executionAdmin","")
+    auth = data.get("auth","")
+
+    agent_id = hash_id(agent_name, hostname, ip, os_name)
+
+    auth_token_record = AuthTokenAgent.query.filter_by(agent_id=agent_id).first()
+    #auth_token_record = AuthToken.query.filter_by(token=auth).first()
+    if not auth_token_record:
+        logger.warning(f"/list_authconfig_agent - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
+        return "Unauthorized", 403
+    
     logger.info(f"/list_authconfig_agent - Successful connection from {request.remote_addr}.")
     entries = AuthConfig.query.all()
     
@@ -123,8 +141,25 @@ def get_config():
         
     return jsonify(config)
 
-# Also used for frontend btw
-def get_global_config():
-    logger.info(f"/list_authconfigglobal - Successful connection from {request.remote_addr}.")
+def get_global_config_agent():
+    data = request.json
+    agent_name = data.get("name","")
+    agent_type = data.get("agent_type","")
+    hostname = data.get("hostname","")
+    ip = data.get("ip","")
+    os_name = data.get("os","")
+    executionUser = data.get("executionUser","")
+    executionAdmin = data.get("executionAdmin","")
+    auth = data.get("auth","")
+
+    agent_id = hash_id(agent_name, hostname, ip, os_name)
+
+    auth_token_record = AuthTokenAgent.query.filter_by(agent_id=agent_id).first()
+    #auth_token_record = AuthToken.query.filter_by(token=auth).first()
+    if not auth_token_record:
+        logger.warning(f"/agent/list_authconfigglobal - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
+        return "Unauthorized", 403
+    
+    logger.info(f"/agent/list_authconfigglobal - Successful connection from {request.remote_addr}.")
     configs = AuthConfigGlobal.query.all()
     return jsonify({c.key: c.value for c in configs})

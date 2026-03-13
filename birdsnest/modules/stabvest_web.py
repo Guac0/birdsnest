@@ -11,7 +11,7 @@ from sqlalchemy import func
 
 from models import (
 db,
-Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from shared import (

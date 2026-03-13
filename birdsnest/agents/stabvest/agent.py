@@ -516,7 +516,7 @@ def get_pause_status(file=STATUSFILE):
 ## Server Comms Funcs ###
 #region##################
 
-def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
+def send_message(endpoint,oldStatus=True,newStatus=True,message="",systemInfo=get_system_details()):
     """
     Sends the specified data to the server
     Handles the full process and attaching agent name/auth
@@ -528,7 +528,7 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
         # Server comms are intentionally disabled
         # Maybe redirect to print_debug instead?
         return True
-    url = SERVER_URL + "agent/beacon/stabvest"
+    url = SERVER_URL + endpoint
 
     # Prep payload
     payload = {
@@ -563,80 +563,25 @@ def send_message(oldStatus,newStatus,message,systemInfo=get_system_details()):
                 # Parse result if we get one. Actually, we don't care as it's just one way
                 #response_body = response.read().decode("utf-8")
                 #result = json.loads(response_body)
-                print_debug(f"send_message(): sent msg to server: [{oldStatus,newStatus,message}]")
-                return response.read()
+                print_debug(f"send_message({url}): sent msg to server: [{oldStatus,newStatus,message}]")
+                response_text = response.read().decode('utf-8')
+                if endpoint == "agent/beacon/owlet":
+                    if response_text != AUTH_TOKEN:
+                        AUTH_TOKEN = response_text
+                        print_debug(f"send_message({url}): updating auth token value to new value from server {AUTH_TOKEN}")
+                return response_text
             else:
-                print_debug(f"send_message(): Server error: {response.getcode()}")
+                print_debug(f"send_message({url}): Server error: {response.getcode()}")
 
     # Error handling
     except urllib.error.HTTPError as e:
-        print_debug(f"[send_message(): HTTP error: {e.code} {e.reason}")
+        print_debug(f"[send_message({url}): HTTP error: {e.code} {e.reason}")
     except urllib.error.URLError as e:
-        print_debug(f"send_message(): URL error: {e.reason}")
+        print_debug(f"send_message({url}): URL error: {e.reason}")
     except Exception as e:
         # Various requests errors - networking failure or 4xx/5xx code from server
-        print_debug(f"send_message(): Beacon error: {e}")
+        print_debug(f"send_message({url}): Beacon error: {e}")
     return False
-
-def get_pause_state_server(systemInfo=get_system_details()):
-    """
-    Gets pause state from server
-
-    Returns: pauseTimeEpoch (int), -1 for failure
-    """
-    if not SERVER_URL:
-        # Server comms are intentionally disabled
-        # Maybe redirect to print_debug instead?
-        return True
-    
-    url = SERVER_URL + "agent/get_pause"
-
-    # Prep payload
-    payload = {
-        "name": AGENT_NAME,
-        "hostname": systemInfo["hostname"],
-        "ip": systemInfo["ipadd"],
-        "os": systemInfo["os"],
-        "executionUser": systemInfo["executionUser"],
-        "executionAdmin": systemInfo["executionAdmin"],
-        "auth": AUTH_TOKEN,
-        "agent_type": AGENT_TYPE
-    }
-
-    try:
-        # Prepare data
-        data = json.dumps(payload).encode("utf-8")
-
-        # Build request
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-
-        # Send payload
-        with urllib.request.urlopen(req, timeout=SERVER_TIMEOUT, context=CTX) as response:
-            if response.getcode() == 200:
-                response_body = response.read().decode("utf-8")
-                #result = json.loads(response_body)
-                timeInt = float(response_body)
-                print_debug(f"get_pause_state_server(): sent msg to server with response {response_body}")
-                return timeInt
-            else:
-                print_debug(f"get_pause_state_server(): Server error: {response.getcode()}")
-
-    # Error handling
-    except urllib.error.HTTPError as e:
-        print_debug(f"get_pause_state_server(): HTTP error: {e.code} {e.reason}")
-    except urllib.error.URLError as e:
-        print_debug(f"get_pause_state_server(): URL error: {e.reason}")
-    except ValueError:
-        print_debug(f"get_pause_state_server(): could not convert received value to int")
-    except Exception as e:
-        # Various requests errors - networking failure or 4xx/5xx code from server
-        print_debug(f"get_pause_state_server(): Beacon error: {e}")
-    return -1
 
 #endregion###############
 # Network Protect Funcs #
@@ -3442,7 +3387,7 @@ def pause(seconds=60):
     Sends message to server.
     Returns: Success(bool)
     """
-    send_message(True,True,f"pausing for seconds {seconds}")
+    send_message("agent/beacon/stabvest",True,True,f"pausing for seconds {seconds}")
     return True
 
 def resume(scheduled=False):
@@ -3452,7 +3397,7 @@ def resume(scheduled=False):
     Sends message to server.
     Returns: Success(bool)
     """
-    send_message(True,True,f"resuming - scheduled: {scheduled}")
+    send_message("agent/beacon/stabvest",True,True,f"resuming - scheduled: {scheduled}")
     return True
 
 def reregister():
@@ -3460,7 +3405,7 @@ def reregister():
     Performs a re-init of protected files for legitimate changes
     Returns Success(bool)
     """
-    send_message(True,True,"reregister")
+    send_message("agent/beacon/stabvest",True,True,"reregister")
     return True
 
 #endregion###############
@@ -3649,7 +3594,7 @@ def main(stop_event=None):
     repo_url = os.path.join(f"{SERVER_URL}agent/git",f"{agent_id}.git")
     repo_dir = f"{os.path.join(os.path.dirname(os.path(__file__).resolve()),f'{agent_id}.git')}"
 
-    send_message(True,True,f"Register")
+    send_message("agent/beacon/stabvest",True,True,f"Register")
     
     setup_git_agent(repo_dir,PROTECTED_FOLDERS) # todo works for multiple folders
 
@@ -3674,7 +3619,11 @@ def main(stop_event=None):
         oldStatus = True
         newStatus = True
 
-        pausedEpochServer = get_pause_state_server()
+        pausedEpochServer = send_message("agent/get_pause")
+        if pausedEpochServer:
+            pausedEpochServer = float(pausedEpochServer)
+        else:
+            pausedEpochServer = -1
 
         pausePreferServer, pausedStatus, pausedEpochLocal = get_pause_status()
 
@@ -3710,9 +3659,9 @@ def main(stop_event=None):
             if PAUSED:
                 # Send alert if agent is freshly moving into PAUSED state
                 suppressed_send = True
-                send_message(False,False,f"Agent moved into PAUSE status for {int(pausedEpochLocal - time.time())} seconds")
+                send_message("agent/beacon/stabvest",False,False,f"Agent moved into PAUSE status for {int(pausedEpochLocal - time.time())} seconds")
             else:
-                send_message(True,True,f"Agent moved into ACTIVE status (from PAUSE)")
+                send_message("agent/beacon/stabvest",True,True,f"Agent moved into ACTIVE status (from PAUSE)")
 
         if not PAUSED:
 
@@ -3727,7 +3676,7 @@ def main(stop_event=None):
                 newIssues.append(f"Firewall - {issue}")
                 print_debug(newIssues[-1])
                 if newIssues[-1] not in oldIssues:
-                    send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                    send_message("agent/beacon/stabvest",result_oldStatus,result_newStatus,newIssues[-1])
                     sent_msg = True
                 else:
                     suppressed_send = True
@@ -3743,7 +3692,7 @@ def main(stop_event=None):
                 newIssues.append(f"Interface - {issue}")
                 print_debug(newIssues[-1])
                 if newIssues[-1] not in oldIssues:
-                    send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                    send_message("agent/beacon/stabvest",result_oldStatus,result_newStatus,newIssues[-1])
                     sent_msg = True
                 else:
                     suppressed_send = True
@@ -3759,7 +3708,7 @@ def main(stop_event=None):
                 newIssues.append(f"Service - {issue}")
                 print_debug(newIssues[-1])
                 if newIssues[-1] not in oldIssues:
-                    send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                    send_message("agent/beacon/stabvest",result_oldStatus,result_newStatus,newIssues[-1])
                     sent_msg = True
                 else:
                     suppressed_send = True
@@ -3779,23 +3728,23 @@ def main(stop_event=None):
                 newIssues.append(f"File - {issue}")
                 print_debug(newIssues[-1])
                 if newIssues[-1] not in oldIssues:
-                    send_message(result_oldStatus,result_newStatus,newIssues[-1])
+                    send_message("agent/beacon/stabvest",result_oldStatus,result_newStatus,newIssues[-1])
                     sent_msg = True
                 else:
                     suppressed_send = True
 
             if not sent_msg:
                 if suppressed_send:
-                    send_message(True,True,"no new issues; at least one prior issue still exists but suppressing redundant alert")
+                    send_message("agent/beacon/stabvest",True,True,"no new issues; at least one prior issue still exists but suppressing redundant alert")
                 else:
-                    send_message(True,True,"all good")
+                    send_message("agent/beacon/stabvest",True,True,"all good")
 
             # Finish up
             print_debug(f"main(): oldStatus - {oldStatus}")
             print_debug(f"main(): newStatus - {newStatus}")
             #for issue in issues:
                 #print_debug(f"main(): issue - {issue}")
-                #send_message(oldStatus,newStatus,issue)
+                #send_message("agent/beacon/stabvest",oldStatus,newStatus,issue)
             
             print_debug(f"main(): sleeping for {SLEEPTIME} seconds")
             print_debug(f"")
@@ -3805,7 +3754,7 @@ def main(stop_event=None):
         else:
             if not suppressed_send:
                 # Do not trigger alert
-                send_message(True,False,f"Agent still in PAUSE status for {int(pausedEpochLocal - time.time())} seconds remaining")
+                send_message("agent/beacon/stabvest",True,False,f"Agent still in PAUSE status for {int(pausedEpochLocal - time.time())} seconds remaining")
         
         # SERVICE-SAFE SLEEP for windows service
         """

@@ -11,7 +11,7 @@ from sqlalchemy import func
 
 from models import (
 db,
-Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from shared import (
@@ -213,3 +213,7 @@ def bulk_auth_records():
         logger.info(f"/bulk_authconfig - Successful connection from {current_user.id} at {request.remote_addr}. Importing records of size {added_count}.")
         return jsonify({"status": "success", "added": added_count})
     
+def get_global_config_web():
+    logger.info(f"/web/list_authconfigglobal - Successful connection from {request.remote_addr}.")
+    configs = AuthConfigGlobal.query.all()
+    return jsonify({c.key: c.value for c in configs})

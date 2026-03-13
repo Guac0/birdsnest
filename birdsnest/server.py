@@ -12,7 +12,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from models import (
 db,
-Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from shared import (
@@ -30,12 +30,12 @@ run_git, hash_id, create_incident, clean_and_join_path, get_git_stats, find_inci
 from modules.generic_web import (
     login,
     dashboard_summary,
-    list_users, list_users_simple, list_tokens, 
-    list_tokens_number, list_agents, list_messages, 
+    list_users, list_users_simple, list_tokens, list_tokens_agent,
+    list_tokens_number, list_tokens_agent_number, list_agents, list_messages, 
     list_incidents, list_ansiblevars, list_logfile,
     list_ansibleresult, set_ansiblevars, 
     agent_pause, agent_resume, add_incident, add_user,
-    delete_token, update_incident_tag, update_incident_assignee,
+    delete_token, delete_token_agent, update_incident_tag, update_incident_assignee,
     update_incident_sla, add_ansible, add_token, delete_user
 )
 from modules.generic_agent import (
@@ -50,10 +50,11 @@ from modules.stabvest_agent import (
 from modules.owlet_web import (
     list_authconfig, list_auth_records, update_global_config, 
     add_authconfig, update_authconfig_status, delete_authconfig, 
-    authrecord_update_notes, bulk_authconfig, bulk_auth_records
+    authrecord_update_notes, bulk_authconfig, bulk_auth_records,
+    get_global_config_web
 )
 from modules.owlet_agent import (
-    beacon_owlet, get_config, get_global_config
+    beacon_owlet, get_config, get_global_config_agent
 )
 
 # === Set Flask Config ===
@@ -255,22 +256,22 @@ def beacon_owlet_redirect():
 def get_pause_redirect():
     return get_pause()
 
-@app.route('/agent/list_authconfig_agent', methods=['GET'])
+@app.route('/agent/list_authconfig_agent', methods=['POST'])
 def get_config_redirect():
     return get_config()
 
 @app.route('/agent/list_authconfigglobal', methods=['POST'])
 def get_global_config_agent_redirect():
-    return get_global_config()
+    return get_global_config_agent()
 
 @app.route('/agent/git/<repo_name>.git/<path:git_path>', methods=['GET', 'POST', 'PROPFIND'])
 @app.route('/agent/git/<repo_name>.git/', defaults={'git_path': ''}, methods=['GET', 'POST', 'PROPFIND'])
 def git_backend_redirect(repo_name, git_path):
     return git_backend()
 
-@app.route('/agen/ip')
+@app.route('/agent/ip')
 @login_required
-def ip_web():
+def ip_agent():
     logger.info(f"/agent/ip - Successful connection for {current_user.id} at {request.remote_addr}")
     return {
         "remote_addr": request.remote_addr,
@@ -289,7 +290,7 @@ def exception_agent():
 @app.route('/web/list_authconfigglobal', methods=['POST'])
 @login_required
 def get_global_config_web_redirect():
-    return get_global_config()
+    return get_global_config_web()
 
 @app.route("/web/dashboard_summary", methods=["POST"])
 @login_required
@@ -349,6 +350,17 @@ def list_tokens_redirect():
 @login_required
 def list_tokens_number_redirect():
     return list_tokens_number()
+
+@app.route("/web/list_tokens_agent", methods=["POST"])
+@login_required
+@admin_required
+def list_tokens_agent_redirect():
+    return list_tokens_agent()
+
+@app.route("/web/list_tokens_agent_number", methods=["POST"])
+@login_required
+def list_tokens_agent_number_redirect():
+    return list_tokens_agent_number()
 
 @app.route("/web/list_agents", methods=["POST"])
 @login_required
@@ -485,6 +497,12 @@ def add_token_redirect():
 @admin_required
 def delete_token_redirect():
     return delete_token()
+
+@app.route("/web/delete_token_agent", methods=["POST"])
+@login_required
+@admin_required
+def delete_token_agent_redirect():
+    return delete_token_agent()
 
 @app.route("/web/update_incident_tag", methods=["POST"])
 @login_required

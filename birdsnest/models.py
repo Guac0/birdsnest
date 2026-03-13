@@ -43,6 +43,7 @@ class Agent(db.Model):
 
     messages = db.relationship('Message', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == Message.agent_id")
     incidents = db.relationship('Incident', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == Incident.agent_id")
+    messages = db.relationship('AuthTokenAgent', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == AuthTokenAgent.agent_id")
 
     def __repr__(self):
         return f"<Agent {self.agent_name} ({'Online' if self.lastStatus else 'Down'})>"
@@ -88,6 +89,17 @@ class AuthToken(db.Model):
     token = db.Column(db.String(128), primary_key=True, nullable=False) # The token string itself
     timestamp = db.Column(db.Integer, default=lambda: int(time.time()), nullable=False)
     added_by = db.Column(db.String(128))
+
+    def __repr__(self):
+        return f"<AuthToken {self.token[:8]}...>"
+
+class AuthTokenAgent(db.Model):
+    __tablename__ = 'auth_tokens_agent'
+    
+    token = db.Column(db.String(128), primary_key=True, nullable=False) # The token string itself
+    timestamp = db.Column(db.Integer, default=lambda: int(time.time()), nullable=False)
+    added_by = db.Column(db.String(128))
+    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
 
     def __repr__(self):
         return f"<AuthToken {self.token[:8]}...>"

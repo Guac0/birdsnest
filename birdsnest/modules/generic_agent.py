@@ -2,10 +2,11 @@
 
 from flask import request, jsonify
 import time
+import os
 
 from models import (
 db,
-Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from shared import (
@@ -69,7 +70,7 @@ def beacon_generic_handler():
 
     # Log the connection before returning with HTTP syntx "custom message", httpReturnCode
     logger.info(f"/agent/beacon - Successful connection from {request.remote_addr}. Full details: {request.json}") # TODO - dynamically grab the route from Flask instead of manually typing it. I know how to do this but holding off on doing this to all several dozen instances until i get bored.
-    return "ok", 200
+    return returnMsg, 200
 
 def beacon_generic(endpoint):
     """
@@ -86,12 +87,12 @@ def beacon_generic(endpoint):
     Note that `request` is automatically passed into this function's context by Flask (but you must only call this function from the context of an endpoint!).
 
     Returns:
-    * returnMsg (string) - custom message to be returned to the agent (i.e. "ok", "unauthorized", etc)
+    * returnMsg (string) - custom message to be returned to the agent (i.e. "ok", "unauthorized", "newtoken", etc)
     * returnCode (int) - HTTP return code to be returned to the client (i.e. 200, 403, etc)
     * registered (bool) - True if this connection triggered the registration logic (first time connection or flagged re-register). Defaults to False if this function is returning early (missing data or bad auth)
     * agent_id (string) - The id of the agent connected. Defaults to empty string if this function is returning early (missing data or bad auth)
     * current_time (int) - Coordinated current_time value for usage by subordinate functions to link timestamps together in case of processing lag
-    Note that if message and returnCode are not equal to "ok",200 you should strongly consider immediately canceling your logic and returning that to the agent.
+    Note that if returnCode is not equal to 200 you should strongly consider immediately canceling your logic and returning that and the returnMsg to the agent.
     Otherwise, you can safely discard the return values and return whatever makes sense for your agent's context.
     
     Example:
@@ -129,14 +130,17 @@ def beacon_generic(endpoint):
         logger.warning(f"{endpoint} - Failed connection from {request.remote_addr} - missing data. Full details: {request_info}")
         return "missing data", 400, False, "", current_time
     
-    # Validate that agent presented a valid auth token
-    auth_token_record = AuthToken.query.filter_by(token=request_info["auth"]).first()
-    if not auth_token_record:
-        logger.warning(f"{endpoint} - Failed connection from {request.remote_addr} - invalid auth token. Full details: {request_info}")
-        return "unauthorized", 403, False, "", current_time
-    
     # Register client if new, or update agent fields if not
     agent_id = hash_id(request_info["agent_name"], request_info["hostname"], request_info["ip"], request_info["os_name"])
+    
+    # Validate that agent presented a valid auth token
+    auth_token_agent_record = AuthTokenAgent.query.filter_by(agent_id=agent_id).first()
+    if not auth_token_agent_record:
+        # See if it might be a first time connection and do a lookup on the registration table instead
+        auth_token_record = AuthToken.query.filter_by(token=request_info["auth"]).first()
+        if not auth_token_record:
+            logger.warning(f"{endpoint} - Failed connection from {request.remote_addr} - invalid auth token. Full details: {request_info}")
+            return "unauthorized", 403, False, "", current_time
 
     try:
         agent = db.session.get(Agent,agent_id)
@@ -150,9 +154,22 @@ def beacon_generic(endpoint):
         if is_reregister_request and agent:
             # Delete existing agent record
             db.session.delete(agent)
+            if auth_token_agent_record:
+                db.session.delete(auth_token_agent_record)
             agent = None # Set to None so it gets re-created in the next block
             logger.info(f"{endpoint} - Reregistering and deleting old agent record for agent {agent_id} with details: {request_info}")
 
+        if not auth_token_agent_record:
+            # let's create a permanent token for this agent
+            new_token_value = os.urandom(6).hex()
+            new_token = AuthTokenAgent(
+                token=new_token_value,
+                added_by="registration",
+                agent_id=agent_id
+            )
+            db.session.add(new_token)
+            db.session.commit()
+        
         # Register or update client
         if not agent:
             # CREATE NEW AGENT
@@ -182,7 +199,7 @@ def beacon_generic(endpoint):
         logger.error(f"{endpoint} - Failed to register or update agent {agent_id}: {e}")
         return "database error during agent update or registration", 500, not agent, agent_id, current_time
 
-    return "ok", 200, not agent, agent_id, current_time
+    return f"{AuthTokenAgent.query.filter_by(agent_id=agent_id).first().token}", 200, not agent, agent_id, current_time
     
     # Example of writing to messages table
     try:
@@ -266,7 +283,8 @@ def get_pause():
         return "Missing data", 400
     
     # Auth check
-    auth_token_record = AuthToken.query.filter_by(token=auth).first()
+    auth_token_record = AuthTokenAgent.query.filter_by(agent_id=agent_id).first()
+    #auth_token_record = AuthToken.query.filter_by(token=auth).first()
     if not auth_token_record:
         logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
         return "Unauthorized", 403

@@ -15,7 +15,7 @@ import hashlib
 
 from models import (
 db,
-Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from shared import (
@@ -38,6 +38,22 @@ def insert_initial_data():
     This should only be run after the tables have been created via db.create_all().
     """
     try:
+        new_agent = Agent(
+            agent_id="custom",
+            agent_name="custom",
+            agent_type="custom",
+            hostname="N/A",
+            ip="255.255.255.255",
+            os="N/A",
+            executionUser="N/A",
+            executionAdmin=True,
+            lastSeenTime=0,
+            lastStatus=True,
+            stale=True,
+            pausedUntil=0
+        )
+        db.session.add(new_agent)
+        
         if CREATE_TEST_DATA:
             add_test_data_agents(5)
             add_test_data_messages(10)
@@ -200,7 +216,7 @@ def add_test_data_agents(num=5):
             ip = possible_ips[i-1]
             possible_oses = ["Windows 10","Windows 2016Server","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8"]
             #os = random.choice(possible_oses)
-            os = possible_oses[i-1]
+            os_name = possible_oses[i-1]
 
             # The agent_id is computed but we use a unique prefix for test data to avoid collisions
             #computed_agent_id = hash_id(f"test_agent_{i}", hostname, ip, os)
@@ -212,7 +228,7 @@ def add_test_data_agents(num=5):
                 agent_type=agent_type,
                 hostname=hostname,
                 ip=ip,
-                os=os,
+                os=os_name,
                 executionUser=random.choice(["root", "admin", ".\\administrator", "domain\\dadmin", "user"]),
                 executionAdmin=random.choice([True, False]),
                 lastSeenTime=time.time() - ((num - i) * 100),
@@ -221,6 +237,12 @@ def add_test_data_agents(num=5):
                 pausedUntil=random.choice([str(0),str(0),str(1),str(time.time()),str(time.time() + 180), str(time.time() + 600)])
             )
             db.session.add(new_agent)
+            new_token = AuthTokenAgent(
+                agent_id=computed_agent_id,
+                added_by="test data",
+                token=os.urandom(6).hex()
+            )
+            db.session.add(new_token)
         db.session.commit()
         logger.info(f"Successfully added {num} test agents to the database.")
     except Exception as e:
@@ -229,7 +251,7 @@ def add_test_data_agents(num=5):
 
 def add_test_data_messages(num=15):
     try:
-        all_agents = Agent.query.all()
+        all_agents = Agent.query.filter(Agent.agent_id != 'custom').all()
         for i in range(1, num + 1):
             timestamp = time.time() - ((num - i) * 100)
             #agent_id = f"agent_{random.randint(1, 5)}" # Uses the agent_id naming pattern from the original code
@@ -280,7 +302,7 @@ def add_test_data_messages(num=15):
         logger.error(f"Failed to add test message data: {e}")
 
 def add_test_data_incidents(num=15,createAlert=True):
-    all_agents = Agent.query.all()
+    all_agents = Agent.query.filter(Agent.agent_id != 'custom').all()
     for i in range(1, num + 1):
         ranagent = random.choice(all_agents)
         #agent_id = f"agent_{random.randint(1,5)}"
@@ -330,7 +352,7 @@ def add_test_data_incidents(num=15,createAlert=True):
     logger.info(f"Successfully added {num} test incidents to the database.")
 
 def add_test_data_incidents_custom(num=5,createAlert=True):
-    all_agents = Agent.query.all()
+    all_agents = Agent.query.filter(Agent.agent_id != 'custom').all()
     for i in range(1, num + 1):
         agent_id = random.choice(all_agents).agent_id
         incident_data = {
@@ -359,7 +381,7 @@ def add_test_data_incidents_custom(num=5,createAlert=True):
 def add_test_data_auth_records(num=10):
     try:
         # Fetch existing agents and messages to use as foreign keys
-        all_agents = Agent.query.all()
+        all_agents = Agent.query.filter(Agent.agent_id != 'custom').all()
         all_messages = Message.query.all()
 
         if not all_agents or not all_messages:

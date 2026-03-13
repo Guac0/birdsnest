@@ -7,7 +7,7 @@ import shutil
 
 from models import (
 db,
-Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from shared import (
@@ -70,8 +70,8 @@ def beacon_stabvest():
             run_git(["config", "-f", f"{agent_id}.git/config", "http.receivepack", "true"],GIT_PROJECT_ROOT)
             logger.info(f"/beacon_stabvest: created repo {os.path.join(GIT_PROJECT_ROOT,f'{agent_id}.git')}")
         except subprocess.CalledProcessError as e:
-            logger.error(f"/beacon_stabvest: Error occurred when creating {repo_path} - {e.stderr}")
-            return "error when creating git repo", 500
+            logger.error(f"/beacon_stabvest: Error occurred when creating git repo {repo_path} - {e.stderr}")
+            return returnMsg, 500
 
     # Trigger Incident if Status Change is Critical
     if oldStatus == False:
@@ -85,9 +85,11 @@ def beacon_stabvest():
         }
         create_incident(incident_data)
 
-    return "ok", 200
+    return returnMsg, 200
 
 def git_backend(repo_name, git_path):
+    # note: does NOT check for auth as that's not really compatible with git
+    
     # Log IMMEDIATELY with all inputs
     #logger.info(f"/git: START git_backend: repo={repo_name}, path={git_path}, method={request.method}")
 
@@ -97,7 +99,7 @@ def git_backend(repo_name, git_path):
             # If this function crashes, it usually happens here
             git_path = clean_and_join_path(git_path)
         except Exception as e:
-            logger.eoor(f"/git: CRASH in clean_and_join_path: {str(e)}")
+            logger.eroor(f"/git: CRASH in clean_and_join_path: {str(e)}")
             return f"Path cleaning failed: {str(e)}", 500
 
         # Build Environment

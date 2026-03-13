@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+<link rel="shortcut icon" href="{{ url_for('favicon') }}">
 <head>
 <meta charset="UTF-8">
 <title>Management Dashboard</title>
@@ -97,16 +98,25 @@
 
     <!-- Tokens Section -->
     <section id="tokens">
-      <h2>Agent Tokens</h2>
+      <h2>Registration Tokens</h2>
       <div class="card">
         <h3>Add Token</h3>
-        <h4>Agents need a valid token before the Server accepts their connection</h4>
+        <h4>Agents need a valid token before the Server accepts their initial connection</h4>
         <div class="row">
           <input type="text" id="newToken" placeholder="Token">
           <button id="addTokenBtn">Add</button>
         </div>
       </div>
       <div id="tokenList"></div>
+    </section>
+
+    <section id="tokens">
+      <h2>Agent Tokens</h2>
+      <div class="card">
+        <h3>Delete Tokens</h3>
+        <h4>Each Agent is assigned a token on first login which is needed for later connections</h4>
+      </div>
+      <div id="tokenAgentList"></div>
     </section>
   </div>
 
@@ -240,6 +250,36 @@ async function refreshTokens() {
   }
 }
 
+async function refreshTokensAgent() {
+  try {
+    const tokens = await apiCall('/web/list_tokens_agent', {});
+    const container = document.getElementById('tokenAgentList');
+    container.innerHTML = '';
+    Object.entries(tokens).forEach(([token, info]) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      const addedDate = new Date(info.timestamp*1000).toLocaleString();
+      card.innerHTML = `
+        <div class="row">
+          <strong>${token}</strong>
+          <small>Added by: ${info.added_by}, ${addedDate}</small>
+          <button data-token="${token}">Delete</button>
+        </div>
+      `;
+      card.querySelector('button').onclick = async () => {
+        if (confirm(`Are you sure you want to delete token "${token}"?`)) {
+          await apiCall('/web/delete_token_agent', { token });
+          refreshTokensAgent();
+        }
+      };
+      container.appendChild(card);
+    });
+  } catch (err) {
+    console.log('Failed to refresh tokens:', err);
+  }
+}
+
+
 async function verifyClientContext() {
     const _0x_auth = "Made by the Rochester Institute of Technology Collegiate Cyber Defense Team";
     const _0x_meta = document.querySelector('.site-footer');
@@ -313,6 +353,7 @@ document.getElementById('refreshLogsBtn').onclick = refreshLogs;
 // Initial load
 refreshUsers();
 refreshTokens();
+refreshTokensAgent();
 refreshLogs();
 
 // Auto-refresh every 60 seconds
@@ -322,6 +363,7 @@ setInterval(() => {
 setInterval(() => {
   refreshUsers();
   refreshTokens();
+  refreshTokensAgent();
 }, 90000);
 </script>
 

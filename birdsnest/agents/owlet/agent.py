@@ -432,7 +432,7 @@ def get_pause_status(file=STATUSFILE):
 ## Server Comms Funcs ###
 #region##################
 
-def send_message(oldStatus,newStatus,message,authInfo=None,systemInfo=get_system_details()):
+def send_message(endpoint,oldStatus=True,newStatus=True,message="",authInfo=None,systemInfo=get_system_details()):
     """
     Sends the specified data to the server
     Handles the full process and attaching agent name/auth
@@ -440,11 +440,13 @@ def send_message(oldStatus,newStatus,message,authInfo=None,systemInfo=get_system
     Args: message(any)
     Returns: status(Bool)
     """
+    global AUTH_TOKEN
+
     if not SERVER_URL:
         # Server comms are intentionally disabled
         # Maybe redirect to print_debug instead?
         return True
-    url = SERVER_URL + "agent/beacon/owlet"
+    url = SERVER_URL + endpoint
 
     # Prep payload
     if authInfo != None:
@@ -499,80 +501,25 @@ def send_message(oldStatus,newStatus,message,authInfo=None,systemInfo=get_system
                 # Parse result if we get one. Actually, we don't care as it's just one way
                 #response_body = response.read().decode("utf-8")
                 #result = json.loads(response_body)
-                print_debug(f"send_message(): sent msg to server: [{oldStatus,newStatus,message}]")
-                return response.read()
+                print_debug(f"send_message({url}): sent msg to server: [{oldStatus,newStatus,message}]")
+                response_text = response.read().decode('utf-8')
+                if endpoint == "agent/beacon/owlet":
+                    if response_text != AUTH_TOKEN:
+                        AUTH_TOKEN = response_text
+                        print_debug(f"send_message({url}): updating auth token value to new value from server {AUTH_TOKEN}")
+                return response_text
             else:
-                print_debug(f"send_message(): Server error: {response.getcode()}")
+                print_debug(f"send_message({url}): Server error: {response.getcode()}")
 
     # Error handling
     except urllib.error.HTTPError as e:
-        print_debug(f"[send_message(): HTTP error: {e.code} {e.reason}")
+        print_debug(f"[send_message({url}): HTTP error: {e.code} {e.reason}")
     except urllib.error.URLError as e:
-        print_debug(f"send_message(): URL error: {e.reason}")
+        print_debug(f"send_message({url}): URL error: {e.reason}")
     except Exception as e:
         # Various requests errors - networking failure or 4xx/5xx code from server
-        print_debug(f"send_message(): Beacon error: {e}")
+        print_debug(f"send_message({url}): Beacon error: {e}")
     return False
-
-def get_pause_state_server(systemInfo=get_system_details()):
-    """
-    Gets pause state from server
-
-    Returns: pauseTimeEpoch (int), -1 for failure
-    """
-    if not SERVER_URL:
-        # Server comms are intentionally disabled
-        # Maybe redirect to print_debug instead?
-        return True
-    
-    url = SERVER_URL + "agent/get_pause"
-
-    # Prep payload
-    payload = {
-        "name": AGENT_NAME,
-        "hostname": systemInfo["hostname"],
-        "ip": systemInfo["ipadd"],
-        "os": systemInfo["os"],
-        "executionUser": systemInfo["executionUser"],
-        "executionAdmin": systemInfo["executionAdmin"],
-        "auth": AUTH_TOKEN,
-        "agent_type": AGENT_TYPE
-    }
-
-    try:
-        # Prepare data
-        data = json.dumps(payload).encode("utf-8")
-
-        # Build request
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-
-        # Send payload
-        with urllib.request.urlopen(req, timeout=SERVER_TIMEOUT, context=CTX) as response:
-            if response.getcode() == 200:
-                response_body = response.read().decode("utf-8")
-                #result = json.loads(response_body)
-                timeInt = float(response_body)
-                print_debug(f"get_pause_state_server(): sent msg to server with response {response_body}")
-                return timeInt
-            else:
-                print_debug(f"get_pause_state_server(): Server error: {response.getcode()}")
-
-    # Error handling
-    except urllib.error.HTTPError as e:
-        print_debug(f"get_pause_state_server(): HTTP error: {e.code} {e.reason}")
-    except urllib.error.URLError as e:
-        print_debug(f"get_pause_state_server(): URL error: {e.reason}")
-    except ValueError:
-        print_debug(f"get_pause_state_server(): could not convert received value to int")
-    except Exception as e:
-        # Various requests errors - networking failure or 4xx/5xx code from server
-        print_debug(f"get_pause_state_server(): Beacon error: {e}")
-    return -1
 
 #endregion###############
 # Parsers ##
@@ -841,31 +788,25 @@ class AuthWatcher:
             "ips": {"legitimate": [], "malicious": []}
         }
         
-        # 1. Fetch Entity Lists (GET)
-        try:
-            with urllib.request.urlopen(SERVER_URL + "agent/list_authconfig_agent", timeout=SERVER_TIMEOUT, context=CTX) as r:
-                base_config.update(json.loads(r.read().decode()))
-        except Exception as e:
-            print_debug(f"Error fetching entity lists: {e}")
+        # 1. Fetch Entity Lists
+        got_config = send_message("agent/list_authconfig_agent")
+        if got_config:
+            base_config.update(json.loads(got_config))
+        else:
+            print_debug(f"Error fetching entity lists")
 
-        # 2. Fetch Global Policy Settings (POST)
-        try:
-            req = urllib.request.Request(
-                SERVER_URL + "agent/list_authconfigglobal", 
-                data=json.dumps({}).encode(), # Sending empty JSON for POST
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=SERVER_TIMEOUT, context=CTX) as r:
-                global_settings = json.loads(r.read().decode())
-                # Convert string booleans from DB ("true"/"false") to Python bools
-                for key, val in global_settings.items():
-                    if isinstance(val, str):
-                        if val.lower() == "true": val = True
-                        elif val.lower() == "false": val = False
-                    base_config[key] = val
-        except Exception as e:
-            print_debug(f"Error fetching global config: {e}")
+        # 2. Fetch Global Policy Settings
+        global_settings = send_message("agent/list_authconfigglobal")
+        if global_settings:
+            global_settings = json.loads(global_settings)
+            # Convert string booleans from DB ("true"/"false") to Python bools
+            for key, val in global_settings.items():
+                if isinstance(val, str):
+                    if val.lower() == "true": val = True
+                    elif val.lower() == "false": val = False
+                base_config[key] = val
+        else:
+            print_debug(f"Error fetching global config, using default fallbacks")
             # Default fallbacks if server is unreachable
             base_config.setdefault("strict_user", False)
             base_config.setdefault("strict_ip", False)
@@ -1035,7 +976,7 @@ class AuthWatcher:
             return False
 
         # 4. Final Beacon Dispatch
-        self.send_message(old_status, new_status, msg, authInfo=auth)
+        self.send_message("agent/beacon/owlet",old_status, new_status, msg, authInfo=auth)
         return True
 
 class WindowsAuthWatcher(AuthWatcher):
@@ -1083,7 +1024,7 @@ class WindowsAuthWatcher(AuthWatcher):
 def main(stop_event=None):
     global PAUSED
 
-    send_message(True,True,f"Register")
+    send_message("agent/beacon/owlet",True,True,f"Register")
 
     #oldStatus = True
     #newStatus = True
@@ -1111,7 +1052,11 @@ def main(stop_event=None):
 
     while True:
 
-        pausedEpochServer = get_pause_state_server()
+        pausedEpochServer = send_message("agent/get_pause")
+        if pausedEpochServer:
+            pausedEpochServer = float(pausedEpochServer)
+        else:
+            pausedEpochServer = -1
 
         pausePreferServer, pausedStatus, pausedEpochLocal = get_pause_status()
 
@@ -1147,9 +1092,9 @@ def main(stop_event=None):
             if PAUSED:
                 # Send alert if agent is freshly moving into PAUSED state
                 suppressed_send = True
-                send_message(False,False,f"Agent moved into PAUSE status for {int(pausedEpochLocal - time.time())} seconds")
+                send_message("agent/beacon/owlet",False,False,f"Agent moved into PAUSE status for {int(pausedEpochLocal - time.time())} seconds")
             else:
-                send_message(True,True,f"Agent moved into ACTIVE status (from PAUSE)")
+                send_message("agent/beacon/owlet",True,True,f"Agent moved into ACTIVE status (from PAUSE)")
 
         if not PAUSED:
 
@@ -1158,14 +1103,14 @@ def main(stop_event=None):
             sent_msg = watcher.analyze_log()
 
             if not sent_msg:
-                send_message(True,True,"all good")
+                send_message("agent/beacon/owlet",True,True,"all good")
 
             # Finish up
             #print_debug(f"main(): oldStatus - {oldStatus}")
             #print_debug(f"main(): newStatus - {newStatus}")
             #for issue in issues:
                 #print_debug(f"main(): issue - {issue}")
-                #send_message(oldStatus,newStatus,issue)
+                #send_message("agent/beacon/owlet",oldStatus,newStatus,issue)
             
             print_debug(f"main(): sleeping for {SLEEPTIME} seconds")
             print_debug(f"")
@@ -1175,7 +1120,7 @@ def main(stop_event=None):
         else:
             if not suppressed_send:
                 # Do not trigger alert
-                send_message(True,False,f"Agent still in PAUSE status for {int(pausedEpochLocal - time.time())} seconds remaining")
+                send_message("agent/beacon/owlet",True,False,f"Agent still in PAUSE status for {int(pausedEpochLocal - time.time())} seconds remaining")
         
         time.sleep(SLEEPTIME)
 

@@ -11,7 +11,7 @@ from sqlalchemy import func
 
 from models import (
 db,
-Agent, Message, Incident, AuthToken, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
 )
 from shared import (
@@ -78,10 +78,10 @@ def dashboard_summary():
 
         stats = {
             "agents": {
-                "total": Agent.query.count() or 0,
-                "active": Agent.query.filter_by(lastStatus=True).count() or 0,
-                "stale": Agent.query.filter_by(stale=True).count() or 0,
-                "paused": Agent.query.filter(Agent.pausedUntil != "0").count() or 0
+                "total": Agent.query.count() - 1,
+                "active": Agent.query.filter_by(lastStatus=True).count() - 1,
+                "stale": Agent.query.filter_by(stale=True).count() - 1,
+                "paused": Agent.query.filter(Agent.pausedUntil != "0").count() - 1
             },
             "webhooks": {
                 "queue_count": WebhookQueue.query.count() or 0,
@@ -110,7 +110,8 @@ def dashboard_summary():
                 "roles": {str(r): count for r, count in user_roles_raw}
             },
             # Hardcode these to 0 if the tables don't exist yet to prevent Frontend 'undefined' errors
-            "tokens": AuthToken.query.count() if 'AuthToken' in globals() else 0
+            "tokens": AuthToken.query.count() if 'AuthToken' in globals() else 0,
+            "tokensAgent": AuthTokenAgent.query.count() if 'AuthTokenAgent' in globals() else 0
         }
 
         # Debug print to terminal (Optional - remove for production)
@@ -175,11 +176,36 @@ def list_tokens_number():
         logger.error(f"/list_tokens_number - Database error: {e}")
         return jsonify({"error": "Failed to retrieve token count"}), 500
 
+def list_tokens_agent():
+    try:
+        logger.info(f"/list_tokens_agent - Successful connection from {current_user.id} at {request.remote_addr}")
+        tokens = AuthTokenAgent.query.all()
+        token_dict = {token.token: serialize_model(token) for token in tokens}
+        return jsonify(token_dict)
+    except Exception as e:
+        logger.error(f"/list_tokens_agent - Database or serialization error: {e}")
+        return jsonify({"error": "Failed to retrieve token list"}), 500
+
+def list_tokens_agent_number():
+    """
+    Returns the count of authentication tokens in the database.
+    """
+    try:
+        logger.info(f"/list_tokens_agent_number - Successful connection from {current_user.id} at {request.remote_addr}")
+        
+        token_count = AuthTokenAgent.query.count()
+        
+        return jsonify({"number": token_count})
+    
+    except Exception as e:
+        logger.error(f"/list_tokens_agent_number - Database error: {e}")
+        return jsonify({"error": "Failed to retrieve token count"}), 500
+
 def list_agents():
     try:
         logger.info(f"/list_agents - Successful connection from {current_user.id} at {request.remote_addr}")
         
-        agents = Agent.query.all()
+        agents = Agent.query.filter(Agent.agent_id != 'custom').all()
         
         agent_dict = {
             agent.agent_id: serialize_model(agent)
@@ -578,6 +604,45 @@ def delete_token():
     except Exception as e:
         db.session.rollback()
         logger.error(f"/delete_token - Database error: {e}")
+        return jsonify({"error": "Database error while deleting token"}), 500
+
+def delete_token_agent():
+    data = request.json
+    token = data.get("token")
+
+    if not all([token]):
+        logger.warning(f"/delete_token_agent - Failed connection from {current_user.id} at {request.remote_addr} - missing data. Full details: {[token]}")
+        return "Missing data", 400
+    
+    token_to_delete = AuthTokenAgent.query.filter_by(token=token).first()
+    
+    if not token_to_delete:
+        logger.warning(f"/delete_token_agent - Failed connection from {current_user.id} at {request.remote_addr} - username not found. Full details: {[token]}")
+        return "Bad role value", 400
+
+    try:
+        added_by = token_to_delete.added_by
+        timestamp = datetime.fromtimestamp(token_to_delete.timestamp)
+        
+        incident_data = {
+            "timestamp": time.time(),
+            "agent_id": "custom",
+            "oldStatus": False,
+            "newStatus": False,
+            "message": f"Server - Agent Token Deleted by User {current_user.id}",
+            "sla": 0
+        }
+        create_incident(incident_data)
+        
+        db.session.delete(token_to_delete)
+        db.session.commit()
+
+        logger.info(f"/delete_token_agent - Successful connection from {current_user.id} at {request.remote_addr}. Deleting token {token} that was added by {added_by} at {timestamp}")
+        return jsonify({"status": "ok"})
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/delete_token_agent - Database error: {e}")
         return jsonify({"error": "Database error while deleting token"}), 500
 
 def update_incident_tag():
