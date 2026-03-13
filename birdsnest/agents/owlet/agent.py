@@ -18,6 +18,7 @@ import shutil
 import base64
 from pathlib import Path
 import ast
+from datetime import timedelta
 #import win32evtlog
 #import win32evtlogutil
 #import winreg
@@ -64,8 +65,8 @@ def load_config(path):
     for key, value in config.items():
         if isinstance(value, str):
             config[key] = value.format(
-                HOST=config.get("HOST"),
-                PORT=config.get("PORT"),
+                HOST=config.get("SERVER_URL").split(":")[-1],
+                PORT=":".join(config.get("SERVER_URL").split(":")[:-1]),  
                 timestamp=timestamp
             )
 
@@ -215,7 +216,7 @@ def get_perms():
     
     # Unknown OS - shouldn't reach
     print_debug("get_perms(): reached unexpected unsupported OS block")
-    return False, runAsUser
+    return False, ""
 
 def get_primary_ip():
     """
@@ -273,41 +274,41 @@ def interface_get_primary_windows(ip):
 
 def interface_get_primary_linux(ip):
     """
-    Gets interface name on linux using "ip" or "ifconfig"
-    TODO: make this not be AI slop
-    Returns: interface(String) or None
+    Unified getter for Linux (Debian, RHEL, Alpine) and FreeBSD.
     """
-    # Try "ip address"
+    system = platform.system()
+    
+    # 1. Try 'ip addr' first (Standard for modern Linux: Debian, RHEL)
+    if system == "Linux":
+        try:
+            # Full path is safer
+            ip_bin = shutil.which("ip") or "/sbin/ip"
+            output = subprocess.check_output([ip_bin, "-4", "addr"], text=True)
+            iface = None
+            for line in output.splitlines():
+                # Headers look like: "2: eth0: <BROADCAST...>"
+                header_match = re.match(r"^\d+:\s+([^:@\s]+)", line.strip())
+                if header_match:
+                    iface = header_match.group(1)
+                if "inet " in line and ip in line:
+                    return iface
+        except Exception:
+            pass
+
+    # 2. Try 'ifconfig' (Fallback for Alpine/BusyBox and Primary for FreeBSD)
     try:
-        output = subprocess.check_output(["ip", "-4", "addr"], text=True)
+        ifconfig_bin = shutil.which("ifconfig") or "/sbin/ifconfig"
+        output = subprocess.check_output([ifconfig_bin], text=True)
         iface = None
+        
         for line in output.splitlines():
-            line = line.strip()
-
-            # Match interface header: "2: ens33:"
-            m = re.match(r"\d+:\s+([^:]+):", line)
-            if m:
-                iface = m.group(1)
-                continue
-
-            # Match "inet 192.168.1.10/24"
-            if line.startswith("inet ") and ip in line:
-                return iface
-    except Exception:
-        pass
-
-    # Fallback: try "ifconfig"
-    try:
-        output = subprocess.check_output(["ifconfig"], text=True)
-        iface = None
-        for line in output.splitlines():
-            # Interface header: "eth0: flags=..."
-            m = re.match(r"^([a-zA-Z0-9._-]+):\s", line)
-            if m:
-                iface = m.group(1)
-                continue
-
-            # "inet 192.168.1.10"
+            # FreeBSD/Linux ifconfig headers usually start at column 0
+            # Matches "eth0: ..." or "em0: ..."
+            header_match = re.match(r"^([a-zA-Z0-9._-]+)[:\s]", line)
+            if header_match:
+                iface = header_match.group(1)
+            
+            # Check for the IP in the following indented lines
             if "inet " in line and ip in line:
                 return iface
     except Exception:
@@ -367,10 +368,16 @@ def run_bash(cmd, noisy=True):
     # Use with caution.
     
     try:
+        executable_path = shutil.which("bash")
+        
+        # Fallback to standard sh if bash isn't installed
+        if not executable_path:
+            executable_path = "/bin/sh"
+
         result = subprocess.run(
             cmd,
             shell=True,
-            executable="/bin/bash", # Explicitly use bash for consistency
+            executable=executable_path,
             capture_output=True, 
             text=True,
             check=False # Do not raise a CalledProcessError on non-zero exit code
@@ -427,7 +434,7 @@ def get_pause_status(file=STATUSFILE):
         with open(file,"w") as f:
             f.write(f"false\n0\n")
         return False, False, 0
-        
+            
 #endregion###############
 ## Server Comms Funcs ###
 #region##################
@@ -528,9 +535,9 @@ def send_message(endpoint,oldStatus=True,newStatus=True,message="",authInfo=None
 def get_native_parser():
     """Detects OS and returns the appropriate parser class."""
     if os.path.exists("/etc/debian_version"):
-        return DebianAuthParser(), "/var/log/auth.log", AuthWatcher()
+        return DebianAuthParser(), "/var/log/auth.log", JournalAuthWatcher()
     elif os.path.exists("/etc/redhat-release") or os.path.exists("/etc/rocky-release"):
-        return RedHatParser(), "/var/log/secure", AuthWatcher()
+        return RedHatParser(), "/var/log/secure", JournalAuthWatcher()
     elif os.path.exists("/etc/alpine-release"):
         return AlpineParser(), "/var/log/messages", AuthWatcher()
     elif os.uname().sysname == "FreeBSD":
@@ -545,6 +552,57 @@ class BaseParser:
     """Interface for different log formats."""
     def parse_line(self, line):
         raise NotImplementedError("Each parser must implement parse_line")
+    
+    def _format_record(self, sig_type, match, epoch_or_line):
+        """
+        Standardized formatter shared by all OS-specific parsers.
+        Works for Windows Events, Journald, and Syslog (FreeBSD/Alpine).
+        """
+        # 1. Handle Timestamp: Prioritize provided epoch from parser
+        if isinstance(epoch_or_line, (int, float)):
+            epoch = epoch_or_line
+        else:
+            # Fallback if parser didn't calculate epoch (deprecated behavior)
+            epoch = int(time.time())
+        
+        # 2. Extract named groups from the regex match
+        groups = match.groupdict()
+        user = groups.get('user', 'unknown')
+        ip = groups.get('ip', '127.0.0.1')
+        
+        # 3. Base Record Structure
+        res = {
+            "timestamp": epoch,
+            "user": user,
+            "srcip": ip,
+            "login_type": sig_type,
+            "successful": True  # Default to True, corrected by 'status' or sig_type
+        }
+
+        # 4. Success/Failure Logic (Unified for sshd, login, and Windows)
+        # Checks for 'Accepted', 'success', 'opened', or Windows 'Success'
+        if 'status' in groups:
+            status_val = groups['status'].lower()
+            res["successful"] = any(x in status_val for x in ["accept", "success", "open", "audit success"])
+        
+        # 5. Handle SSH Invalid Users (Always failure)
+        if sig_type == "ssh_invalid":
+            res["successful"] = False
+
+        # 6. Unified Elevation Logic (Works for 'sudo' on Linux and 'su' on FreeBSD)
+        # If the regex captured a source user, we format the transition: e.g., "su(alice->root)"
+        if 'src_user' in groups:
+            src = groups.get('src_user', 'unknown')
+            # Extracts 'sudo' or 'su' from the sig_type and formats transition
+            prefix = sig_type.split('_')[0] 
+            res["login_type"] = f"{prefix}({src}->{user})"
+            
+        # 7. Windows Specific: Domain context (Optional)
+        if 'domain' in groups and groups['domain'] not in ['NT AUTHORITY', '']:
+            res["user"] = f"{groups['domain']}\\{user}"
+            
+        return res
+    
     def __repr__(self):
         return f"NotImplemented Parser"
 
@@ -553,96 +611,86 @@ class DebianAuthParser(BaseParser):
     Parses /var/log/auth.log for SSH attempts and Privilege Elevation.
     """
     def __init__(self):
-        # We define a list of signatures to check against each line
         self.signatures = [
-            # 1. SSH Password Success/Fail
+            # 1. SSH Password & Public Key (Combined for efficiency)
             {
                 "type": "ssh_auth",
-                "regex": re.compile(r"sshd\[\d+\]: (?P<status>Accepted|Failed) password for (?P<user>\S+) from (?P<ip>\S+)"),
+                "regex": re.compile(r"sshd\[\d+\]: (?P<status>Accepted|Failed) (?P<method>\S+) for (?P<user>\S+) from (?P<ip>\S+)"),
             },
-            # 2. SSH Public Key Success
-            {
-                "type": "ssh_pubkey",
-                "regex": re.compile(r"sshd\[\d+\]: Accepted publickey for (?P<user>\S+) from (?P<ip>\S+)"),
-            },
-            # 3. Sudo Execution (Elevation)
+            # 2. Sudo Execution (Captures source user and target user)
             {
                 "type": "sudo_elevation",
                 "regex": re.compile(r"sudo:\s+(?P<src_user>\S+) : TTY=.* ; USER=(?P<user>\S+) ; COMMAND=(?P<cmd>.*)"),
             },
-            # 4. Invalid User SSH Attempt
+            # 3. Invalid User SSH Attempt
             {
                 "type": "ssh_invalid",
                 "regex": re.compile(r"sshd\[\d+\]: Invalid user (?P<user>\S+) from (?P<ip>\S+)"),
             }
         ]
         
-        # Base timestamp regex (Jan 18 12:00:01)
-        #self.ts_pattern = re.compile(r"^(?P<month>\w{3})\s+(?P<day>\d+)\s+(?P<time>[\d:]+)") #old
-        self.ts_pattern = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})T(?P<time>[\d:.]+)(?P<timezone>[+-]\d{2}:\d{2})")
+        # Enhanced ISO8601 Pattern to handle micro-seconds and timezones accurately
+        self.ts_pattern = re.compile(
+            r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})T(?P<time>[\d:]+)(?P<subsecond>\.[\d]+)?(?P<timezone>[+-]\d{2}:\d{2}|Z)"
+        )
 
     def parse_line(self, line):
-        # First, extract timestamp
         ts_match = self.ts_pattern.match(line)
         if not ts_match:
             return None
             
-        ts_str = f"{datetime.now().year} {ts_match.group('month')} {ts_match.group('day')} {ts_match.group('time')}"
-        #epoch = int(time.mktime(time.strptime(ts_str, "%Y %b %d %H:%M:%S")))
-        epoch = int(time.mktime(time.strptime(ts_str, "%Y %m %d %H:%M:%S.%f"))) #iso
+        # Robust ISO8601 parsing
+        ts_str = f"{ts_match.group('year')}-{ts_match.group('month')}-{ts_match.group('day')}T{ts_match.group('time')}"
+        try:
+            # Use fromisoformat for reliable cross-platform epoch conversion
+            dt = datetime.fromisoformat(ts_str)
+            epoch = dt.timestamp()
+        except ValueError:
+            return None
 
-        # Check against each signature
         for sig in self.signatures:
             match = sig['regex'].search(line)
             if match:
+                # Calls the unified BaseParser logic
                 return self._format_record(sig['type'], match, epoch)
         
         return None
-
-    def _format_record(self, sig_type, match, epoch):
-        # Default successful to False unless explicitly 'Accepted' or a Sudo command
-        res = {
-            "timestamp": epoch,
-            "user": match.group('user'),
-            "srcip": match.group('ip') if 'ip' in match.groupdict() else "127.0.0.1",
-            "login_type": sig_type,
-            "successful": True 
-        }
-
-        if sig_type == "ssh_auth":
-            res["successful"] = (match.group('status') == "Accepted")
-        elif sig_type == "ssh_invalid":
-            res["successful"] = False
-        elif sig_type == "sudo_elevation":
-            # For sudo, we note the source user in the 'notes' or similar field
-            res["login_type"] = f"sudo({match.group('src_user')}->{match.group('user')})"
-            # We treat the execution itself as a 'success' event to log
-            
-        return res
 
     def __repr__(self):
         return f"DebianAuthParser"
 
 class RedHatParser(BaseParser):
-    """Parses /var/log/secure for RHEL/Rocky/CentOS."""
     def __init__(self):
-        self.log_path = "/var/log/secure"
+        # Patterns match both /var/log/secure and 'journalctl -o short-iso'
         self.signatures = [
-            # SSH Auth (Password/Key/Invalid)
-            {"type": "ssh", "regex": re.compile(r"sshd\[\d+\]: (?P<status>Accepted|Failed) (?P<method>\S+) for (?P<user>\S+) from (?P<ip>\S+)")},
-            {"type": "ssh_invalid", "regex": re.compile(r"sshd\[\d+\]: Invalid user (?P<user>\S+) from (?P<ip>\S+)")},
-            # Sudo Elevation
-            {"type": "sudo", "regex": re.compile(r"sudo:.* ; USER=(?P<user>\S+) ; COMMAND=(?P<cmd>.*)")},
-            # Direct su to root
-            {"type": "su_elevation", "regex": re.compile(r"su: pam_unix\(su-l:session\): session opened for user root by (?P<src_user>\S+)")}
+            {
+                "type": "ssh_auth", 
+                "regex": re.compile(r"sshd\[\d+\]: (?P<status>Accepted|Failed) password for (?P<user>\S+) from (?P<ip>\S+)")
+            },
+            {
+                "type": "ssh_invalid", 
+                "regex": re.compile(r"sshd\[\d+\]: Invalid user (?P<user>\S+) from (?P<ip>\S+)")
+            }
         ]
+        # Matches 2026-03-13T02:11:41-0400
+        self.ts_pattern = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")
 
     def parse_line(self, line):
-        # RHEL/Rocky often use same MMM DD HH:MM:SS format as Debian
+        ts_match = self.ts_pattern.match(line)
+        if not ts_match:
+            return None
+        
+        # Convert to epoch
+        try:
+            dt = datetime.fromisoformat(ts_match.group('ts'))
+            epoch = dt.timestamp()
+        except ValueError:
+            return None
+
         for sig in self.signatures:
             match = sig['regex'].search(line)
             if match:
-                return self._format_record(sig['type'], match, line)
+                return self._format_record(sig['type'], match, epoch)
         return None
 
     def __repr__(self):
@@ -651,19 +699,42 @@ class RedHatParser(BaseParser):
 class AlpineParser(BaseParser):
     """Parses /var/log/messages for Alpine (BusyBox)."""
     def __init__(self):
-        self.log_path = "/var/log/messages"
         self.signatures = [
-            # Alpine sshd logs are often simplified
-            {"type": "ssh", "regex": re.compile(r"auth\.info sshd\[\d+\]: (?P<status>Accepted|Failed) (?P<method>\S+) for (?P<user>\S+) from (?P<ip>\S+)")},
-            # Alpine sudo (if installed)
-            {"type": "sudo", "regex": re.compile(r"auth\.info sudo:.*USER=(?P<user>\S+); COMMAND=(?P<cmd>.*)")}
+            # SSH attempts (Optional 'auth.info' prefix for BusyBox)
+            {
+                "type": "ssh_auth", 
+                "regex": re.compile(r"(?:auth\.info )?sshd\[\d+\]: (?P<status>Accepted|Failed) \S+ for (?P<user>\S+) from (?P<ip>\S+)")
+            },
+            # Sudo elevation (Updated to capture src_user)
+            {
+                "type": "sudo_elevation", 
+                "regex": re.compile(r"(?:auth\.info )?sudo:\s+(?P<src_user>\S+) :.*USER=(?P<user>\S+) ; COMMAND=(?P<cmd>.*)")
+            }
         ]
+        # Pattern for "Mar 13 02:11:41"
+        self.ts_pattern = re.compile(r"^(?P<month>[A-Z][a-z]{2})\s+(?P<day>\d+)\s+(?P<time>\d{2}:\d{2}:\d{2})")
 
     def parse_line(self, line):
+        ts_match = self.ts_pattern.match(line)
+        if not ts_match:
+            return None
+
+        # Handle the missing year in BusyBox logs
+        now = datetime.now()
+        ts_str = f"{now.year} {ts_match.group('month')} {ts_match.group('day')} {ts_match.group('time')}"
+        try:
+            dt = datetime.strptime(ts_str, "%Y %b %d %H:%M:%S")
+            # Logic: If it's Jan and log is Dec, it's from last year
+            if dt > now + timedelta(days=1): 
+                dt = dt.replace(year=now.year - 1)
+            epoch = dt.timestamp()
+        except ValueError:
+            return None
+
         for sig in self.signatures:
             match = sig['regex'].search(line)
             if match:
-                return self._format_record(sig['type'], match, line)
+                return self._format_record(sig['type'], match, epoch)
         return None
 
     def __repr__(self):
@@ -672,67 +743,107 @@ class AlpineParser(BaseParser):
 class FreeBSDParser(BaseParser):
     """Parses /var/log/auth.log for FreeBSD."""
     def __init__(self):
-        self.log_path = "/var/log/auth.log"
         self.signatures = [
-            # SSH attempts
-            {"type": "ssh", "regex": re.compile(r"sshd\[\d+\]: (?P<status>Accepted|Failed) (?P<method>\S+) for (?P<user>\S+) from (?P<ip>\S+) port")},
-            # FreeBSD 'su' is very common for elevation
-            {"type": "su_elevation", "regex": re.compile(r"su\[\d+\]: (?P<src_user>\S+) to root on (?P<tty>\S+)")},
-            # Login failures on tty/console
-            {"type": "console_fail", "regex": re.compile(r"login: FAIL on (?P<tty>\S+) for (?P<user>\S+), password incorrect")}
+            # 1. SSH attempts
+            {
+                "type": "ssh_auth", 
+                "regex": re.compile(r"sshd\[\d+\]: (?P<status>Accepted|Failed) (?P<method>\S+) for (?P<user>\S+) from (?P<ip>\S+) port")
+            },
+            # 2. su elevation (Captures source user and target user)
+            {
+                "type": "su_elevation", 
+                "regex": re.compile(r"su\[\d+\]: (?P<src_user>\S+) to (?P<user>\S+) on (?P<tty>\S+)")
+            },
+            # 3. Console login failures
+            {
+                "type": "console_fail", 
+                "regex": re.compile(r"login: FAIL on (?P<tty>\S+) for (?P<user>\S+), password incorrect")
+            }
         ]
+        # Pattern for "Mar 13 02:11:41"
+        self.ts_pattern = re.compile(r"^(?P<month>[A-Z][a-z]{2})\s+(?P<day>\d+)\s+(?P<time>\d{2}:\d{2}:\d{2})")
 
     def parse_line(self, line):
+        ts_match = self.ts_pattern.match(line)
+        if not ts_match:
+            return None
+
+        # Add current year and convert to epoch
+        now = datetime.now()
+        ts_str = f"{now.year} {ts_match.group('month')} {ts_match.group('day')} {ts_match.group('time')}"
+        try:
+            dt = datetime.strptime(ts_str, "%Y %b %d %H:%M:%S")
+            # New Year's Eve safety: if log is Dec but it's now Jan, it's last year
+            if dt > now + timedelta(days=1):
+                dt = dt.replace(year=now.year - 1)
+            epoch = dt.timestamp()
+        except ValueError:
+            return None
+
         for sig in self.signatures:
             match = sig['regex'].search(line)
             if match:
-                return self._format_record(sig['type'], match, line)
+                # Pass the calculated epoch, not the raw line
+                return self._format_record(sig['type'], match, epoch)
         return None
 
     def __repr__(self):
         return f"FreeBSDParser"
 
-class WindowsAuthParser:
-    """Parses Windows Security Event Logs for login attempts."""
+class WindowsAuthParser(BaseParser):
+    """Parses Windows Security Event Logs for login attempts (4624/4625)."""
     def __init__(self):
         self.log_type = "Security"
-        # Event IDs: 4624 (Success), 4625 (Failure)
         self.event_ids = {4624: True, 4625: False}
+        # Common system accounts to ignore to prevent log flooding
+        self.ignored_users = ["SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE", "ANONYMOUS LOGON"]
 
     def _get_timestamp(self, event):
-        """Converts Windows TimeGenerated to Unix timestamp."""
         return int(event.TimeGenerated.timestamp())
 
     def parse_event(self, event):
-        """
-        Processes a single Windows Event Object and returns a 
-        standardized record format used by the AuthWatcher.
-        """
-        event_id = event.EventID & 0xFFFF # Mask to get the standard ID
-        
+        event_id = event.EventID & 0xFFFF
         if event_id not in self.event_ids:
             return None
 
-        # Extract event data (Strings is a list of data fields in the event)
-        # For 4624/4625, standard indices are:
-        # [5]: TargetUserName, [18]: IpAddress
-        try:
-            user = event.StringInserts[5] if len(event.StringInserts) > 5 else "unknown"
-            ip = event.StringInserts[18] if len(event.StringInserts) > 18 else "127.0.0.1"
-            
-            # Clean up IP (Windows often logs '-' for local or IPv6 format)
-            if ip == "-" or ip == "::1": ip = "127.0.0.1"
+        inserts = event.StringInserts
+        # Boundary check: Ensure we have enough fields
+        if not inserts or len(inserts) < 19:
+            return None
 
-            return {
-                "timestamp": self._get_timestamp(event),
+        try:
+            # Standard indices for 4624/4625:
+            # [5] = TargetUserName, [6] = TargetDomainName, [18] = IpAddress
+            user = inserts[5]
+            domain = inserts[6]
+            ip = inserts[18]
+
+            # 1. Filter out high-volume System noise
+            if user.upper() in self.ignored_users or user.endswith('$'):
+                return None
+
+            # 2. IP Normalization
+            if ip in ["-", "::1", "127.0.0.1"]:
+                ip = "127.0.0.1"
+
+            # 3. Format for your new universal _format_record standard
+            # We create a "dummy" match object to reuse your BaseParser logic
+            class MockMatch:
+                def __init__(self, data): self.data = data
+                def groupdict(self): return self.data
+
+            mock_match = MockMatch({
                 "user": user,
-                "srcip": ip,
-                "successful": self.event_ids[event_id],
-                "type": "win_auth",
-                "raw": f"WinEvent {event_id}: {user} from {ip}"
-            }
+                "domain": domain,
+                "ip": ip,
+                "status": "success" if self.event_ids[event_id] else "failed"
+            })
+
+            # Use the universal formatter you just built
+            return self._format_record("win_auth", mock_match, self._get_timestamp(event))
+
         except Exception as e:
-            print(f"Error parsing Windows Event: {e}")
+            # print_debug(f"Error parsing Event {event_id}: {e}")
             return None
 
     def __repr__(self):
@@ -744,32 +855,69 @@ class WindowsAuthParser:
 
 class AlertThrottler:
     def __init__(self, threshold=10, window=60):
-        self.threshold = threshold  # Max alerts before suppression
-        self.window = window        # Time window in seconds
-        self.history = {}           # { ip: [timestamps] }
-        self.suppressed = set()      # IPs currently being silenced
+        self.threshold = threshold
+        self.window = window
+        self.history = {}
+        self.suppressed = set()
+        self.last_cleanup = time.time()
+
+    def _cleanup_all(self):
+        """Prevents memory exhaustion from one-off attacker IPs."""
+        now = time.time()
+        # Only cleanup every 10 minutes to save CPU
+        if now - self.last_cleanup < 600:
+            return
+            
+        expired_ips = []
+        for ip, timestamps in self.history.items():
+            self.history[ip] = [t for t in timestamps if now - t < self.window]
+            if not self.history[ip]:
+                expired_ips.append(ip)
+        
+        for ip in expired_ips:
+            del self.history[ip]
+            if ip in self.suppressed:
+                self.suppressed.remove(ip)
+        
+        self.last_cleanup = now
 
     def should_throttle(self, ip):
         now = time.time()
+        self._cleanup_all()
+
         if ip not in self.history:
             self.history[ip] = []
         
-        # Clean old timestamps outside the window
+        # 1. Clean current IP history
         self.history[ip] = [t for t in self.history[ip] if now - t < self.window]
-        self.history[ip].append(now)
+        
+        # 2. Logic Check
+        currently_suppressed = ip in self.suppressed
+        attempt_count = len(self.history[ip])
 
-        if len(self.history[ip]) > self.threshold:
-            if ip not in self.suppressed:
-                self.suppressed.add(ip)
-                return "START_THROTTLE" # Signal to send one last warning
-            return "SILENCE"
-        
-        if ip in self.suppressed and len(self.history[ip]) < (self.threshold / 2):
-            self.suppressed.remove(ip)
-            return "END_THROTTLE"
+        # State: Moving from PROCEED -> THROTTE
+        if attempt_count >= self.threshold and not currently_suppressed:
+            self.suppressed.add(ip)
+            # We DON'T append the 'now' here yet to keep the count stable 
+            # for the START_THROTTLE signal
+            return "START_THROTTLE"
+
+        # State: Already suppressed
+        if currently_suppressed:
+            # Check for recovery: count has dropped significantly
+            if attempt_count < (self.threshold / 2):
+                self.suppressed.remove(ip)
+                self.history[ip].append(now) # Add this recovery attempt
+                return "END_THROTTLE"
             
+            # Still flooding: record the attempt but keep silencing
+            self.history[ip].append(now)
+            return "SILENCE"
+
+        # State: Normal operation
+        self.history[ip].append(now)
         return "PROCEED"
-        
+    
 class AuthWatcher:
     def __init__(self, parser, auth_log):
         self.parser = parser
@@ -798,13 +946,21 @@ class AuthWatcher:
         # 2. Fetch Global Policy Settings
         global_settings = send_message("agent/list_authconfigglobal")
         if global_settings:
-            global_settings = json.loads(global_settings)
-            # Convert string booleans from DB ("true"/"false") to Python bools
-            for key, val in global_settings.items():
-                if isinstance(val, str):
-                    if val.lower() == "true": val = True
-                    elif val.lower() == "false": val = False
-                base_config[key] = val
+            try:
+                global_settings = json.loads(global_settings)
+                # Convert string booleans from DB ("true"/"false") to Python bools
+                for key, val in global_settings.items():
+                    if isinstance(val, str):
+                        if val.lower() == "true": val = True
+                        elif val.lower() == "false": val = False
+                    base_config[key] = val
+            except Exception as E:
+                print_debug(f"Error applying global config, using default fallbacks. error: {E}")
+                # Default fallbacks if server is unreachable
+                base_config.setdefault("strict_user", False)
+                base_config.setdefault("strict_ip", False)
+                base_config.setdefault("create_incident", False)
+                base_config.setdefault("log_attempt_successful", True)
         else:
             print_debug(f"Error fetching global config, using default fallbacks")
             # Default fallbacks if server is unreachable
@@ -830,83 +986,72 @@ class AuthWatcher:
         new_last_scan = self.load_state()
         self.last_scan_time = new_last_scan
         sent_msg = False
-        
-        # List to hold new records (since we find them in reverse, we'll flip them later)
         records_to_process = []
         
-        print_debug(f"analyze_log(): starting with last scan time of {datetime.fromtimestamp(new_last_scan).strftime('%Y-%m-%d %H:%M:%S')} ({new_last_scan})")
-        
         if not os.path.exists(self.auth_log):
-            print_debug(f"analyze_log(): auth_log does not exist! path: {self.auth_log}")
             return sent_msg
 
         file_size = os.path.getsize(self.auth_log)
         if file_size == 0:
-            print_debug("analyze_log(): auth_log is empty.")
             return sent_msg
 
         with open(self.auth_log, 'rb') as f:
-            # Move pointer to the very end of the file
             f.seek(0, os.SEEK_END)
             pointer = f.tell()
             buffer = b""
-            chunk_size = 4096  # 4KB chunks are usually optimal for I/O
+            chunk_size = 4096
             reached_cutoff = False
 
-            #print_debug(f"analyze_log(): seeking backward from end of file ({file_size} bytes)")
-
             while pointer > 0 and not reached_cutoff:
-                # Determine how much to read (don't over-read past start of file)
                 if pointer - chunk_size > 0:
                     pointer -= chunk_size
                     f.seek(pointer)
                     chunk = f.read(chunk_size)
                 else:
-                    # We are at the beginning of the file
                     f.seek(0)
                     chunk = f.read(pointer)
                     pointer = 0
 
-                # Combine new chunk with leftover data from previous chunk
                 chunk += buffer
                 lines = chunk.splitlines()
 
-                # The first line of a chunk might be partial; save it for the next loop
                 if pointer > 0:
                     buffer = lines.pop(0)
                 else:
+                    # pointer is 0, so 'buffer' is no longer needed; 
+                    # all lines in this final chunk are complete.
                     buffer = b""
 
-                # Process the lines in this chunk from bottom to top
                 for line in reversed(lines):
-                    decoded_line = line.decode('utf-8', errors='ignore')
-                    print_debug(f"analyze_log(): sending line to parser: {decoded_line}")
+                    decoded_line = line.decode('utf-8', errors='replace')
                     record = self.parser.parse_line(decoded_line)
 
                     if record:
                         if record['timestamp'] > self.last_scan_time:
                             records_to_process.append(record)
-                            # Keep track of the most recent timestamp seen
+                            # Track the highest timestamp found for the state update
                             if record['timestamp'] > new_last_scan:
                                 new_last_scan = record['timestamp']
                         else:
-                            # Found a record older or equal to our last scan! Stop reading.
-                            print_debug(f"analyze_log(): found cutoff at timestamp {record['timestamp']}. Stopping backtracker.")
                             reached_cutoff = True
                             break
+            
+            # FIX: Process the leftover buffer if we haven't reached the cutoff
+            if not reached_cutoff and buffer:
+                decoded_line = buffer.decode('utf-8', errors='replace')
+                record = self.parser.parse_line(decoded_line)
+                if record and record['timestamp'] > self.last_scan_time:
+                    records_to_process.append(record)
+                    if record['timestamp'] > new_last_scan:
+                        new_last_scan = record['timestamp']
 
-        # Since we collected them backward, reverse them to process chronologically
         records_to_process.reverse()
-        print_debug(f"analyze_log(): found {len(records_to_process)} new records to evaluate.")
-
         for record in records_to_process:
             if self.evaluate_threat(record):
                 sent_msg = True
 
-        new_last_scan = time.time()
+        # Update state to the timestamp of the newest log we've seen
         self.save_state(new_last_scan)
-        print_debug(f"analyze_log(): exiting, saving state with timestamp {new_last_scan}")
-
         return sent_msg
 
     def evaluate_threat(self, auth):
@@ -914,84 +1059,116 @@ class AuthWatcher:
         Processes a single auth event, applies flood protection, 
         and determines if a beacon should be sent.
         """
-        # 2. Determine Malicious Status based on Config + Policy
-        # Pull flags from the config (handled during fetch_config)
-        strict_ip = self.config.get('strict_ip', False)
-        strict_user = self.config.get('strict_user', False)
-
         ip = auth.get('srcip', '127.0.0.1')
         user = auth.get('user', 'unknown')
-        print_debug(f"evaluate_threat(): srcip: {ip}, user: {user}, strict_user: {strict_user}, strict_ip: {strict_ip}")
         
-        # 1. Check Flood Protection status
+        # 1. Check Flood Protection status FIRST
         throttle_status = self.throttler.should_throttle(ip)
         
         if throttle_status == "SILENCE":
-            # Log line ignored to prevent server flooding
-            print_debug("evaluate_threat(): SILENCED")
+            print_debug(f"evaluate_threat(): IP {ip} is silenced. Ignoring log.")
             return False
+
+        # 2. Determine Malicious Status (Policy Checks)
+        strict_ip = self.config.get('strict_ip', False)
+        strict_user = self.config.get('strict_user', False)
         
-        # User Evaluation
-        is_mal_user = False
-        if strict_user:
-            # Strict: Malicious if NOT in legitimate list
-            if user not in self.config['users']['legitimate']:
-                is_mal_user = True
-        else:
-            # Permissive: Malicious only if in malicious list
-            if user in self.config['users']['malicious']:
-                is_mal_user = True
-
-        # IP Evaluation
-        is_mal_ip = False
-        if strict_ip:
-            # Strict: Malicious if NOT in legitimate list
-            if ip not in self.config['ips']['legitimate']:
-                is_mal_ip = True
-        else:
-            # Permissive: Malicious only if in malicious list
-            if ip in self.config['ips']['malicious']:
-                is_mal_ip = True
-
-        # Aggregate Threat Status
+        is_mal_user = user in self.config['users']['malicious'] if not strict_user else user not in self.config['users']['legitimate']
+        is_mal_ip = ip in self.config['ips']['malicious'] if not strict_ip else ip not in self.config['ips']['legitimate']
         is_malicious = is_mal_user or is_mal_ip
 
-        # 3. Construct Message and Statuses
-        # oldStatus (False = Malicious activity detected)
-        # newStatus (False = Malicious activity AND successful login)
+        # 3. Define Default Statuses
+        # oldStatus: False = Potential threat detected
+        # newStatus: False = Successful compromise (Malicious user + Successful login)
         old_status = not is_malicious
         new_status = not (is_malicious and auth['successful'])
+        msg = None
 
+        # 4. Message Construction Priority
         if throttle_status == "START_THROTTLE":
             msg = f"FLOOD CONTROL: IP {ip} is being throttled for excessive login attempts."
+            old_status = False  # Force an 'Unhealthy' status so the dashboard flags it
+            
+        elif throttle_status == "END_THROTTLE":
+            msg = f"FLOOD CONTROL: IP {ip} is no longer being throttled."
+            old_status = True   # Mark as resolved/healthy
+            new_status = True
+            
         elif is_mal_user and is_mal_ip:
             msg = f"SECURITY ALERT: Known malicious user {user} from malicious IP {ip}"
         elif is_mal_user:
             msg = f"SECURITY ALERT: Malicious user access: {user}"
         elif is_mal_ip:
             msg = f"SECURITY ALERT: Access from malicious IP: {ip}"
-        else:
-            # If not malicious and not flooding, we do not send a beacon
-            print_debug(f"evaluate_threat(): item is not malicious, ignoring. strict_user: {strict_user}, strict_ip: {strict_ip}")
-            return False
 
-        # 4. Final Beacon Dispatch
-        self.send_message("agent/beacon/owlet",old_status, new_status, msg, authInfo=auth)
-        return True
+        # 5. Final Dispatch
+        if msg:
+            print_debug(f"evaluate_threat(): Sending beacon - {msg}")
+            send_message("agent/beacon/owlet", old_status, new_status, msg, authInfo=auth)
+            return True
 
-class WindowsAuthWatcher(AuthWatcher):
-    def analyze_log(self):
-        """Overrides analyze_log to use Windows Event API instead of file reading."""
-        server = 'localhost'
-        handle = win32evtlog.OpenEventLog(server, self.parser.log_type)
+        # No threat, no throttle change, no alert needed
+        return False
+
+class JournalAuthWatcher(AuthWatcher):
+    """
+    A robust watcher that reads /var/log/auth.log (or secure) 
+    but falls back to journalctl if the file is missing.
+    """
+    def get_journal_logs(self, since_timestamp):
+        # Format: 2026-03-13 02:11:41
+        since_str = datetime.fromtimestamp(since_timestamp).strftime('%Y-%m-%d %H:%M:%S')
         
-        # Read flags: Backwards (newest first) and sequential
-        flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+        # We query the sshd unit specifically for efficiency
+        cmd = ["journalctl", "_SYSTEMD_UNIT=sshd.service", "--since", since_str, "--output=short-iso", "--no-pager"]
+        
+        try:
+            # Note: This requires the agent to run with sudo/root privileges to read the journal
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            return result.stdout.splitlines()
+        except Exception as e:
+            print_debug(f"JournalAuthWatcher: Failed to query journalctl: {e}")
+            return []
+
+    def analyze_log(self):
+        # If the physical file exists, use the high-speed binary backtracker
+        if os.path.exists(self.auth_log) and os.path.getsize(self.auth_log) > 0:
+            return super().analyze_log()
+        
+        # Fallback for Debian 12+ and RHEL 9+
+        print_debug(f"JournalAuthWatcher: {self.auth_log} not found. Using journalctl fallback.")
+        self.last_scan_time = self.load_state()
+        lines = self.get_journal_logs(self.last_scan_time)
         
         records_to_process = []
-        reached_cutoff = False
+        new_last_scan = self.last_scan_time
+        sent_msg = False
+
+        for line in lines:
+            record = self.parser.parse_line(line)
+            if record and record['timestamp'] > self.last_scan_time:
+                records_to_process.append(record)
+                if record['timestamp'] > new_last_scan:
+                    new_last_scan = record['timestamp']
+
+        for record in records_to_process:
+            if self.evaluate_threat(record):
+                sent_msg = True
+
+        self.save_state(new_last_scan)
+        return sent_msg
+  
+class WindowsAuthWatcher(AuthWatcher):
+    def analyze_log(self):
+        """Overrides analyze_log to use Windows Event API."""
+        server = 'localhost'
+        handle = win32evtlog.OpenEventLog(server, self.parser.log_type)
+        flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
         
-        print_debug(f"Starting Windows Event Scan. Last scan: {self.last_scan_time}")
+        sent_msg = False
+        records_to_process = []
+        reached_cutoff = False
+        new_last_scan = self.last_scan_time
 
         while not reached_cutoff:
             events = win32evtlog.ReadEventLog(handle, flags, 0)
@@ -1003,19 +1180,23 @@ class WindowsAuthWatcher(AuthWatcher):
                 if record:
                     if record['timestamp'] > self.last_scan_time:
                         records_to_process.append(record)
+                        if record['timestamp'] > new_last_scan:
+                            new_last_scan = record['timestamp']
                     else:
                         reached_cutoff = True
                         break
             
             if reached_cutoff: break
 
-        # Process found records
-        records_to_process.reverse() # Process chronologically
+        records_to_process.reverse()
         for record in records_to_process:
-            self.evaluate_threat(record)
+            # FIX: Capture the threat return value
+            if self.evaluate_threat(record):
+                sent_msg = True
 
-        self.save_state(time.time())
+        self.save_state(new_last_scan)
         win32evtlog.CloseEventLog(handle)
+        return sent_msg
 
 #endregion###############
 ######### Main ##########
