@@ -18,6 +18,8 @@ import shutil
 import base64
 from pathlib import Path
 import ast
+import sys
+import signal
 #import winreg
 #import win32serviceutil
 #import win32service
@@ -3584,8 +3586,16 @@ def test_main():
     #test_network()
     test_service()
 
+def signal_handler(sig, frame):
+    print_debug("Service stopping due to receiving signal handler")
+    sys.exit(0)
+
 def main(stop_event=None):
     # TODO daemon-reload if service file was changed!
+
+    # force the working directory to the script's location
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
     global PAUSED
     ip_address,prefix,gateway = init_int_vars() # TODO
 
@@ -3796,6 +3806,8 @@ if __name__ == "__main__":
     else:
         main()
     """
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     main()
 
 #endregion###############

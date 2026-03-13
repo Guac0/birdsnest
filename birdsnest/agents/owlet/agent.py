@@ -15,21 +15,19 @@ import urllib.request
 import urllib.error
 import ssl
 import shutil
-import base64
-from pathlib import Path
-import ast
+import signal
+import sys
 from datetime import timedelta
 try:
     import win32evtlog
-    import win32evtlogutil
-    import winreg
-    import win32serviceutil
-    import win32service
-    import win32event
+    #import win32evtlogutil
+    #import winreg
+    #import win32serviceutil
+    #import win32service
+    #import win32event
     WINDOWS_LIBS_LOADED = True
 except ImportError:
     WINDOWS_LIBS_LOADED = False
-#import sys
 #import servicemanager
 #import threading
 
@@ -1318,8 +1316,15 @@ else:
 ######### Main ##########
 #region##################
 
+def signal_handler(sig, frame):
+    print_debug("Service stopping due to receiving signal handler")
+    sys.exit(0)
+
 def main(stop_event=None):
     global PAUSED
+
+    # force the working directory to the script's location
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
     send_message("agent/beacon/owlet",True,True,f"Register")
 
@@ -1422,6 +1427,8 @@ def main(stop_event=None):
         time.sleep(SLEEPTIME)
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     main()
 
 #endregion###############
