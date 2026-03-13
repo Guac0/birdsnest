@@ -1756,11 +1756,11 @@ def firewall_rules_create_windows(port,direction,action):
     rule_name = f"Stabvest_Rule_{port}_{direction}_{action}"
 
     ps_cmd = fr"""
-    New-NetFirewallRule -DisplayName "{rule_name}" \
-                        -Direction {direction} \
-                        -Action {action} \
-                        -LocalPort {port} \
-                        -Profile Any \
+    New-NetFirewallRule -DisplayName "{rule_name}" `
+                        -Direction {direction} `
+                        -Action {action} `
+                        -LocalPort {port} `
+                        -Profile Any `
                         -ErrorAction Stop
     """
 
@@ -2824,9 +2824,7 @@ def service_integrity_windows(service_name, backupDict):
     expected_dependencies_sorted = sorted([d.lower() for d in expected_dependencies])
 
     # Re-evaluate initial state (in case any check below fails)
-    if (current_start_name != expected_start_name) or \
-       (current_path_name.lower().strip() != expected_path_name.lower().strip()) or \
-       (current_dependencies_sorted != expected_dependencies_sorted):
+    if (current_start_name != expected_start_name) or (current_path_name.lower().strip() != expected_path_name.lower().strip()) or (current_dependencies_sorted != expected_dependencies_sorted):
         oldStatus = False
 
     # ----------------------------------------------------------
