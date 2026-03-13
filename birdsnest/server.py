@@ -19,7 +19,7 @@ from shared import (
 setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
 MAX_WEBHOOK_MSG_PER_MINUTE, WEBHOOK_URL, INITIAL_AGENT_AUTH_TOKENS, INITIAL_WEBGUI_USERS, AUTHCONFIG_STRICT_IP,
 AUTHCONFIG_STRICT_USER, AUTHCONFIG_CREATE_INCIDENT, AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL, CREATE_TEST_DATA, SECRET_KEY,
-GIT_PROJECT_ROOT, GIT_BACKEND
+GIT_PROJECT_ROOT, GIT_BACKEND, DATABASE_CREDS, DATABASE_LOCATION, DATABASE_DB
 )
 from utilities import (
 insert_initial_data, create_db_tables, serialize_model, is_safe_path,
@@ -59,7 +59,7 @@ from modules.owlet_agent import (
 
 # === Set Flask Config ===
 #SQLALCHEMY_DATABASE_URI = f'sqlite:///save.db'
-SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://birdsnest:birdsnestpwd@database:5432/birdsnestdb"
+SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{ DATABASE_CREDS }@{ DATABASE_LOCATION }/{ DATABASE_DB }"
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.config['SECRET_KEY'] = CONFIG["SECRET_KEY"]
