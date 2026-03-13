@@ -1,3 +1,0 @@
----
-- name: Deploy Birdsnest
-  ansible.builtin.include_tasks: deploy.yaml
