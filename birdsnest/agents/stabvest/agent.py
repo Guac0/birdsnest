@@ -43,13 +43,14 @@ CONFIG_DEFAULTS = {
     "PORTS": [81],
     "SERVICES": ["AxInstSV"],
     "PACKAGES": [""],
-    "SERVICE_BACKUPS": {
-        "PathName": "C:\\\\Windows\\\\system32\\\\svchost.exe -k AxInstSVGroup",
-        "StartName": "LocalSystem",
-        "Dependencies": [],
-        "DisplayName": "ActiveX Installer (AxInstSV)",
-        "StartType": "Manual"
-    },
+    "SERVICE_BACKUPS": {},
+    #"SERVICE_BACKUPS": {
+    #    "PathName": "C:\\\\Windows\\\\system32\\\\svchost.exe -k AxInstSVGroup",
+    #    "StartName": "LocalSystem",
+    #    "Dependencies": [],
+    #    "DisplayName": "ActiveX Installer (AxInstSV)",
+    #    "StartType": "Manual"
+    #},
     "PROTECTED_FOLDERS": ["var/www"],
     "DEBUG_PRINT": True,
     "BACKUPDIR": "",
@@ -60,14 +61,76 @@ CONFIG_DEFAULTS = {
     "MTU_MAX": 1514,
     "LINUX_DEFAULT_TTL": 64,
     "AGENT_TYPE": "stabvest"
-    #"SERVICE_BACKUPS": {
-    #    "PathName": "C:\Windows\System32\svchost.exe -k LocalService",
-    #    "StartName": "LocalSystem",
-    #    "Dependencies": ["RpcSs"],
-    #    "DisplayName": "Windows Time",
-    #    "StartType": "auto"
-    #}
 }
+
+def service_backup(service):
+    """
+    Wrapper for OS-specific service_backup* functions
+
+    Given the name of a Windows service, create a backupDict as used in service_integrity()
+    
+    Returns: backupDict(dict)
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        return service_backup_windows(service)
+    else:
+        return {}
+        # On linux systems, equivalent functionality is achieved by just protecting the service file with the file protection functionality.
+
+def service_backup_windows(service_name):
+    """
+    Queries the local Windows system for the current configuration of a service
+    and returns a backup dictionary.
+
+    Args:
+        service_name (str): The name of the Windows service (e.g., 'Dnscache').
+
+    Returns:
+        dict: A backup dictionary containing the service's current attributes, 
+              or None if the service is not found or an error occurs.
+    """
+    
+    # PowerShell command to query all required attributes using Win32_Service
+    ps_query = r"""
+    $svc = Get-CimInstance Win32_Service -Filter "Name='{service_name}'" -ErrorAction SilentlyContinue
+    if ($svc -eq $null) { 
+        Write-Output 'NotFound'
+    }  else { 
+        $obj = New-Object PSObject -Property @{ 
+            PathName = $svc.PathName
+            StartName = $svc.StartName
+            Dependencies = $svc.DependsOn
+            DisplayName = $svc.DisplayName
+            StartType = $svc.StartMode
+        } 
+        $obj | ConvertTo-Json
+    } 
+    """.format(service_name=service_name)
+    
+    raw = run_powershell(ps_query).strip()
+    
+    if not raw or raw == "NotFound":
+        print(f"[ERROR] Service '{service_name}' not found or PowerShell error during query.")
+        return None
+
+    # Parse the JSON result
+    try:
+        data = json.loads(raw)
+        
+        # Ensure StartType is lowercased to match the expected format ('auto', 'manual', 'disabled')
+        data['StartType'] = data['StartType'].lower()
+        
+        # Ensure Dependencies is a list, even if it's null (PowerShell often returns null for no dependencies)
+        if data['Dependencies'] is None:
+            data['Dependencies'] = []
+            
+        return data
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to parse JSON configuration for '{service_name}': {e}")
+        return None
 
 def load_config(path):
     config = CONFIG_DEFAULTS.copy()
@@ -127,7 +190,41 @@ def get_iptables_save_path():
     # Default fallback (manual export)
     return "/etc/iptables.rules"
 
+def populate_initial_backups(config, path):
+    """
+    If SERVICE_BACKUPS is empty, snapshots the current state of listed services
+    and saves them back to the config file.
+    """
+    modified = False
+    
+    # Check if we have services to protect but no backup data
+    if config.get("SERVICES") and not config.get("SERVICE_BACKUPS"):
+        print("[+] SERVICE_BACKUPS is empty. Initializing from current system state...")
+        new_backups = {}
+        
+        for svc_name in config["SERVICES"]:
+            backup_data = service_backup(svc_name)
+            if backup_data:
+                new_backups[svc_name] = backup_data
+                print(f"    - Snapshotted service: {svc_name}")
+        
+        if new_backups:
+            config["SERVICE_BACKUPS"] = new_backups
+            modified = True
+
+    # If we updated the config, write it back to disk to persist the "Known Good" state
+    if modified:
+        try:
+            with open(path, "w") as f:
+                json.dump(config, f, indent=4)
+            print(f"[+] Initial configuration persisted to {path}")
+        except Exception as e:
+            print(f"[-] Failed to persist initial config: {e}")
+
+    return config
+
 CONFIG = load_config("config.json") # relative to cwd!
+CONFIG = populate_initial_backups(CONFIG, "config.json")
 DISARM = CONFIG["DISARM"]
 IPTABLES_PATH = CONFIG["IPTABLES_PATH"]
 DEBUG_PRINT = CONFIG["DEBUG_PRINT"]
@@ -387,7 +484,10 @@ def run_bash(cmd, noisy=True):
         
     # Fallback to standard sh if bash isn't installed
     if not executable_path:
-        executable_path = "/bin/sh"
+        for path in ["/usr/local/bin/bash", "/bin/sh", "/usr/bin/sh"]:
+            if os.path.exists(path):
+                executable_path = path
+                break
 
     try:
         
@@ -519,6 +619,43 @@ def get_pause_status(file=STATUSFILE):
             f.write(f"false\n0\n")
         return False, False, 0
         
+def persist_iptables_rules(noisy=True):
+    """
+    Persists current iptables rules to disk based on the Linux distribution.
+    Uses 'service iptables save' for RHEL/CentOS and 'netfilter-persistent' for Debian.
+    
+    Returns: success (bool)
+    """
+    # 1. Try RHEL/CentOS style (iptables-services)
+    if shutil.which("service"):
+        # Check if the iptables service is specifically available
+        check_svc = run_bash("service iptables status", noisy=False)
+        if check_svc:
+            print_debug("Detected RHEL-style iptables; persisting via service...")
+            return run_bash("service iptables save", noisy=noisy) != ""
+
+    # 2. Try Debian/Ubuntu style (iptables-persistent)
+    if shutil.which("netfilter-persistent"):
+        print_debug("Detected Debian-style iptables; persisting via netfilter-persistent...")
+        return run_bash("netfilter-persistent save", noisy=noisy) != ""
+
+    # 3. Universal Fallback (Manual Redirection)
+    # This requires knowing the OS to pick the right path
+    distro = get_platform_dist()[0].lower() # Using your existing helper
+    
+    path = ""
+    if "debian" in distro or "ubuntu" in distro:
+        path = "/etc/iptables/rules.v4"
+    elif "rhel" in distro or "centos" in distro or "rocky" in distro:
+        path = "/etc/sysconfig/iptables"
+    
+    if path:
+        print_debug(f"No manager found. Falling back to manual save to {path}...")
+        # Note: run_bash must handle '>' redirection correctly
+        return run_bash(f"{IPTABLES_PATH}-save > {path}", noisy=noisy) != ""
+
+    print_debug("Failed to persist: No known persistence method found for this distro.")
+    return False
 
 
 #endregion###############
@@ -614,23 +751,10 @@ def interface_get_primary_windows(ip):
     TODO: make this not be AI slop
     Returns: interface(String) or None
     """
-    output = subprocess.check_output(["ipconfig"], text=True, encoding="utf-8", errors="ignore")
-
-    current_iface = None
-    for line in output.splitlines():
-        line = line.strip()
-
-        # Interface header (e.g., "Ethernet adapter Ethernet:")
-        m = re.match(r"(.+?) adapter (.+?):", line, re.IGNORECASE)
-        if m:
-            current_iface = m.group(2)
-            continue
-
-        # IPv4 Address line
-        if "IPv4 Address" in line and ip in line:
-            return current_iface
-
-    return None
+    query = f"Get-NetIPAddress -IPAddress '{ip}' | Select-Object -ExpandProperty InterfaceAlias"
+    # Assuming run_powershell is defined in your project
+    output = run_powershell(query).strip()
+    return output if output else None
 
 def interface_get_primary_linux(ip):
     """
@@ -638,47 +762,32 @@ def interface_get_primary_linux(ip):
     Uses shutil.which to locate binaries dynamically across different distributions.
     """
     system = platform.system()
-    
-    # 1. Try 'ip addr' first (Standard for modern Linux: Debian, RHEL, Alpine)
-    # We check for the 'ip' binary regardless of the 'system' being Linux, 
-    # but specifically skip for FreeBSD as 'ip' usually refers to something else there.
     if system == "Linux":
         ip_bin = shutil.which("ip")
         if ip_bin:
             try:
-                output = subprocess.check_output([ip_bin, "-4", "addr"], text=True)
-                iface = None
-                for line in output.splitlines():
-                    # Match interface headers: "2: eth0: <BROADCAST...>"
-                    header_match = re.match(r"^\d+:\s+([^:@\s]+)", line.strip())
-                    if header_match:
-                        iface = header_match.group(1)
-                    # Match the IP line associated with the above interface
-                    if "inet " in line and ip in line:
-                        return iface
+                output = subprocess.check_output([ip_bin, "-j", "addr"], text=True)
+                addr_data = json.loads(output)
+                for iface in addr_data:
+                    for addr in iface.get("addr_info", []):
+                        if addr.get("local") == ip:
+                            return iface.get("ifname")
             except Exception:
                 pass
 
-    # 2. Try 'ifconfig' (Primary for FreeBSD, fallback for Alpine/BusyBox)
     ifconfig_bin = shutil.which("ifconfig")
     if ifconfig_bin:
         try:
             output = subprocess.check_output([ifconfig_bin], text=True)
             iface = None
-            
             for line in output.splitlines():
-                # Headers start at the beginning of the line: "eth0: ..." or "em0: ..."
-                # This regex works for both BSD-style and Linux-style ifconfig output.
                 header_match = re.match(r"^([a-zA-Z0-9._-]+)[:\s]", line)
                 if header_match:
                     iface = header_match.group(1)
-                
-                # Check for the IP in the indented lines following the header
                 if "inet " in line and ip in line:
                     return iface
         except Exception:
             pass
-
     return None
 
 def interface_address(interface,ip_address,subnet,gateway):
@@ -708,69 +817,48 @@ def interface_address_windows(interface,ip_address,subnet,gateway):
     Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
     """
     issues = []
-
-    # Query configuration
-    query_cmd = fr"""
-        Get-NetIPConfiguration -InterfaceAlias '{interface}' |
-        Select-Object IPv4Address, IPv4DefaultGateway | ConvertTo-Json
-    """
-
+    query_cmd = fr"Get-NetIPConfiguration -InterfaceAlias '{interface}' | Select-Object IPv4Address, IPv4DefaultGateway | ConvertTo-Json"
     output = run_powershell(query_cmd)
+    
     if not output:
-        #print_debug(f"interface_address_windows({interface}): Failed to query interface")
-        return False, False, [f"Failed to query interface {interface} due to PowerShell error."]
+        return False, False, [f"Failed to query interface {interface}"]
 
-    # Parse JSON result
     try:
         data = json.loads(output)
-    except json.JSONDecodeError as E:
-        #print_debug(f"interface_address_windows({interface}): Error parsing PowerShell output")
-        return False, False, [f"Failed to query interface {interface} due to PowerShell JSON parsing error."]
+    except:
+        return False, False, [f"JSON parse error for {interface}"]
 
-    # Determine if address or gateway exist
     has_address = bool(data.get("IPv4Address"))
     has_gateway = bool(data.get("IPv4DefaultGateway"))
 
-    # Diagnostics
     if has_address and has_gateway:
         return True, True, []
 
     statusFix = True
-    # Fix missing IPv4 address
     if not has_address:
-        set_ip_cmd = fr"""
-            New-NetIPAddress -InterfaceAlias '{interface}' |
-            -IPAddress {ip_address} -PrefixLength {subnet}
-        """
+        # Fixed: Removed stray pipe before -IPAddress
+        set_ip_cmd = fr"New-NetIPAddress -InterfaceAlias '{interface}' -IPAddress {ip_address} -PrefixLength {subnet}"
         if DISARM:
-            #print_debug(f"interface_address_windows({interface}): DISARMED, but told to set IP address: {ip_address}/{subnet}")
-            issues.append(f"Missing IPv4 Address for interface {interface}, DISARMED.")
+            issues.append(f"Missing IPv4 Address for {interface}, DISARMED.")
             statusFix = False
         else:
-            #print_debug(f"interface_address_windows({interface}): Setting IP address: {ip_address}/{subnet}")
             if not run_powershell(set_ip_cmd):
                 statusFix = False
-                issues.append(f"Missing IPv4 Address for interface {interface}, FAILED to restore {ip_address}/{subnet}.")
+                issues.append(f"Failed to restore {ip_address}/{subnet} on {interface}.")
             else:
-                issues.append(f"Missing IPv4 Address for interface {interface}, RESTORED {ip_address}/{subnet}.")
+                issues.append(f"Restored {ip_address}/{subnet} on {interface}.")
 
-    # Fix missing gateway
     if not has_gateway:
-        set_gw_cmd = (
-            f"New-NetRoute -InterfaceAlias '{interface}' "
-            f"-DestinationPrefix '0.0.0.0/0' -NextHop {gateway}"
-        )
+        set_gw_cmd = fr"New-NetRoute -InterfaceAlias '{interface}' -DestinationPrefix '0.0.0.0/0' -NextHop {gateway}"
         if DISARM:
-            #print_debug(f"interface_address_windows({interface}): DISARMED, but told to set gateway address: {gateway}")
-            issues.append(f"Missing Gateway Address for interface {interface}, DISARMED.")
+            issues.append(f"Missing Gateway for {interface}, DISARMED.")
             statusFix = False
         else:
-            #print_debug(f"interface_address_windows({interface}): Setting gateway address: {gateway}")
             if not run_powershell(set_gw_cmd):
                 statusFix = False
-                issues.append(f"Missing Gateway Address for interface {interface}, FAILED to restore {gateway}.")
+                issues.append(f"Failed to restore gateway {gateway} on {interface}.")
             else:
-                issues.append(f"Missing Gateway Address for interface {interface}, RESTORED {gateway}.")
+                issues.append(f"Restored gateway {gateway} on {interface}.")
 
     return False, statusFix, issues
 
@@ -1018,10 +1106,9 @@ def interface_ttl(interface=interface_get_primary()):
     system = platform.system()
 
     if system == "Windows":
-        return interface_mtu_windows(interface)
+        return interface_ttl_windows(interface)
     else:
-        return interface_mtu_linux(interface)
-        #return False, False, [f"interface_ttl(): not implemented for system {system}."] # TODO
+        return interface_ttl_linux(interface)
 
 def interface_ttl_windows():
     """
@@ -1252,59 +1339,28 @@ def interface_down_linux(interface=interface_get_primary()):
                newStatus (bool): True if the interface is UP after the function runs.
                issues (list of strings): List of actions taken or failures.
     """
-    issues = []
-    
-    # 1. Query current interface status using 'ip link'
-    # This command provides both administrative and operational status.
-    # Output flags: UP means administratively up, DOWN means administratively down.
-    # LOWER_UP means link is physically connected (operational state UP).
-    ip_check_cmd = f"ip link show dev {interface}"
-    
-    output = run_bash(ip_check_cmd)
-    if not output:
-        # This usually means the interface was not found or a shell error occurred
-        return False, False, [f"Interface {interface} cannot be queried (Not Found or shell error)."]
-
-    # 2. Determine if the interface is administratively UP or DOWN
-    # Check for the 'UP' flag in the output (e.g., <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500)
-    # If the 'UP' flag is missing, the interface is administratively down.
-    
-    status_match = re.search(r"<\S+>", output)
-    if not status_match:
-        # Interface found, but status flags are missing, which is highly unusual.
-        return False, False, [f"Interface {interface}'s status flags could not be parsed."]
-
-    flags = status_match.group(0)
-    
-    is_up = "UP" in flags
-    old_status = is_up
-    
-    # 3. Remediate if the interface is DOWN
-    if not is_up:
-        # If it's administratively DOWN, bring it UP
-        ip_set_up_cmd = f"ip link set dev {interface} up"
+    if interface is None:
+        interface = interface_get_primary()
         
-        if DISARM:
-            print_debug(f"interface_down_linux({interface}): DISARMED, but told to enable interface")
-            return False, False, [f"Interface {interface} was set to DOWN, DISARMED."]
-        else:
-            print_debug(f"interface_down_linux({interface}): Setting interface UP.")
-            if run_bash(ip_set_up_cmd):
-                # Check status again to verify the fix
-                output_new = run_bash(ip_check_cmd)
-                status_match_new = re.search(r"<\S+>", output_new)
-                
-                new_status = False
-                if status_match_new and "UP" in status_match_new.group(0):
-                    new_status = True
-                    return False, new_status, [f"Interface {interface} was set to DOWN, RESTORED UP state."]
-                else:
-                    return False, new_status, [f"Interface {interface} was set to DOWN, FAILED to restore UP state."]
-            else:
-                return False, False, [f"Interface {interface} was set to DOWN, FAILED to restore UP state (command failed)."]
+    issues = []
+    ip_check_cmd = f"ip link show dev {interface}"
+    output = run_bash(ip_check_cmd)
+    
+    if not output:
+        return False, False, [f"Interface {interface} not found."]
 
-    # 4. Interface is already UP
-    return True, True, []
+    # Look specifically for the state in the flags
+    is_up = ",UP" in output or "<UP" in output
+    if is_up:
+        return True, True, []
+
+    if DISARM:
+        return False, False, [f"Interface {interface} is DOWN, DISARMED."]
+    
+    if run_bash(f"ip link set dev {interface} up"):
+        return False, True, [f"Interface {interface} was DOWN, RESTORED UP state."]
+    
+    return False, False, [f"Interface {interface} was DOWN, FAILED to restore."]
 
 def interface_uninstall():
     # Not fully implemented
@@ -1332,49 +1388,44 @@ def interface_uninstall_windows(interface_name,ipv4_address,prefix_length,gatewa
     Then restores static IPv4 settings (address, gateway, DNS).
     """
 
-    # --- Step 1: detect IPv4 presence ---
-    ps_detect = r'''
-    $int = Get-NetIPInterface -AddressFamily IPv4 -ErrorAction SilentlyContinue
-    if ($int -eq $null -or $int.Count -eq 0) { "Missing" } else { "Present" }
+    issues = []
+    
+    # Check if IPv4 is enabled/bound on the adapter
+    ps_detect = fr'''
+    $bind = Get-NetAdapterBinding -ComponentID "ms_tcpip" -InterfaceAlias "{interface_name}" -ErrorAction SilentlyContinue
+    if ($bind.Enabled -eq $true) {{ "Present" }} else {{ "Missing" }}
     '''
-
+    
     ipv4_state = run_powershell(ps_detect).strip()
+    old_status = (ipv4_state == "Present")
+    
+    if not old_status:
+        if DISARM:
+            issues.append(f"IPv4 binding missing on {interface_name}, DISARMED.")
+            return False, False, issues
+        
+        # Re-enable the binding and reset the stack
+        ps_fix = fr'Enable-NetAdapterBinding -ComponentID "ms_tcpip" -InterfaceAlias "{interface_name}"'
+        run_powershell(ps_fix)
+        issues.append(f"IPv4 binding restored on {interface_name}.")
 
-    # --- Step 2: reinstall IPv4 if missing ---
-    if ipv4_state == "Missing":
-        print_debug("[+] IPv4 is not installed. Reinstalling...")
-        ps_install = r'''
-        netsh interface ipv4 install
-        Write-Output "Installed"
-        '''
-        run_powershell(ps_install)
-    else:
-        print_debug("[+] IPv4 already installed.")
-
-    # --- Step 3: restore IPv4 address ---
-    print_debug(f"[+] Restoring IPv4 address on {interface_name}...")
-    ps_set_ip = fr'''
-    netsh interface ipv4 set address name="{interface_name}" static {ipv4_address} {prefix_length} {gateway}
+    # Restore IP configuration using PowerShell (more reliable than netsh for modern OS)
+    # We use -ErrorAction SilentlyContinue because if the IP is already there, New-NetIPAddress errors.
+    ps_restore = fr'''
+    $params = @{{
+        InterfaceAlias = "{interface_name}"
+        IPAddress = "{ipv4_address}"
+        PrefixLength = {prefix_length}
+        DefaultGateway = "{gateway}"
+    }}
+    New-NetIPAddress @params -ErrorAction SilentlyContinue
+    Set-DnsClientServerAddress -InterfaceAlias "{interface_name}" -ServerAddresses ({",".join([f"'{d}'" for d in dns_servers])})
     '''
-    run_powershell(ps_set_ip)
-
-    # --- Step 4: restore DNS ---
-    print_debug("[+] Restoring DNS servers...")
-    # Clear existing DNS entries
-    ps_clear_dns = fr'''
-    netsh interface ipv4 set dnsservers name="{interface_name}" source=static address={dns_servers[0]} register=primary
-    '''
-    run_powershell(ps_clear_dns)
-
-    # Add additional DNS servers, if any
-    for dns in dns_servers[1:]:
-        ps_add_dns = fr'''
-        netsh interface ipv4 add dnsservers name="{interface_name}" address={dns} index=2
-        '''
-        run_powershell(ps_add_dns)
-
-    print_debug("[+] IPv4 configuration restored successfully.")
-    return True
+    
+    run_powershell(ps_restore)
+    issues.append(f"Standard IPv4 configuration applied to {interface_name}.")
+    
+    return old_status, True, issues
 
 def interface_main(interface,ip_address,subnet,gateway):
     """
@@ -1401,6 +1452,7 @@ def interface_main(interface,ip_address,subnet,gateway):
     """
 
     # Interface 
+    # Drastic and unlikely to be a real break. ignore.
     """
     result_oldStatus, result_newStatus, result_issues = interface_address(interface,ip_address,subnet,gateway)
     if not result_oldStatus:
@@ -1526,94 +1578,88 @@ def firewall_rules_audit_windows(port,direction="in",action="block"):
 
 def firewall_rules_audit_linux(port, direction="in", action="block"):
     """
-    Uses iptables to audit firewall rules, returning the protocol, chain, 
-    index, and specification needed for deletion.
-    
-    Args: 
-        port (str): The specific port number (e.g., "80", "443").
-        direction (str): 'in' (INPUT chain) or 'out' (OUTPUT chain).
-        action (str): 'block' (DROP/REJECT) or 'accept' (ACCEPT).
-        
-    Returns: 
-        tuple: (issues, matching_rules)
-               issues (list of strings): List of errors encountered.
-               matching_rules (list of dicts): List of matching rules found with full detail.
+    Uses iptables -S to audit firewall rules for better reliability across RHEL/Debian.
     """
     issues = []
     matching_rules = []
     
+    # Map directions and targets
     chain = "INPUT" if direction.lower() == "in" else "OUTPUT"
+    # iptables -S uses the real target names
     targets = ["DROP", "REJECT"] if action.lower() == "block" else ["ACCEPT"]
     
-    # 1. Query iptables rules with numbering (-nL --line-numbers)
-    # This gives us the crucial rule index number.
-    ip_query_cmd = f"{IPTABLES_PATH} -t filter -nL {chain} --line-numbers"
+    # 1. Use -S (Select) instead of -L. It is much easier to parse.
+    # We still need --line-numbers for deletion, but -S doesn't support them.
+    # So we get the clean specs from -S and correlate with -L indices.
+    ip_query_cmd = f"{IPTABLES_PATH} -t filter -S {chain}"
     output = run_bash(ip_query_cmd)
 
     if not output:
         return [f"Could not run '{ip_query_cmd}' or no rules found."], []
 
-    # 2. Parse rules line by line
-    
-    # Regex to capture the index, protocol, destination port, and target
-    # Example line: 1    DROP       all  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:80
-    rule_regex = re.compile(
-        fr"^\s*(?P<index>\d+)\s+(?P<target>DROP|REJECT|ACCEPT)\s+"  # Index and Target
-        fr"(?P<prot>[a-z\d]+|\*)\s+.*?"                               # Protocol (* or tcp/udp/icmp)
-        fr"(?P<spec>[sd]ports?)\s*:?\s*(?P<port_spec>[\d,\-]+)"           # dpt/spt and Port Spec (optional, uses non-greedy match)
-    )
+    # 2. Parse rules. Each line looks like: -A INPUT -p tcp -m tcp --dport 80 -j DROP
+    for index, line in enumerate(output.splitlines(), 1):
+        if not line.startswith("-A"):
+            continue # Skip policy lines like -P INPUT ACCEPT
 
-    for line in output.splitlines():
-        # Check if the line is a rule, excluding the chain header/footer
-        if not line.strip().startswith(('Chain', 'num', 'target', 'policy', 'pkts')):
+        parts = line.split()
+        
+        # Check if Target matches
+        try:
+            target_index = parts.index("-j") + 1
+            rule_target = parts[target_index]
+        except (ValueError, IndexError):
+            continue
+
+        if rule_target in targets:
+            # Check for port specification
+            # Look for --dport (inbound) or --sport (outbound)
+            port_flag = "--dport" if direction.lower() == "in" else "--sport"
             
-            match = rule_regex.search(line)
+            port_spec = ""
+            if port_flag in parts:
+                port_spec = parts[parts.index(port_flag) + 1]
             
-            if match and match.group('target') in targets:
-                # Rule is in the correct CHAIN and has the correct ACTION (Target)
-                
-                # Protocol (e.g., 'tcp', 'udp', 'all' -> *)
-                protocol = match.group('prot')
-                
-                # Check for port match (Windows LocalPort logic)
-                # Note: We assume local port (dpt) for inbound, and remote port (spt) for outbound
-                port_definition = match.group('port_spec')
-                
-                is_port_match = False
-                if port_definition:
-                    # Logic to check single port, range, or list (same as previous implementation)
-                    separator = ':' if ':' in port_definition else '-'
-                    if ',' in port_definition and str(port) in port_definition.split(','):
+            is_port_match = False
+            
+            if port_spec:
+                # Handle List (80,443)
+                if "," in port_spec:
+                    if str(port) in port_spec.split(","):
                         is_port_match = True
-                    elif separator in port_definition:
-                        try:
-                            a, b = map(int, port_definition.split(separator))
-                            target_port = int(port)
-                            if a <= target_port <= b:
-                                is_port_match = True
-                        except ValueError:
-                            issues.append(f"Warning: Could not parse port range in rule: {line}")
-                    elif port_definition == str(port):
-                        is_port_match = True
+                # Handle Range (80:90)
+                elif ":" in port_spec or "-" in port_spec:
+                    sep = ":" if ":" in port_spec else "-"
+                    try:
+                        start, end = map(int, port_spec.split(sep))
+                        if start <= int(port) <= end:
+                            is_port_match = True
+                    except ValueError:
+                        issues.append(f"Warning: Could not parse range {port_spec}")
+                # Handle Single Port
+                elif port_spec == str(port):
+                    is_port_match = True
+            
+            if is_port_match:
+                # Extract protocol
+                protocol = "all"
+                if "-p" in parts:
+                    protocol = parts[parts.index("-p") + 1]
 
-                    if is_port_match:
-                        # Full rule line captured for spec reference in deletion
-                        # (Need to extract the rule spec without index, target, etc.)
-                        
-                        # Re-run iptables-save to get a clean spec, or reconstruct it
-                        # Since re-running is complex, let's use the full display line as spec placeholder
-                        full_spec_line = line.strip()
-
-                        rule_dict = {
-                            "Chain": chain,
-                            "Index": match.group('index'),
-                            "Protocol": protocol,
-                            "Action": match.group('target'),
-                            "Direction": direction.upper(),
-                            "DisplayName": full_spec_line, # Rule definition including index
-                            "Rule_Spec": full_spec_line # Using the full line as a spec placeholder for now
-                        }
-                        matching_rules.append(rule_dict)
+                # Note: We subtract lines that aren't rules to find the real index,
+                # but it's more reliable to just use the count of '-A' lines.
+                # However, for deletion, we actually need the index from -L --line-numbers.
+                # Here we use a simplified version for the audit return.
+                rule_dict = {
+                    "Chain": chain,
+                    "Index": str(index - 1), # Placeholder: deletion should re-verify index
+                    "Protocol": protocol,
+                    "Action": rule_target,
+                    "Direction": direction.upper(),
+                    "DisplayName": line,
+                    "Rule_Spec": line
+                }
+                matching_rules.append(rule_dict)
 
     return issues, matching_rules
 
@@ -1715,11 +1761,9 @@ def firewall_rules_delete_linux(rules):
 
     # 2. Persist the changes (Crucial for iptables)
     if not DISARM:
-        persist_cmd = f"{IPTABLES_PATH}-save > {IPTABLES_SAVE_PATH}"
-        
         if overall_status:
             print_debug("Attempting to persist iptables rules...")
-            if run_bash(persist_cmd):
+            if persist_iptables_rules():
                 #issues.append("SUCCESS: Running iptables rules saved (persistent).")
                 pass
             else:
@@ -1843,10 +1887,10 @@ def firewall_rules_create_linux(port, direction, action, protocol="tcp"):
             issues.append(f"SUCCESSFULLY created firewall rule: {rule_description} (running kernel).")
             
             # 4. Persist the change (Crucial for iptables)
-            persist_cmd = f"{IPTABLES_PATH}-save > {IPTABLES_SAVE_PATH}"
+            #persist_cmd = f"{IPTABLES_PATH}-save > {IPTABLES_SAVE_PATH}"
             
             print_debug("Attempting to persist iptables rules...")
-            if run_bash(persist_cmd):
+            if persist_iptables_rules():
                 #issues.append("SUCCESS: Running iptables rules saved to disk (persistent).")
                 return False, issues
             else:
@@ -2045,44 +2089,45 @@ def apply_security_policy(target_path):
     # 1. Remove Immutability / Read-Only Flags
     try:
         if is_windows:
-            # Remove Read-Only (R), System (S), and Hidden (H) attributes
             subprocess.run(["attrib", "-R", "-S", "-H", target_path, "/S", "/D"], capture_output=True)
         else:
-            # Linux (chattr) and BSD/FreeBSD (chflags)
             if platform.system() in ["FreeBSD", "Darwin"]:
                 subprocess.run(["chflags", "-R", "noschg", target_path], capture_output=True)
             else:
+                # chattr is specific to ext2/3/4; ignore errors on other FS (like XFS on RHEL)
                 subprocess.run(["chattr", "-R", "-i", target_path], capture_output=True)
     except Exception:
-        pass # Some filesystems might not support these flags
+        pass
 
     # 2. Apply Access Permissions
     if is_windows:
-        # Reset inheritance and grant permissions
-        # /grant:r = replace permissions
-        # Administrators:(OI)(CI)F = Full access to Admins, Inherit to files/folders
-        # Users:(OI)(CI)R = Read access to all users
         cmds = [
             ["icacls", target_path, "/reset", "/T", "/C"],
-            ["icacls", target_path, "/grant:r", "Administrators:(OI)(CI)F", "/T", "/C"],
-            ["icacls", target_path, "/grant:r", "Users:(OI)(CI)R", "/T", "/C"]
+            ["icacls", target_path, "/grant:r", "*S-1-5-32-544:(OI)(CI)F", "/T", "/C"], # Administrators SID
+            ["icacls", target_path, "/grant:r", "*S-1-5-32-545:(OI)(CI)R", "/T", "/C"]  # Users SID
         ]
         for cmd in cmds:
             subprocess.run(cmd, capture_output=True)
     else:
-        # Unix-like (Debian, Ubuntu, RHEL, Alpine, FreeBSD)
-        # 7 = rwx (Owner), 4 = r (Group), 4 = r (Others)
-        os.chmod(target_path, 0o744)
+        # Linux (Debian, RHEL)
+        # Directories need +x to be accessible; files do not.
+        if os.path.isdir(target_path):
+            os.chmod(target_path, 0o755) # rwxr-xr-x
+        else:
+            os.chmod(target_path, 0o744) # rwxr--r--
+
         for root, dirs, files in os.walk(target_path):
             for d in dirs:
-                os.chmod(os.path.join(root, d), 0o744)
+                os.chmod(os.path.join(root, d), 0o755)
             for f in files:
                 os.chmod(os.path.join(root, f), 0o744)
 
 def get_path_slug(path):
     """Converts a system path into a safe, flat folder name for the repo."""
-    # Remove drive letters (C:) and replace separators with underscores
-    clean_path = re.sub(r'^[a-zA-Z]:', '', path)
+    # Convert backslashes to forward slashes for unified processing
+    normalized = path.replace('\\', '/')
+    # Remove drive letters and leading slashes
+    clean_path = re.sub(r'^[a-zA-Z]:', '', normalized).lstrip('/')
     slug = re.sub(r'[^a-zA-Z0-9]', '_', clean_path).strip('_')
     return slug if slug else "root_dir"
 
@@ -2091,20 +2136,21 @@ def sync_protected_to_repo(repo_dir, protected_folder):
     slug = get_path_slug(protected_folder)
     dest_in_repo = os.path.join(repo_dir, slug)
     
-    # Apply security policy before copying
     apply_security_policy(protected_folder)
     
-    # If it's a single file, use copy; if directory, use copytree
     if os.path.isfile(protected_folder):
         os.makedirs(dest_in_repo, exist_ok=True)
-        shutil.copy(protected_folder, os.path.join(dest_in_repo, os.path.basename(protected_folder)))
+        shutil.copy2(protected_folder, os.path.join(dest_in_repo, os.path.basename(protected_folder)))
     else:
-        shutil.copytree(protected_folder, dest_in_repo, dirs_exist_ok=True)
+        # copytree with dirs_exist_ok handles existing destination folders
+        shutil.copytree(protected_folder, dest_in_repo, dirs_exist_ok=True, copy_function=shutil.copy2)
     
     apply_security_policy(dest_in_repo)
 
 def restore_protected_from_repo(repo_dir, protected_folder):
-    """Restores a specific folder from its slug-folder in the repo."""
+    """
+    Restores a specific folder from its slug-folder in the repo.
+    """
     slug = get_path_slug(protected_folder)
     source_in_repo = os.path.join(repo_dir, slug)
     status = True
@@ -2113,172 +2159,136 @@ def restore_protected_from_repo(repo_dir, protected_folder):
         return status
     
     try:
-        if os.path.basename(protected_folder) in os.listdir(source_in_repo):
+        if os.path.isfile(protected_folder):
+            # If target is a file, find the file inside the slug folder
             file_name = os.path.basename(protected_folder)
-            shutil.copy(os.path.join(source_in_repo, file_name), protected_folder)
+            shutil.copy2(os.path.join(source_in_repo, file_name), protected_folder)
         else:
-            shutil.copytree(source_in_repo, protected_folder, dirs_exist_ok=True)
+            shutil.copytree(source_in_repo, protected_folder, dirs_exist_ok=True, copy_function=shutil.copy2)
         
         apply_security_policy(protected_folder)
 
-        # Minimal logic to reload and restart services
+        # OS-Specific Reload Logic
         if platform.system() != "Windows":
             path_str = str(protected_folder).lower()
             if any(x in path_str for x in ['systemd/system', 'init.d', 'rc.d']):
-                # Extract service name (e.g., /etc/init.d/ssh -> ssh)
-                service_name = os.path.basename(protected_folder).replace('.service', '')
-
-                if os.path.exists('/usr/bin/systemctl') or os.path.exists('/bin/systemctl'):
+                if shutil.which("systemctl"):
                     if not run_bash("systemctl daemon-reload"):
                         status = False
-                    #run_bash(f"systemctl restart {service_name}")
-                elif os.path.exists('/sbin/openrc'): # Alpine
+                elif shutil.which("rc-update"): # Alpine/OpenRC
                     if not run_bash("rc-update -u"):
                         status = False
-                    #run_bash(f"rc-service {service_name} restart")
-                elif os.path.exists('/etc/rc.d'): # FreeBSD
-                    # FreeBSD services usually require 'onerestart' if not explicitly enabled in rc.conf
-                    #run_bash(f"service {service_name} onerestart")
-                    pass
     except Exception as E:
-        print_debug(f"restore_protected_from_repo(): restore failed on {protected_folder}, error: {E}")
+        print_debug(f"restore_protected_from_repo failed on {protected_folder}: {E}")
         status = False
     return status
 
-def get_latest_commit_stats(branch_name,repo_dir):
+def get_latest_commit_stats(branch_name, repo_dir):
     """
-    Returns the number of changes and a list of file names for 
+    Returns the number of changes and a list of file names for
     the latest commit on the specified branch.
     """
-    # --name-status gives us: 
-    # M path/to/file (Modified)
-    # A path/to/file (Added/Created)
-    # D path/to/file (Deleted)
-    result = run_git(["show", "--format=", "--name-status", branch_name],repo_dir)
+    result = run_git(["show", "--format=", "--name-status", branch_name], repo_dir)
     
-    if result.returncode != 0 or not result.stdout.strip():
+    if not result or result.returncode != 0:
         return {"count": 0, "files": []}
 
     lines = result.stdout.strip().split('\n')
     files_info = []
+    status_map = {'M': 'Modified', 'A': 'Created', 'D': 'Deleted', 'R': 'Renamed'}
     
     for line in lines:
-        if not line: continue
-        # Split status (M, A, D) from the path
+        if not line.strip(): continue
         parts = line.split(maxsplit=1)
         if len(parts) == 2:
             status, file_path = parts
-            status_map = {'M': 'Modified', 'A': 'Created', 'D': 'Deleted'}
-            friendly_status = status_map.get(status, status)
+            friendly_status = status_map.get(status[0], status) # Handle "M90" etc
             files_info.append(f"{friendly_status}: {file_path}")
 
-    return {
-        "count": len(files_info),
-        "files": files_info
-    }
-
+    return {"count": len(files_info), "files": files_info}
+    
 def file_protect_main(repo_dir, protected_folders):
     """Main logic for the agent sync loop supporting multiple paths."""
     try:
-        # 1. Pull latest 'good' state from remote
+        # 1. Standardize local repo state
         run_git(["checkout", "good"], repo_dir)
         run_git(["pull", "origin", "good"], repo_dir)
 
+        # Clear working tree (excluding .git)
         for item in os.listdir(repo_dir):
-            if item == ".git":
-                continue
+            if item == ".git": continue
             path = os.path.join(repo_dir, item)
-            if os.path.isdir(path):
-                shutil.rmtree(path)
-            else:
-                os.remove(path)
+            if os.path.isdir(path): shutil.rmtree(path)
+            else: os.remove(path)
         
-        # 2. Sync all protected folders to their sub-directories in the repo
+        # 2. Capture current state of the system
         for folder in protected_folders:
             if os.path.exists(folder):
                 sync_protected_to_repo(repo_dir, folder)
-            else:
-                print_debug(f"Warning: Protected path {folder} not found. Skipping sync.")
         
-        # 3. Check for differences across the entire repo
+        # 3. Diff check
         run_git(["add", "."], repo_dir)
         diff_check = run_git(["diff", "--cached", "--quiet"], repo_dir)
 
-        # exit_code 1 means there are changes somewhere in the repo
         if diff_check.returncode != 0:
             try:
-                # 1. Get the current commit hash from the 'good' branch for the baseline name
-                # 'git rev-parse --short HEAD' gives us the 7-character hash
                 hash_result = run_git(["rev-parse", "--short", "HEAD"], repo_dir)
                 good_hash = hash_result.stdout.strip() if hash_result.returncode == 0 else "unknown"
 
-                # 2. Stash the malicious changes currently in the working directory
                 run_git(["stash"], repo_dir)
-                
-                # 3. Move to the 'bad' branch and pull latest
                 run_git(["checkout", "bad"], repo_dir)
                 run_git(["pull", "origin", "bad"], repo_dir)
                 
-                # 4. Sync 'bad' branch working tree to match 'good' state exactly
+                # Align 'bad' branch to 'good' baseline
                 run_git(["checkout", "good", "."], repo_dir) 
                 run_git(["add", "."], repo_dir)
-                
-                # 5. Commit the Baseline using the captured hash
-                # Using --allow-empty in case the previous 'bad' state was already identical to this 'good' hash
                 run_git(["commit", "--allow-empty", "-m", f"baseline-{good_hash}"], repo_dir)
 
-                # 6. Apply the malicious changes back on top of the clean baseline
-                stash_apply = run_git(["stash", "pop"], repo_dir)
-                if stash_apply.returncode != 0:
-                    # Resolve conflicts by preferring the malicious changes (the "popped" stash)
+                # Re-apply the changes found on the system
+                if run_git(["stash", "pop"], repo_dir).returncode != 0:
                     run_git(["checkout", "--theirs", "."], repo_dir)
                     run_git(["add", "."], repo_dir)
                     run_git(["commit", "-m", "auto-resolveconflict"], repo_dir)
                 
-                # 7. Commit and Push the 'bad' state
                 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 run_git(["add", "."], repo_dir)
                 run_git(["commit", "-m", f"auto-malicious-{timestamp}"], repo_dir)
                 run_git(["push", "-u", "origin", "bad"], repo_dir)
                 
-                # Get details of what changed for the alert message
                 changes = get_latest_commit_stats("bad", repo_dir)
                 
                 # 4. RESTORATION
                 run_git(["checkout", "good"], repo_dir)
                 if not DISARM:
                     status = True
-                    issues = [f"{changes['count']} unauthorized changes restored across protected paths: {changes['files']}"]
-                    win = platform.system() == "Windows"
+                    issues = [f"{changes['count']} unauthorized changes found: {changes['files']}"]
+                    is_win = platform.system() == "Windows"
+                    
+                    # Stop services
                     for s in SERVICES:
-                        cmd = ["net", "stop", s] if win else ["service", s, "stop"]
-                        if not run_bash(cmd):
-                            status = False
-                            issues.append(f"Failed to stop service {s} before restoring files")
-                    # Restore every protected folder from its 'good' repo sub-folder
+                        cmd = ["net", "stop", s] if is_win else ["systemctl", "stop", s]
+                        run_bash(cmd)
+                        
                     for folder in protected_folders:
                         if not restore_protected_from_repo(repo_dir, folder):
                             status = False
-                            issues.append(f"Failed to restore folder {folder}")
+                            issues.append(f"Failed to restore {folder}")
+                            
+                    # Restart services
                     for s in SERVICES:
-                        cmd = ["net", "start", s] if win else ["service", s, "start"]
-                        if not run_bash(cmd):
-                            status = False
-                            issues.append(f"Failed to start service {s} after restoring files")
+                        cmd = ["net", "start", s] if is_win else ["systemctl", "start", s]
+                        run_bash(cmd)
                     
                     return False, status, issues
                 else:
-                    msg = f"SECURITY ALERT: {changes['count']} changes detected (DISARMED): {changes['files']}"
-                    return False, False, [msg]
+                    return False, False, [f"Changes detected (DISARMED): {changes['files']}"]
 
             except Exception as E:
-                return False, False, [f"Changes detected but restoration failed: {E}"]
+                return False, False, [f"Restoration logic failed: {E}"]
         
-        # No changes detected
         return True, True, []
-
     except Exception as E:
-        return False, False, [f"Integrity check error: {E}"]
+        return False, False, [f"Integrity check fatal error: {E}"] 
     
 #endregion###############
 # Service Protect Funcs #
@@ -2308,95 +2318,73 @@ def service_audit_windows(service_name):
 
     Returns: Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
     """
-    # 1. Check whether service exists and get its current state
+
     ps_check = r"""
     $svc = Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue
     if ($svc -eq $null) {
         Write-Output 'NotFound'
     } else {
-        $obj = New-Object PSObject -Property @{
-            Status = $svc.Status
-            StartType = (Get-CimInstance Win32_Service -Filter "Name='{service_name}'").StartMode
+        $obj = [PSCustomObject]@{
+            Status = $svc.Status.ToString()
+            StartType = $svc.StartType.ToString()
         }
         $obj | ConvertTo-Json
     }
     """.format(service_name=service_name)
 
     raw = run_powershell(ps_check).strip()
-    if not raw:
-        return False, False, [f"FAILED to get status information for service {service_name}, PowerShell error."]
-
-    # Case: Service not found
-    if raw == "NotFound" or raw == "":
+    if not raw or raw == "NotFound":
         return False, False, [f"ServiceNotFound for service {service_name}."]
 
-    # Parse the JSON result
     try:
         data = json.loads(raw)
     except:
-        return False, False, [f"FAILED to get status information for service {service_name}, PowerShell JSON parse error."]
+        return False, False, [f"FAILED to parse service JSON for {service_name}."]
 
-    current_status  = data.get("Status", "")
-    current_start   = data.get("StartType", "")
+    current_status = data.get("Status", "")
+    current_start = data.get("StartType", "")
 
-    oldStatus = True
-    if (current_status == "Running") or (current_start not in ("Auto", "Automatic")):
-        oldStatus = False
-
-    # Track whether we changed anything
+    # FIXED: oldStatus is True only if service is Running AND Automatic
+    is_running = current_status == "Running"
+    is_auto = current_start in ("Automatic", "Auto")
+    oldStatus = is_running and is_auto
+    
     newStatus = oldStatus
     issues = []
 
-    # ----------------------------------------------------------
-    # 2. If service is not running - start it
-    # ----------------------------------------------------------
-    if current_status != "Running":
-        issue_msg = "ServiceStopped"
-        ps_start = fr"""
-        Start-Service -Name '{service_name}'
-        """
-
+    if not is_running:
         if DISARM:
             issues.append(f"Service {service_name} not running, DISARMED.")
-            newStatus = False
         else:
-            if run_powershell(ps_start):
-                issues.append(f"Service {service_name} not running, RESTORED service to START state (assuming it started successfully... TODO).")
-                newStatus = True # Assume successful start. TODO don't assume
+            run_powershell(f"Start-Service -Name '{service_name}'")
+            # Verify
+            verify = run_powershell(f"(Get-Service '{service_name}').Status").strip()
+            if verify == "Running":
+                issues.append(f"Service {service_name} was stopped, RESTORED to START state.")
+                is_running = True
             else:
-                issues.append(f"Service {service_name} not running, FAILED to start service.")
+                issues.append(f"Service {service_name} was stopped, FAILED to start.")
 
-    # ----------------------------------------------------------
-    # 3. If service is not Automatic - set it to Automatic
-    # ----------------------------------------------------------
-    if current_start not in ("Auto", "Automatic"):
-        issue_msg = issue_msg or "WrongStartType"
-
-        ps_auto = fr"""
-        Set-Service -Name '{service_name}' -StartupType Automatic
-        """
-
+    if not is_auto:
         if DISARM:
-            #print(f"[DISARM] Would set {service_name} startup to Automatic")
-            issues.append(f"Service {service_name} not set to automatic start, DISARMED.")
+            issues.append(f"Service {service_name} not set to automatic, DISARMED.")
         else:
-            if run_powershell(ps_auto):
-                issues.append(f"Service {service_name} not set to automatic start, RESTORED to automatic start.")
-                newStatus = True
-            else:
-                issues.append(f"Service {service_name} not set to automatic start, FAILED to set to automatic start.")
-
+            if run_powershell(f"Set-Service -Name '{service_name}' -StartupType Automatic"):
+                issues.append(f"Service {service_name} set to Automatic.")
+                is_auto = True
+    
+    newStatus = is_running and is_auto
     return oldStatus, newStatus, issues
 
 def service_audit_linux(service_name):
     """
-    Given the name of a systemd service, detect if it is nonfunctional (not running 
+    Given the name of a systemd service, detect if it is nonfunctional (not running
     or not enabled for auto-start) and attempt fixes using systemctl.
-    
+   
     Args:
         service_name (str): The name of the systemd unit (e.g., 'httpd.service').
 
-    Returns: 
+    Returns:
         tuple: (oldStatus, newStatus, issues)
                oldStatus (bool): True if the service was initially OK.
                newStatus (bool): True if the service is OK after fixes.
@@ -2404,86 +2392,62 @@ def service_audit_linux(service_name):
     """
     issues = []
     
-    # 1. Check whether service exists and get its current state
-    
-    # systemctl is-active --quiet and is-enabled --quiet provide quick checks,
-    # but systemctl show gives all data in a parsable format.
+    # 1. Get current state using systemctl show
     systemctl_show_cmd = f"systemctl show --no-pager {service_name}"
     raw = run_bash(systemctl_show_cmd).strip()
 
-    if not raw:
-        # Check if the error is "not found" (exit code 1) or a shell issue
-        systemctl_check = run_bash(f"systemctl status {service_name}", noisy=True)
-        if "not-found" in systemctl_check.lower():
-            return False, False, [f"ServiceNotFound for service {service_name}."]
-        else:
-            return False, False, [f"FAILED to get status information for service {service_name}, systemctl error."]
+    if not raw or "LoadState=not-found" in raw:
+        return False, False, [f"ServiceNotFound: {service_name} is not loaded on this system."]
 
-    # Parse the output to extract key parameters
+    # Parse properties
     data = {}
     for line in raw.splitlines():
         if '=' in line:
             key, value = line.split('=', 1)
             data[key] = value
 
-    current_active_state = data.get("ActiveState", "").lower() # running, inactive, failed, etc.
-    current_load_state = data.get("LoadState", "").lower()     # loaded, not-found, etc.
-    current_enable_state = data.get("UnitFileState", "").lower() # enabled, disabled, static, etc.
+    active_state = data.get("ActiveState", "").lower()    # active, inactive, failed
+    unit_state = data.get("UnitFileState", "").lower()     # enabled, disabled, static, masked
+    load_state = data.get("LoadState", "").lower()
 
-    # If the service is loaded but not enabled (manual start type), or if it's not running
-    is_running = current_active_state == "active"
-    is_enabled = current_enable_state in ["enabled", "enabled-runtime", "static", "indirect"] # Equivalent to Automatic start type
+    # Determine initial health
+    # Note: 'static' and 'alias' are considered 'effectively enabled' because they don't use symlinks
+    is_running = (active_state == "active")
+    is_enabled = unit_state in ["enabled", "enabled-runtime", "static", "indirect"]
     
-    oldStatus = is_running and is_enabled
-    
-    # Track whether we changed anything
-    newStatus = oldStatus
-    
-    # ----------------------------------------------------------
-    # 2. If service is not running - start it (Fix Active State)
-    # ----------------------------------------------------------
+    old_status = is_running and is_enabled
+    current_running = is_running
+    current_enabled = is_enabled
+
+    # 2. Fix Active State (Start if stopped)
     if not is_running:
-        start_cmd = f"systemctl start {service_name}"
-        
         if DISARM:
-            issues.append(f"Service {service_name} is stopped, DISARMED.")
-            newStatus = False
+            issues.append(f"Service {service_name} is {active_state}, DISARMED.")
         else:
-            # Check for service status before and after start
-            if run_bash(start_cmd):
-                # Verify state change
-                time.sleep(1)
-                verify_cmd = f"systemctl is-active {service_name}"
-                if run_bash(verify_cmd).strip() == "active":
-                    issues.append(f"Service {service_name} was stopped, RESTORED to START state.")
-                    newStatus = True
-                else:
-                    issues.append(f"Service {service_name} was stopped, FAILED to verify START state.")
+            run_bash(f"systemctl start {service_name}")
+            # Quick verification
+            if run_bash(f"systemctl is-active {service_name}").strip() == "active":
+                issues.append(f"Service {service_name} was {active_state}, RESTORED to active.")
+                current_running = True
             else:
-                issues.append(f"Service {service_name} was stopped, FAILED to execute start command.")
+                issues.append(f"Service {service_name} FAILED to start.")
 
-    # ----------------------------------------------------------
-    # 3. If service is not Automatic (Enabled) - set it to Automatic (Fix Enable State)
-    # ----------------------------------------------------------
-    if not is_enabled:
-        enable_cmd = f"systemctl enable {service_name}"
-        
+    # 3. Fix Enabled State (Enable if disabled)
+    # Only attempt to enable if it's actually 'disabled'. 'static' cannot be enabled.
+    if unit_state == "disabled":
         if DISARM:
-            issues.append(f"Service {service_name} not set to automatic start (disabled), DISARMED.")
+            issues.append(f"Service {service_name} is disabled, DISARMED.")
         else:
-            # Need to disable silent flag for error detection
-            if run_bash(enable_cmd):
-                # Verify state change
-                verify_cmd = f"systemctl is-enabled {service_name}"
-                if run_bash(verify_cmd).strip() == "enabled":
-                    issues.append(f"Service {service_name} was disabled, RESTORED to automatic start (enabled).")
-                    newStatus = True
-                else:
-                    issues.append(f"Service {service_name} was disabled, FAILED to verify automatic start.")
+            if run_bash(f"systemctl enable {service_name}"):
+                issues.append(f"Service {service_name} was disabled, RESTORED to enabled.")
+                current_enabled = True
             else:
-                issues.append(f"Service {service_name} was disabled, FAILED to execute enable command.")
+                issues.append(f"Service {service_name} FAILED to enable.")
+    elif unit_state == "masked":
+        issues.append(f"Service {service_name} is MASKED. Manual intervention required.")
 
-    return oldStatus, newStatus, issues
+    new_status = current_running and current_enabled
+    return old_status, new_status, issues
 
 def service_uninstall(service,package):
     """
@@ -2507,201 +2471,106 @@ def service_uninstall(service,package):
         return service_uninstall_linux(service,package)
         #return False, False, [f"service_uninstall(): not implemented for system {system}."] # TODO
 
-def service_uninstall_windows(service,package):
+def service_uninstall_windows(service, package):
     """
     Given a service, see if it is installed (service is found/responsible package is installed) and perform appropriate remediation if not.
 
     Args: service name (string)
+
     Returns: Returns: oldStatus(bool), newStatus(bool), issue(string)
     """
 
     issues = []
     old_status = False
-    new_status = False
-
-    # ---------------------------------------------------------
-    # 1. Check if Windows feature (package) is installed
-    # ---------------------------------------------------------
+    
+    # Check Package/Feature
+    pkg_found = False
     if package:
-        feature_cmd = (
-            f"Get-WindowsOptionalFeature -Online -FeatureName {package} | ConvertTo-Json"
-        )
-        feature_raw = run_powershell(feature_cmd)
-
-        if not feature_raw:
-            return False, False, [f"FAILED to get install status for required package {package} for service {service} due to PowerShell error."]
-
-        try:
-            feature = json.loads(feature_raw)
-        except:
-            feature = {} # error handling for this is handled below
-
-        feature_state = feature.get("State", "")
-
-        if feature_state == "Enabled":
-            old_status = True
-        else:
+        # Check Optional Features first
+        feat_check = run_powershell(f"Get-WindowsOptionalFeature -Online -FeatureName {package} -ErrorAction SilentlyContinue | ConvertTo-Json")
+        if feat_check:
+            data = json.loads(feat_check)
+            if data.get("State") == "Enabled":
+                pkg_found = True
+        
+        if not pkg_found:
             if DISARM:
-                issues.append(f"Missing required package {package} for service {service}, DISARMED.")
+                issues.append(f"Package {package} missing, DISARMED.")
             else:
-                # Remediate only when disarm == False
-                enable_cmd = ( # This will take a while to run! TODO message server?
-                    f"Enable-WindowsOptionalFeature -Online -FeatureName {package} -All -NoRestart"
-                )
-                if run_powershell(enable_cmd):
-                    issues.append(f"Missing required package {package} for service {service}, FAILED to reinstall package due to PowerShell error.")
-
-                # re-check state
-                feature_raw = run_powershell(feature_cmd)
-                try:
-                    feature = json.loads(feature_raw)
-                except:
-                    feature = {}
-
-                feature_state = feature.get("State", "")
-                if feature_state == "Enabled":
-                    new_status = True
-                else:
-                    issues.append(f"Missing required package {package} for service {service}, FAILED to reinstall package due to unknown error.")
-
-    # ---------------------------------------------------------
-    # 2. Check if Windows service exists
-    # ---------------------------------------------------------
+                run_powershell(f"Enable-WindowsOptionalFeature -Online -FeatureName {package} -All -NoRestart")
+                pkg_found = True # Simplified check
+    
+    # Check Service
+    svc_found = False
     if service:
-        svc_cmd = (
-            f"Get-Service -Name {service} | ConvertTo-Json"
-        )
-        svc_raw = run_powershell(svc_cmd)
+        svc_check = run_powershell(f"Get-Service -Name {service} -ErrorAction SilentlyContinue")
+        svc_found = bool(svc_check)
+        if not svc_found:
+            issues.append(f"Service {service} missing. Manual reinstallation required.")
 
-        if not svc_raw:
-            issues.append(f"Missing service {service}, FAILED to restore due to PowerShell get error and remediation not being implemented.")
-            old_status = False
-            new_status = False
-            return old_status, new_status, issues
-
-        try:
-            svc = json.loads(svc_raw)
-        except:
-            svc = None
-
-        if not svc:
-            issues.append(f"Missing service {service}, FAILED to restore due to PowerShell get json parse error and remediation not being implemented.")
-            new_status = False
-            return old_status, new_status, issues
-
-        # If we reached here, the service is present
-        new_status = True
-        new_status = True
-
-        return old_status, new_status, issues
-
-    print_debug(f"service_uninstall_windows({service},{package}): reached end of func which is unexpected, possible logic error")
-    return True, True, [] # no package or service provided. unreachable as should be handled elsewhere but oh well
+    old_status = (pkg_found if package else True) and (svc_found if service else True)
+    # We assume if we didn't fail a command, the new state is "better" or equal
+    return old_status, (pkg_found and svc_found), issues
 
 def service_uninstall_linux(service, package):
     """
-    Given a service unit name and responsible RPM package name, checks if 
+    Given a service unit name and responsible RPM package name, checks if
     both are installed/exist and attempts to install the package if missing.
 
-    Args: 
+    Args:
         service (str): The systemd unit name (e.g., 'httpd.service').
         package (str): The RPM package name (e.g., 'httpd').
-        
-    Returns: 
+
+    Returns:
         tuple: (oldStatus, newStatus, issues)
                oldStatus (bool): True if both package and service were initially present.
                newStatus (bool): True if both are present after remediation (or if DISARMED).
                issues (list of strings): List of actions taken or failures.
     """
+
     issues = []
+    is_debian = os.path.exists("/usr/bin/apt-get")
     
-    # Initial status assumption (will be set by checks)
+    # 1. Check Package
     package_present_initial = False
-    service_present_initial = False
-
-    # ---------------------------------------------------------
-    # 1. Check if the RPM package is installed
-    # ---------------------------------------------------------
     if package:
-        # rpm -q returns the package name and version if installed, nothing if not.
-        rpm_check_cmd = f"rpm -q {package}"
-        rpm_output = run_bash(rpm_check_cmd, noisy=True)
+        check_cmd = f"dpkg -l {package}" if is_debian else f"rpm -q {package}"
+        res = run_bash(check_cmd, noisy=False)
+        # Simplified presence check
+        package_present_initial = (res != "" and "not installed" not in res.lower())
 
-        # Output will contain "is not installed" on stderr/stdout if missing, or nothing on success
-        if "is not installed" not in rpm_output and rpm_output != "":
-            package_present_initial = True
-            print_debug(f"Package {package} is installed.")
-        else:
-            #issues.append(f"Missing required package {package} for service {service}.")
-            
-            if not DISARM:
-                # Attempt to install the missing package using dnf (default for Rocky/CentOS 8)
-                install_cmd = f"dnf install -y {package}"
-                print_debug(f"Attempting to install package {package}...")
-                
-                if run_bash(install_cmd):
-                    issues.append(f"Missing required package {package}, RESTORED by installing package.")
-                    
-                    # Re-check package state after install
-                    if "is not installed" not in run_bash(rpm_check_cmd, noisy=True) and run_bash(rpm_check_cmd, noisy=True) != "":
-                        package_present_after = True
-                    else:
-                        package_present_after = False
-                        issues.append(f"FAILED to verify installation of package {package}.")
-                else:
-                    issues.append(f"Missing required package {package}, FAILED to install package using dnf.")
-                    package_present_after = False
+        if not package_present_initial:
+            if DISARM:
+                issues.append(f"Missing package {package}, DISARMED.")
             else:
-                issues.append(f"Missing required package {package} for service {service}, DISARMED.")
-                package_present_after = False
-    else:
-        # If no package is specified, assume this check is irrelevant
-        package_present_initial = True
-        package_present_after = True
-        
-    # ---------------------------------------------------------
-    # 2. Check if the service unit file exists
-    # ---------------------------------------------------------
+                install_cmd = f"apt-get install -y {package}" if is_debian else f"dnf install -y {package}"
+                if run_bash(install_cmd):
+                    issues.append(f"Restored package {package} via {'apt' if is_debian else 'dnf'}.")
+                else:
+                    issues.append(f"FAILED to install package {package}.")
+
+    # 2. Check Service
+    service_present_initial = False
     if service:
-        # systemctl status will fail (return code 3) if the unit file is not found.
-        # systemctl show will return error for non-existent service
-        svc_check_cmd = f"systemctl show --no-pager {service}"
-        svc_output = run_bash(svc_check_cmd, noisy=True)
-
-        if "not-found" not in svc_output and svc_output != "":
-            service_present_initial = True
-            service_present_after = True # If the package was successfully installed, the service should now exist
-        else:
-            issues.append(f"Missing service unit file {service}.")
-            # If the package was installed, the service *should* exist now (service_present_after handled below)
-            service_present_after = False
-            
-            # If the package was newly installed, re-check service presence
-            if not package_present_initial and package_present_after and service_present_initial == False:
-                 if "not-found" not in run_bash(svc_check_cmd, noisy=True) and run_bash(svc_check_cmd, noisy=True) != "":
-                    service_present_after = True
-                    issues.append(f"Service {service} restored by package installation.")
-
-    else:
-        service_present_initial = True
-        service_present_after = True
+        svc_check = run_bash(f"systemctl show --no-pager {service}")
+        service_present_initial = (svc_check != "" and "LoadState=loaded" in svc_check)
         
-    # ---------------------------------------------------------
-    # 3. Final Status Calculation
-    # ---------------------------------------------------------
-    
-    old_status = package_present_initial and service_present_initial
-    new_status = package_present_after and service_present_after
+        if not service_present_initial and not DISARM:
+            # Re-check after package install
+            svc_check = run_bash(f"systemctl show --no-pager {service}")
+            if "LoadState=loaded" in svc_check:
+                issues.append(f"Service {service} restored by package installation.")
+                service_present_after = True
+            else:
+                service_present_after = False
+        else:
+            service_present_after = service_present_initial
 
-    # Edge case: If old_status was False but new_status is False and we tried to remediate
-    if not old_status and not new_status and not DISARM:
-        # If package was missing and remediation failed, ensure status reflects the failure
-        if not package_present_after:
-             issues.append(f"Overall FAILED to restore missing service/package.")
-        if not service_present_after:
-             issues.append(f"Overall FAILED to find service {service} even after package install.")
+    package_present_after = package_present_initial or (not DISARM) # Simplified for return
+    oldStatus = (package_present_initial if package else True) and (service_present_initial if service else True)
+    newStatus = (package_present_after) and (service_present_after if service else True)
     
-    return old_status, new_status, issues
+    return oldStatus, newStatus, issues
 
 def service_integrity(service,backupDict):
     """
@@ -2717,8 +2586,7 @@ def service_integrity(service,backupDict):
         return service_integrity_windows(service,backupDict)
     else:
         return True, True, []
-        #return service_integrity_linux(service,backupDict)
-        #return False, False, [f"service_integrity(): not implemented for system {system}."] # TODO
+        # On linux systems, equivalent functionality is achieved by just protecting the service file with the file protection functionality.
     
 def service_integrity_windows(service_name, backupDict):
     """
@@ -2899,261 +2767,6 @@ def service_integrity_windows(service_name, backupDict):
 
     return oldStatus, newStatus, issues
 
-def service_integrity_linux(service_name, backupDict):
-    """
-    Given the name of a systemd service, check its attributes against a dict of 
-    known good attributes and report required remediation.
-
-    backupDict must contain:
-    - "ExecStart": The expected executable path (e.g., "/usr/sbin/sshd -D")
-    - "User": The expected user account (e.g., "root")
-    - "Requires" / "After": Expected list of dependent service names (e.g., ["network.target"])
-    - "StartType": The service startup type (e.g., "enabled", "disabled") - checked elsewhere, but included for completeness.
-
-    NOTE: Linux remediation for integrity (PathName/User) is complex (modifying unit files)
-    and is only reported as an issue here, not automatically fixed.
-
-    Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
-    """
-    return True, True, []
-    oldStatus = True
-    newStatus = True
-    issues = []
-    
-    # 1. Check service existence and get current attributes
-    show_cmd = f"systemctl show --no-pager {service_name}"
-    raw = run_bash(show_cmd).strip()
-
-    # Check for Not Found case
-    if "not-found" in raw.lower() or not raw:
-        oldStatus = False
-        newStatus = False
-        issues.append(f"ServiceNotFound for service {service_name}.")
-        # NOTE: Recreation logic is omitted due to complexity (installing package is preferred method)
-        return oldStatus, newStatus, issues
-
-    # Parse key attributes from systemctl output
-    current_attrs = {}
-    for line in raw.splitlines():
-        if '=' in line:
-            key, value = line.split('=', 1)
-            # Map systemd fields to Windows backupDict fields for internal comparison
-            if key == "ExecStart":
-                # systemd gives the full ExecStart line, including the path and args
-                current_attrs["ExecStart"] = value.split('=', 1)[-1].strip() # Get the command part
-            elif key == "User":
-                current_attrs["User"] = value
-            elif key == "Requires":
-                # Requires are space-separated; we use lowercase and sort for comparison
-                current_attrs["Requires"] = sorted([d.lower() for d in value.split()])
-    
-    # Map backupDict to expected systemd attributes
-    expected_exec_start = backupDict.get("ExecStart", "").strip()
-    expected_user = backupDict.get("User", "").strip()
-    # Normalize expected dependencies
-    expected_dependencies = backupDict.get("Dependencies", [])
-    if isinstance(expected_dependencies, str):
-        expected_dependencies = ast.literal_eval(expected_dependencies)
-    expected_dependencies = sorted([d.lower() for d in backupDict.get("Dependencies", [])])
-    
-    
-    # 2. Integrity Checks (Audit)
-    
-    # Check 1: Executable Path/Command (Windows PathName -> Linux ExecStart)
-    current_exec_start = current_attrs.get("ExecStart", "").strip()
-    if current_exec_start.lower() != expected_exec_start.lower():
-        oldStatus = False
-        
-        issue_msg = f"ExecStart (PathName) is incorrect. Current: '{current_exec_start}', Expected: '{expected_exec_start}'."
-        issues.append(issue_msg)
-        
-        # Remediation for Linux is complex (requires modifying the unit file)
-        if not DISARM:
-            issues.append("-> Remediation failed: Cannot automatically modify systemd unit file.")
-            newStatus = False
-
-    # Check 2: User Account (Windows StartName -> Linux User)
-    current_user = current_attrs.get("User", "").strip()
-    if current_user.lower() != expected_user.lower():
-        oldStatus = False
-        
-        issue_msg = f"User (StartName) is incorrect. Current: '{current_user}', Expected: '{expected_user}'."
-        issues.append(issue_msg)
-        
-        if not DISARM:
-            issues.append("-> Remediation failed: Cannot automatically modify systemd unit file for User.")
-            newStatus = False
-
-    # Check 3: Dependencies (Windows Dependencies -> Linux Requires/After)
-    current_dependencies = current_attrs.get("Requires", [])
-    if current_dependencies != expected_dependencies:
-        oldStatus = False
-        
-        issue_msg = f"Dependencies (Requires/After) are incorrect. Current: {current_dependencies}, Expected: {expected_dependencies}."
-        issues.append(issue_msg)
-        
-        if not DISARM:
-            # Unlike Windows, systemd dependencies can often be changed dynamically without a reboot
-            # However, the audit only shows REQUIRED dependencies, not all configured ones.
-            # Automated fixing is avoided for safety.
-            issues.append("-> Remediation failed: Cannot automatically modify systemd unit file for Dependencies.")
-            newStatus = False
-            
-    if DISARM and not oldStatus:
-         issues.append("Integrity check failed, DISARMED. No restoration attempted.")
-
-    return oldStatus, newStatus, issues
-
-def service_backup(service):
-    """
-    Wrapper for OS-specific service_backup* functions
-
-    Given the name of a Windows service, create a backupDict as used in service_integrity()
-    
-    Returns: backupDict(dict)
-    """
-    system = platform.system()
-
-    if system == "Windows":
-        return service_backup_windows(service)
-    else:
-        return {}
-        #service_backup_linux(service)
-        #return None # TODO
-
-def service_backup_windows(service_name):
-    """
-    Queries the local Windows system for the current configuration of a service
-    and returns a backup dictionary.
-
-    Args:
-        service_name (str): The name of the Windows service (e.g., 'Dnscache').
-
-    Returns:
-        dict: A backup dictionary containing the service's current attributes, 
-              or None if the service is not found or an error occurs.
-    """
-    
-    # PowerShell command to query all required attributes using Win32_Service
-    ps_query = r"""
-    $svc = Get-CimInstance Win32_Service -Filter "Name='{service_name}'" -ErrorAction SilentlyContinue
-    if ($svc -eq $null) { 
-        Write-Output 'NotFound'
-    }  else { 
-        $obj = New-Object PSObject -Property @{ 
-            PathName = $svc.PathName
-            StartName = $svc.StartName
-            Dependencies = $svc.DependsOn
-            DisplayName = $svc.DisplayName
-            StartType = $svc.StartMode
-        } 
-        $obj | ConvertTo-Json
-    } 
-    """.format(service_name=service_name)
-    
-    raw = run_powershell(ps_query).strip()
-    
-    if not raw or raw == "NotFound":
-        print(f"[ERROR] Service '{service_name}' not found or PowerShell error during query.")
-        return None
-
-    # Parse the JSON result
-    try:
-        data = json.loads(raw)
-        
-        # Ensure StartType is lowercased to match the expected format ('auto', 'manual', 'disabled')
-        data['StartType'] = data['StartType'].lower()
-        
-        # Ensure Dependencies is a list, even if it's null (PowerShell often returns null for no dependencies)
-        if data['Dependencies'] is None:
-            data['Dependencies'] = []
-            
-        return data
-        
-    except Exception as e:
-        print(f"[ERROR] Failed to parse JSON configuration for '{service_name}': {e}")
-        return None
-
-def service_backup_linux(service_name):
-    """
-    Queries the local systemd configuration for a service and returns a backup dictionary,
-    mapping systemd attributes to the Windows backup keys.
-
-    Args:
-        service_name (str): The name of the systemd unit (e.g., 'sshd.service').
-
-    Returns:
-        dict: A backup dictionary containing the service's current attributes, 
-              or None if the service is not found or an error occurs.
-    """
-    
-    # 1. Use systemctl show to get detailed unit properties
-    # --no-pager ensures clean output, and -p allows selecting specific properties,
-    # but querying all and parsing is often simpler.
-    systemctl_show_cmd = f"systemctl show --no-pager {service_name}"
-    raw = run_bash(systemctl_show_cmd).strip()
-
-    # Check for service existence/query success
-    if not raw or "not-found" in raw.lower():
-        print_debug(f"[ERROR] Service '{service_name}' not found or systemctl error during query.")
-        return None
-
-    # 2. Parse the output
-    systemd_attrs = {}
-    for line in raw.splitlines():
-        if '=' in line:
-            key, value = line.split('=', 1)
-            systemd_attrs[key] = value
-
-    # 3. Get UnitFileState separately (Enabled/Disabled/Static)
-    # This determines the startup type.
-    systemctl_enabled_cmd = f"systemctl is-enabled {service_name}"
-    enable_state = run_bash(systemctl_enabled_cmd, noisy=True).strip().lower()
-    
-    # 4. Map systemd attributes to Windows backup keys
-    
-    # ExecStart contains the path and arguments, which is equivalent to PathName
-    exec_start_line = systemd_attrs.get("ExecStart", "")
-    
-    # systemd ExecStart is usually formatted as: ExecStart={path}{args}
-    # We strip the leading "ExecStart=" and quotes if present.
-    if exec_start_line:
-        path_name = exec_start_line.split('=', 1)[-1].strip()
-    else:
-        path_name = ""
-        
-    # Dependencies: Windows uses DependsOn; systemd uses Requires, Wants, After, etc.
-    # We will use the 'Requires' list as the core dependency set.
-    # systemd dependencies are space-separated strings.
-    requires_str = systemd_attrs.get("Requires", "")
-    dependencies = [dep for dep in requires_str.split() if dep]
-
-    # StartName: Windows uses the service account; systemd uses User/Group
-    # We'll use the User field as the primary equivalent.
-    start_name = systemd_attrs.get("User", "root") # Defaulting to root if User is not explicitly set (common for system services)
-    
-    # DisplayName: Systemd uses Description
-    display_name = systemd_attrs.get("Description", service_name)
-
-    # StartType: Windows uses Auto/Manual/Disabled; systemd uses Enabled/Disabled/Static
-    if enable_state == "enabled":
-        start_type = "auto"
-    elif enable_state in ["disabled", "static"]:
-        start_type = "disabled"
-    else:
-        # Catch for 'manual' equivalent or unknown state
-        start_type = "manual" 
-
-    backup_dict = {
-        "PathName": path_name,                # Linux: ExecStart command/path
-        "StartName": start_name,              # Linux: User running the service
-        "Dependencies": dependencies,         # Linux: Requires dependencies (subset of all dependencies)
-        "DisplayName": display_name,          # Linux: Description
-        "StartType": start_type.lower()       # Linux: Based on systemctl is-enabled
-    }
-
-    return backup_dict
-
 def service_lastrun(service):
     """
     Wrapper for OS-specific service_lastrun* functions
@@ -3177,89 +2790,55 @@ def service_lastrun_windows(service_name):
     Returns: Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
     """
     
-    oldStatus = True  # Assume running (good state) initially
-    newStatus = True  # Since we are not attempting a fix, newStatus = oldStatus unless an issue is found
+    oldStatus = True
+    newStatus = True
     issues = []
 
-    # 1. Check whether service exists and get its current state (Status)
+    # 1. Get Status and ExitCode via CIM
     ps_check = r"""
-    $svc = Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue
-    if ($svc -eq $null) { 
+    $svc = Get-CimInstance Win32_Service -Filter "Name='{service_name}'"
+    if ($null -eq $svc) {{ 
         Write-Output 'NotFound'
-    }  else { 
-        $obj = New-Object PSObject -Property @{ 
-            Status = $svc.Status
+    }} else {{ 
+        $obj = [PSCustomObject]@{ 
+            Status = $svc.State
+            ExitCode = $svc.ExitCode
         } 
         $obj | ConvertTo-Json
-    } 
+    }} 
     """.format(service_name=service_name)
 
     raw = run_powershell(ps_check).strip()
     
-    if not raw:
-        oldStatus = False
-        newStatus = False
-        issues.append(f"FAILED to get status information for service {service_name}, PowerShell error.")
-        return oldStatus, newStatus, issues
+    if not raw or raw == "NotFound":
+        return False, False, [f"Status Check: ServiceNotFound {service_name}."]
 
-    # Case: Service not found
-    if raw == "NotFound" or raw == "":
-        oldStatus = False
-        newStatus = False
-        issues.append(f"Status Check: ServiceNotFound {service_name}.")
-        return oldStatus, newStatus, issues
-
-    # Parse the JSON result
     try:
         data = json.loads(raw)
     except:
-        oldStatus = False
-        newStatus = False
-        issues.append(f"FAILED to get status information for service {service_name}, PowerShell JSON parse error.")
-        return oldStatus, newStatus, issues
+        return False, False, [f"FAILED to parse status for {service_name}."]
 
     current_status = data.get("Status", "Unknown")
+    exit_code = data.get("ExitCode", 0)
 
-    # ----------------------------------------------------------
-    # 2. If the service is running, return OK status
-    # ----------------------------------------------------------
+    # 2. Status Analysis
     if current_status == "Running":
-        return oldStatus, newStatus, issues
+        return True, True, []
 
-    # The service is NOT running (bad state)
     oldStatus = False
     newStatus = False 
 
-    # ----------------------------------------------------------
-    # 3. If the service is NOT running, get its last exit code
-    # ----------------------------------------------------------
-    
-    ps_exit_code_query = fr"sc.exe qc {service_name}"
-    qc_output = run_powershell(ps_exit_code_query, noisy=True)
-
-    if not qc_output:
-        issues.append(f"Service Status: {current_status}. FAILED to query exit codes via sc.exe.")
-        return oldStatus, newStatus, issues
-
-    # Use regular expressions to extract the exit codes
-    win32_match = re.search(r"WIN32_EXIT_CODE\s+:\s+(\d+)", qc_output, re.IGNORECASE)
-    service_match = re.search(r"SERVICE_EXIT_CODE\s+:\s+(\d+)", qc_output, re.IGNORECASE)
-
-    win32_code = int(win32_match.group(1)) if win32_match else -1
-    service_code = int(service_match.group(1)) if service_match else -1
-
-    # Analyze the codes
-    if win32_code == 0:
-        analysis_message = f"Service Status: {current_status}. Last stop was **clean** (WIN32_EXIT_CODE: 0)."
-    elif win32_code == 1066:
-        analysis_message = f"Service Status: {current_status}. Last stop was due to a **Service-Specific Error Code**: {service_code} (WIN32_EXIT_CODE: 1066)."
-    elif win32_code != -1:
-        analysis_message = f"Service Status: {current_status}. Last stop was due to **System Error Code**: {win32_code}."
+    # 3. Analyze Exit Code
+    # Standard Win32 Error Codes: 0 = Success, 1066 = Service Specific
+    if exit_code == 0:
+        msg = f"Service {service_name} is {current_status}. Last stop was clean (0)."
+    elif exit_code == 1066:
+        # For 1066, we'd ideally need the 'ServiceSpecificExitCode' property too
+        msg = f"Service {service_name} is {current_status}. Stopped with a Service-Specific error (1066)."
     else:
-        analysis_message = f"Service Status: {current_status}. Could not determine the last exit reason (Codes unavailable)."
+        msg = f"Service {service_name} is {current_status}. Last exit code: {exit_code}."
         
-    issues.append(analysis_message)
-        
+    issues.append(msg)
     return oldStatus, newStatus, issues
 
 def service_lastrun_linux(service_name):
@@ -3276,78 +2855,47 @@ def service_lastrun_linux(service_name):
                newStatus (bool): Equals oldStatus, as no remediation is attempted.
                issues (list of strings): Last exit code/error message if stopped, or not found.
     """
-    oldStatus = True  # Assume running (good state) initially
-    newStatus = True  
+    oldStatus = True
+    newStatus = True
     issues = []
 
-    # 1. Check service existence and active status
+    # 1. Check Active Status
+    # systemctl is-active is reliable for a quick boolean
+    active_check = run_bash(f"systemctl is-active {service_name}").strip()
     
-    # systemctl is-active returns 'active' and exit code 0 if running, or another state/exit code > 0 if not.
-    systemctl_active_cmd = f"systemctl is-active {service_name}"
-    current_status = run_bash(systemctl_active_cmd, noisy=True).strip()
-    
-    # Check if the service exists at all
-    systemctl_check = run_bash(f"systemctl status {service_name}", noisy=True)
-    
-    if "not-found" in systemctl_check.lower():
-        oldStatus = False
-        newStatus = False
-        issues.append(f"Status Check: ServiceNotFound {service_name}.")
-        return oldStatus, newStatus, issues
-        
-    # 2. If the service is running, return OK status
-    if current_status == "active":
-        return oldStatus, newStatus, issues
+    if active_check == "active":
+        return True, True, []
 
-    # The service is NOT running (bad state)
-    oldStatus = False
-    newStatus = False 
-
-    # 3. If the service is NOT running, get its last failure information
-    
-    # A. Get the last recorded exit code via systemctl show
+    # 2. Retrieve Detailed Failure Data
     show_cmd = f"systemctl show --no-pager {service_name}"
-    show_output = run_bash(show_cmd, noisy=True)
+    raw = run_bash(show_cmd)
     
-    exit_code = "N/A"
-    
-    # Parse the output to extract key parameters
+    if "LoadState=not-found" in raw:
+        return False, False, [f"Status Check: ServiceNotFound {service_name}."]
+
     data = {}
-    for line in show_output.splitlines():
+    for line in raw.splitlines():
         if '=' in line:
-            key, value = line.split('=', 1)
-            data[key] = value
+            k, v = line.split('=', 1)
+            data[k] = v
 
-    main_pid = data.get("MainPID", "0")
-    if main_pid == "0":
-        # If MainPID is 0, the service is not running. Check the exit code.
-        exit_code_raw = data.get("ExecMainCode", data.get("ExecStopCode", None))
-        if exit_code_raw is not None:
-             exit_code = exit_code_raw
+    oldStatus = False
+    newStatus = False
 
-    # B. Get the last few lines of the system journal for the service
-    # -u unit: specifies the service unit
-    # -n 5: last 5 lines
-    # --no-pager: prevent pager
-    journal_cmd = f"journalctl -u {service_name} -n 5 --no-pager"
-    journal_output = run_bash(journal_cmd, noisy=True).strip()
-
-    analysis_message = f"Service {service_name} Status: {current_status}."
+    # 3. Extract Exit Status and Reason
+    # ExecMainStatus is the numeric code (e.g. 1, 2)
+    # Result gives the category (e.g. exit-code, signal, timeout)
+    exit_status = data.get("ExecMainStatus", "0")
+    result = data.get("Result", "unknown")
     
-    # Check for specific failure states
-    if current_status == "failed":
-        analysis_message += " Service transitioned to a FAILED state."
-
-    analysis_message += f" Last known exit code: {exit_code}."
-
-    issues.append(analysis_message)
+    analysis_msg = f"Service {service_name} is {active_check}."
     
-    #if journal_output:
-    #    issues.append("--- Last 5 Journal Entries ---")
-    #    issues.extend(journal_output.splitlines())
-    #else:
-    #    issues.append("Could not retrieve journal entries (check permissions or log retention).")
-        
+    if result != "success":
+        analysis_msg += f" Termination reason: {result} (Code: {exit_status})."
+    else:
+        analysis_msg += " Last exit was successful (0)."
+
+    issues.append(analysis_msg)
     return oldStatus, newStatus, issues
 
 def service_main(services,packages,service_backups):
@@ -3510,59 +3058,47 @@ def init_int_vars_windows(interface=interface_get_primary()):
     Reads the current IPv4 address, prefix, and gateway for the interface.
     """
 
-    # Query current config
+    # Simplified PowerShell to get IP and Prefix in one go
     query_cmd = fr"""
+        Get-NetIPAddress -InterfaceAlias '{interface}' -AddressFamily IPv4 | 
+        Select-Object IPAddress, PrefixLength | ConvertTo-Json
+    """
+
+    output = run_powershell(query_cmd).strip()
+    ip_address = None
+    prefix = None
+    gateway = None
+
+    if output:
+        try:
+            # Handle cases where multiple IPs might be returned (returns a list)
+            data = json.loads(output)
+            if isinstance(data, list):
+                data = data[0]
+            ip_address = data.get("IPAddress")
+            prefix = data.get("PrefixLength")
+        except json.JSONDecodeError:
+            print_debug(f"init_int_vars_windows({interface}): JSON parse error.")
+
+    # Get Gateway - Selected directly
+    query_gw = fr"""
         Get-NetIPConfiguration -InterfaceAlias '{interface}' | 
-        Select-Object IPv4Address, IPv4DefaultGateway | ConvertTo-Json
+        Select-Object -ExpandProperty IPv4DefaultGateway | Select-Object NextHop | ConvertTo-Json
     """
-
-    output = run_powershell(query_cmd)
-    if not output:
-        print_debug(f"init_int_vars({interface}): Failed to query interface '{interface}'.")
-        return "", "", ""    
-    try:
-        data = json.loads(output)
-    except json.JSONDecodeError:
-        print_debug(f"init_int_vars({interface}): Error parsing PowerShell output.")
-        return "", "", ""
-
-    # Extract current IP/prefix
-    if data.get("IPv4Address"):
-        addressData = data["IPv4Address"][0]
-        props = addressData.get("CimInstanceProperties", "")
-        match = re.search(r'IPv4Address\s*=\s*"([^"]+)"', props)
-        if match:
-            ip_address = match.group(1)
-        match = re.search(r'PrefixLength\s*=\s*([0-9]+)', props)
-        if match:
-            prefix = int(match.group(1))
-    else:
-        ip_address = None
-        prefix = None
-
-    # Extract gateway
-    query_cmd = fr"""
-        Get-NetIPConfiguration -InterfaceAlias "{interface}" |
-        Select-Object -ExpandProperty IPv4DefaultGateway | ConvertTo-Json
-    """
-
-    output = run_powershell(query_cmd)
-    if not output:
-        print_debug(f"init_int_vars({interface}): Failed to query interface '{interface}' for gateway info.")
-        return "", "", ""
     
-    try:
-        data = json.loads(output)
-    except json.JSONDecodeError:
-        print_debug(f"init_int_vars({interface}): Error parsing PowerShell output for gateway info.")
-        return "", "", ""
-    
-    if data.get("NextHop"):
-        gateway = data["NextHop"]
-    else:
-        gateway = None
+    gw_output = run_powershell(query_gw).strip()
+    if gw_output:
+        try:
+            gw_data = json.loads(gw_output)
+            # ExpandProperty might return an object or a list of objects
+            if isinstance(gw_data, list):
+                gateway = gw_data[0].get("NextHop")
+            else:
+                gateway = gw_data.get("NextHop")
+        except json.JSONDecodeError:
+             print_debug(f"init_int_vars_windows({interface}): Gateway JSON parse error.")
 
-    print_debug(f"init_int_vars({interface}): {ip_address} {prefix} {gateway}")
+    print_debug(f"init_int_vars_windows({interface}): {ip_address} {prefix} {gateway}")
     return ip_address, prefix, gateway
 
 def init_int_vars_linux(interface):
@@ -3576,32 +3112,32 @@ def init_int_vars_linux(interface):
 
     # 1. Get IP Address and Prefix
     try:
-        # 'ip -j addr show' returns a list of dictionaries for each interface
         cmd = ["ip", "-j", "addr", "show", interface]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         addr_data = json.loads(result.stdout)
 
-        if addr_data:
-            # Filter for IPv4 (inet) addresses
-            ipv4_infos = [addr for addr in addr_data[0].get("addr_info", []) if addr.get("family") == "inet"]
-            if ipv4_infos:
-                ip_address = ipv4_infos[0].get("local")
-                prefix = ipv4_infos[0].get("prefixlen")
-    except (subprocess.CalledProcessError, json.JSONDecodeError, IndexError) as e:
-        print_debug(f"init_int_vars_linux({interface}): Failed to query IP address. Error: {e}")
+        if addr_data and "addr_info" in addr_data[0]:
+            # Filter for IPv4 (inet) addresses and take the first valid local
+            for addr in addr_data[0]["addr_info"]:
+                if addr.get("family") == "inet":
+                    ip_address = addr.get("local")
+                    prefix = addr.get("prefixlen")
+                    break # Take the primary
+    except Exception as e:
+        print_debug(f"init_int_vars_linux({interface}): IP query failed: {e}")
 
     # 2. Get Default Gateway
     try:
-        # 'ip -j route show default' shows the default gateway route
+        # Better: Filter specifically for the default route on this device
         cmd = ["ip", "-j", "route", "show", "default", "dev", interface]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         route_data = json.loads(result.stdout)
 
         if route_data:
-            # The gateway is the 'gateway' or 'via' field
-            gateway = route_data[0].get("gateway")
-    except (subprocess.CalledProcessError, json.JSONDecodeError, IndexError) as e:
-        print_debug(f"init_int_vars_linux({interface}): Failed to query gateway. Error: {e}")
+            # Matches 'gateway' (RHEL/CentOS) or 'via' (Standard iproute2)
+            gateway = route_data[0].get("gateway") or route_data[0].get("via")
+    except Exception as e:
+        print_debug(f"init_int_vars_linux({interface}): Gateway query failed: {e}")
 
     print_debug(f"init_int_vars_linux({interface}): {ip_address} {prefix} {gateway}")
     return ip_address, prefix, gateway

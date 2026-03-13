@@ -378,7 +378,10 @@ def run_bash(cmd, noisy=True):
         
     # Fallback to standard sh if bash isn't installed
     if not executable_path:
-        executable_path = "/bin/sh"
+        for path in ["/usr/local/bin/bash", "/bin/sh", "/usr/bin/sh"]:
+            if os.path.exists(path):
+                executable_path = path
+                break
 
     try:
         result = subprocess.run(
