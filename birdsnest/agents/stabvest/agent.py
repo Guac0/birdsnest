@@ -1186,20 +1186,20 @@ def interface_down_windows(interface=interface_get_primary()):
     Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
     """
 
-    ps_check = fr"""
-    $iface = '{interface}'
+    ps_check = r"""
+    $iface = '{interface_name}'
     $int = Get-NetAdapter -Name $iface
 
-    if ($int -eq $null) {{
+    if ($int -eq $null) {
         Write-Output 'NotFound'
-    }}
-    elseif ($int.Status -eq 'Up') {{
+    }
+    elseif ($int.Status -eq 'Up') {
         Write-Output 'Up'
-    }}
-    else {{
+    }
+    else {
         Write-Output 'Down'
-    }}
-    """
+    }
+    """.format(interface_name=interface)
 
     status = run_powershell(ps_check).strip()
     
@@ -1458,34 +1458,34 @@ def firewall_rules_audit_windows(port,direction="in",action="block"):
     # Currently unused as returns too many matches
     #if ($lp -eq 'Any') {{ return $true }}
 
-    ps_query = fr"""
+    ps_query = r"""
     $rules = Get-NetFirewallPortFilter |
-        Where-Object {{
+        Where-Object {
             $lp = $_.LocalPort
-            if ($lp -eq 'Any') {{ return $true }}
-            if ($lp -like '*,*') {{
+            if ($lp -eq 'Any') { return $true }
+            if ($lp -like '*,*') {
                 return $lp.Split(',') -contains '{port}'
-            }}
+            }
 
-            if ($lp -like '*-*') {{
+            if ($lp -like '*-*') {
                 $range = $lp.Split('-')
                 $a = [int]$range[0].Trim()
                 $b = [int]$range[1].Trim()
                 return ({port} -ge [int]$a -and {port} -le [int]$b)
-            }}
+            }
 
             return $lp -eq '{port}'
-        }} |
+        } |
         Get-NetFirewallRule |
-        Where-Object {{ $_.Direction -eq '{direction}' -and $_.Action -eq '{action}' }} |
+        Where-Object { $_.Direction -eq '{direction}' -and $_.Action -eq '{action}' } |
         Select-Object Name, DisplayName, Action, Direction, Profile
 
-    if (-not $rules) {{
+    if (-not $rules) {
         "none found"
-    }} else {{
+    } else {
         $rules | ConvertTo-Json
-    }}
-    """
+    }
+    """.format(port=port, direction=direction, action=action)
 
     output = run_powershell(ps_query).strip()
 
@@ -2263,18 +2263,18 @@ def service_audit_windows(service_name):
     Returns: Returns: oldStatus(bool), newStatus(bool), issues(list of strings)
     """
     # 1. Check whether service exists and get its current state
-    ps_check = fr"""
+    ps_check = r"""
     $svc = Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue
-    if ($svc -eq $null) {{
+    if ($svc -eq $null) {
         Write-Output 'NotFound'
-    }} else {{
-        $obj = New-Object PSObject -Property @{{
+    } else {
+        $obj = New-Object PSObject -Property @{
             Status = $svc.Status
             StartType = (Get-CimInstance Win32_Service -Filter "Name='{service_name}'").StartMode
-        }}
+        }
         $obj | ConvertTo-Json
-    }}
-    """
+    }
+    """.format(service_name=service_name)
 
     raw = run_powershell(ps_check).strip()
     if not raw:
@@ -2690,19 +2690,19 @@ def service_integrity_windows(service_name, backupDict):
     """
     
     # 1. Check whether service exists and get its current attributes
-    ps_check = fr"""
+    ps_check = r"""
     $svc = Get-CimInstance Win32_Service -Filter "Name='{service_name}'" -ErrorAction SilentlyContinue
-    if ($svc -eq $null) {{
+    if ($svc -eq $null) { 
         Write-Output 'NotFound'
-    }} else {{
-        $obj = New-Object PSObject -Property @{{
+    }  else { 
+        $obj = New-Object PSObject -Property @{ 
             StartName = $svc.StartName
             PathName = $svc.PathName
             Dependencies = $svc.DependsOn
-        }}
+        } 
         $obj | ConvertTo-Json
-    }}
-    """
+    } 
+    """.format(service_name=service_name)
     
     raw = run_powershell(ps_check).strip()
     if not raw:
@@ -2991,21 +2991,21 @@ def service_backup_windows(service_name):
     """
     
     # PowerShell command to query all required attributes using Win32_Service
-    ps_query = fr"""
+    ps_query = r"""
     $svc = Get-CimInstance Win32_Service -Filter "Name='{service_name}'" -ErrorAction SilentlyContinue
-    if ($svc -eq $null) {{
+    if ($svc -eq $null) { 
         Write-Output 'NotFound'
-    }} else {{
-        $obj = New-Object PSObject -Property @{{
+    }  else { 
+        $obj = New-Object PSObject -Property @{ 
             PathName = $svc.PathName
             StartName = $svc.StartName
             Dependencies = $svc.DependsOn
             DisplayName = $svc.DisplayName
             StartType = $svc.StartMode
-        }}
+        } 
         $obj | ConvertTo-Json
-    }}
-    """
+    } 
+    """.format(service_name=service_name)
     
     raw = run_powershell(ps_query).strip()
     
@@ -3138,17 +3138,17 @@ def service_lastrun_windows(service_name):
     issues = []
 
     # 1. Check whether service exists and get its current state (Status)
-    ps_check = fr"""
+    ps_check = r"""
     $svc = Get-Service -Name '{service_name}' -ErrorAction SilentlyContinue
-    if ($svc -eq $null) {{
+    if ($svc -eq $null) { 
         Write-Output 'NotFound'
-    }} else {{
-        $obj = New-Object PSObject -Property @{{
+    }  else { 
+        $obj = New-Object PSObject -Property @{ 
             Status = $svc.Status
-        }}
+        } 
         $obj | ConvertTo-Json
-    }}
-    """
+    } 
+    """.format(service_name=service_name)
 
     raw = run_powershell(ps_check).strip()
     

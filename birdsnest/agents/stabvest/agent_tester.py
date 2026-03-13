@@ -282,9 +282,9 @@ def test_service_stop(service):
 def test_service_fail(service):
     # Implements s2
     if SYSTEM == "Windows":
-        run_powershell(f"(Get-WmiObject -Class Win32_Service -Filter Name='{service}').PathName | ForEach-Object {{Rename-Item $_ (Join-Path (Split-Path $_) ((Split-Path $_ -Leaf) + '.old'))}}")
+        run_powershell(r"(Get-WmiObject -Class Win32_Service -Filter Name='{service}').PathName | ForEach-Object {{Rename-Item $_ (Join-Path (Split-Path $_) ((Split-Path $_ -Leaf) + '.old'))}}".format(service=service))
     else:
-        run_bash(f"""svc={service}; systemctl disable --now "$svc"; exe=$(systemctl show -p ExecStart --value "$svc" | awk "{{print $1}}"); mv "$exe" "$exe.old" """)
+        run_bash(r"""svc={service}; systemctl disable --now "$svc"; exe=$(systemctl show -p ExecStart --value "$svc" | awk '{{print $1}}'); mv "$exe" "$exe.old" """.format(service=service))
     return
 
 def test_service_integrity(service,type):

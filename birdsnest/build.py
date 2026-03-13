@@ -12,17 +12,20 @@ from jsmin import jsmin
 # -----------------------------
 # CONFIGURATION
 # -----------------------------
-SOURCE_TEMPLATES = "templates"
-SOURCE_STATIC = "static"
+SOURCE_ITEMS = [
+                "agents\\owlet\\.gitignore","agents\\owlet\\agent.py","agents\\owlet\\requirements_windows.txt","agents\\owlet\\requirements_unix.txt","agents\\owlet\\nssm-2.24_win64.exe",
+                "agents\\stabvest\\.gitignore","agents\\stabvest\\agent.py","agents\\stabvest\\agent_tester.py","agents\\stabvest\\requirements_windows.txt","agents\\stabvest\\requirements_unix.txt","agents\\stabvest\\nssm-2.24_win64.exe",
+                "templates","static","modules",
+                "models.py","server.py","shared.py","utilities.py","worker.py"
+                ]
 BUILD_DIR = "build_assets"
-SOURCE_MISC = ["config.json","server.py","requirements.txt"]
 
-TARGET_FILE = "server.py"
-NUITKA_ARGS = [
-    #"--standalone",
-    "--onefile",
-    #"--python-flag=no_docstrings", # breaks sqlalchemy
-]
+#TARGET_FILE = "server.py"
+#NUITKA_ARGS = [
+#    #"--standalone",
+#    "--onefile",
+#    #"--python-flag=no_docstrings", # breaks sqlalchemy
+#]
 
 
 # -----------------------------
@@ -84,9 +87,11 @@ def minify_py(py_code):
         # Remove comments:
         if token_type == tokenize.COMMENT:
             pass
-        # This series of conditionals removes docstrings:
         elif token_type == tokenize.STRING:
-            if prev_toktype != tokenize.INDENT:
+            # If the string follows an '=', it's an assignment, NOT a docstring
+            if prev_toktype == tokenize.OP and token_string == '=':
+                out += token_string
+            elif prev_toktype != tokenize.INDENT and prev_toktype != tokenize.NEWLINE:
         # This is likely a docstring; double-check we're not inside an operator:
                 if prev_toktype != tokenize.NEWLINE:
                     # Note regarding NEWLINE vs NL: The tokenize module
@@ -112,7 +117,7 @@ def minify_py(py_code):
         prev_toktype = token_type
         last_col = end_col
         last_lineno = end_line
-    return "\n".join([line for line in out.splitlines() if line.strip()])
+    return "\n".join([line for line in out.split('\n') if line.strip()])
 
 
 def minify_inline_js(html):
@@ -240,10 +245,15 @@ def main():
     ensure_clean_dir(BUILD_DIR)
 
     print("=== Copying asset directories ===")
-    copy_tree(SOURCE_TEMPLATES, os.path.join(BUILD_DIR, "templates"))
-    copy_tree(SOURCE_STATIC, os.path.join(BUILD_DIR, "static"))
-    for f in SOURCE_MISC:
-        shutil.copy(f, BUILD_DIR)
+    for f in SOURCE_ITEMS:
+        dest_path = os.path.join(BUILD_DIR, f)
+        if Path(f).is_dir():
+            copy_tree(f, dest_path)
+        else:
+            dest_parent = os.path.dirname(dest_path)
+            if not os.path.exists(dest_parent):
+                os.makedirs(dest_parent)
+            shutil.copy(f, dest_path)
 
     print("=== Minifying HTML, JS, and CSS assets ===")
     minify_directory(BUILD_DIR)
