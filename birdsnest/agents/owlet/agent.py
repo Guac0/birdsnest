@@ -19,12 +19,16 @@ import base64
 from pathlib import Path
 import ast
 from datetime import timedelta
-#import win32evtlog
-#import win32evtlogutil
-#import winreg
-#import win32serviceutil
-#import win32service
-#import win32event
+try:
+    import win32evtlog
+    import win32evtlogutil
+    import winreg
+    import win32serviceutil
+    import win32service
+    import win32event
+    WINDOWS_LIBS_LOADED = True
+except ImportError:
+    WINDOWS_LIBS_LOADED = False
 #import sys
 #import servicemanager
 #import threading
@@ -275,44 +279,49 @@ def interface_get_primary_windows(ip):
 def interface_get_primary_linux(ip):
     """
     Unified getter for Linux (Debian, RHEL, Alpine) and FreeBSD.
+    Uses shutil.which to locate binaries dynamically across different distributions.
     """
     system = platform.system()
     
-    # 1. Try 'ip addr' first (Standard for modern Linux: Debian, RHEL)
+    # 1. Try 'ip addr' first (Standard for modern Linux: Debian, RHEL, Alpine)
+    # We check for the 'ip' binary regardless of the 'system' being Linux, 
+    # but specifically skip for FreeBSD as 'ip' usually refers to something else there.
     if system == "Linux":
+        ip_bin = shutil.which("ip")
+        if ip_bin:
+            try:
+                output = subprocess.check_output([ip_bin, "-4", "addr"], text=True)
+                iface = None
+                for line in output.splitlines():
+                    # Match interface headers: "2: eth0: <BROADCAST...>"
+                    header_match = re.match(r"^\d+:\s+([^:@\s]+)", line.strip())
+                    if header_match:
+                        iface = header_match.group(1)
+                    # Match the IP line associated with the above interface
+                    if "inet " in line and ip in line:
+                        return iface
+            except Exception:
+                pass
+
+    # 2. Try 'ifconfig' (Primary for FreeBSD, fallback for Alpine/BusyBox)
+    ifconfig_bin = shutil.which("ifconfig")
+    if ifconfig_bin:
         try:
-            # Full path is safer
-            ip_bin = shutil.which("ip") or "/sbin/ip"
-            output = subprocess.check_output([ip_bin, "-4", "addr"], text=True)
+            output = subprocess.check_output([ifconfig_bin], text=True)
             iface = None
+            
             for line in output.splitlines():
-                # Headers look like: "2: eth0: <BROADCAST...>"
-                header_match = re.match(r"^\d+:\s+([^:@\s]+)", line.strip())
+                # Headers start at the beginning of the line: "eth0: ..." or "em0: ..."
+                # This regex works for both BSD-style and Linux-style ifconfig output.
+                header_match = re.match(r"^([a-zA-Z0-9._-]+)[:\s]", line)
                 if header_match:
                     iface = header_match.group(1)
+                
+                # Check for the IP in the indented lines following the header
                 if "inet " in line and ip in line:
                     return iface
         except Exception:
             pass
-
-    # 2. Try 'ifconfig' (Fallback for Alpine/BusyBox and Primary for FreeBSD)
-    try:
-        ifconfig_bin = shutil.which("ifconfig") or "/sbin/ifconfig"
-        output = subprocess.check_output([ifconfig_bin], text=True)
-        iface = None
-        
-        for line in output.splitlines():
-            # FreeBSD/Linux ifconfig headers usually start at column 0
-            # Matches "eth0: ..." or "em0: ..."
-            header_match = re.match(r"^([a-zA-Z0-9._-]+)[:\s]", line)
-            if header_match:
-                iface = header_match.group(1)
-            
-            # Check for the IP in the following indented lines
-            if "inet " in line and ip in line:
-                return iface
-    except Exception:
-        pass
 
     return None
 
@@ -543,6 +552,9 @@ def get_native_parser():
     elif os.uname().sysname == "FreeBSD":
         return FreeBSDParser(), "/var/log/auth.log", AuthWatcher()
     elif "windows" in platform.system().lower():
+        if not WINDOWS_LIBS_LOADED:
+            print_debug("CRITICAL: Windows detected but pywin32 not installed.")
+            return None, None, None
         return WindowsAuthParser(), "N/A", WindowsAuthWatcher()
     else:
         # Fallback to a generic syslog parser
@@ -552,6 +564,26 @@ class BaseParser:
     """Interface for different log formats."""
     def parse_line(self, line):
         raise NotImplementedError("Each parser must implement parse_line")
+    
+    # Unified wrapper to separate timestamp from the message content
+    # Works for ISO8601 (Modern) and Legacy Syslog
+    TS_WRAPPER = re.compile(
+        r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?|[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+(.*)'
+    )
+
+    def _parse_timestamp(self, ts_str):
+        """Standardized timestamp resolver for all child parsers."""
+        now = datetime.now()
+        if 'T' in ts_str: # Modern ISO
+            try:
+                return datetime.fromisoformat(ts_str.replace('Z', '+00:00')).timestamp()
+            except ValueError: pass
+        try: # Legacy Syslog
+            dt = datetime.strptime(ts_str, "%b %d %H:%M:%S").replace(year=now.year)
+            if dt > now + timedelta(days=1): dt = dt.replace(year=now.year - 1)
+            return dt.timestamp()
+        except ValueError: pass
+        return None
     
     def _format_record(self, sig_type, match, epoch_or_line):
         """
@@ -609,15 +641,16 @@ class BaseParser:
 class DebianAuthParser(BaseParser):
     """
     Parses /var/log/auth.log for SSH attempts and Privilege Elevation.
+    Supports ISO8601 (Modern Debian/RHEL) and RFC3339/Legacy Syslog (Alpine/FreeBSD).
     """
     def __init__(self):
         self.signatures = [
-            # 1. SSH Password & Public Key (Combined for efficiency)
+            # 1. SSH Password & Public Key
             {
                 "type": "ssh_auth",
                 "regex": re.compile(r"sshd\[\d+\]: (?P<status>Accepted|Failed) (?P<method>\S+) for (?P<user>\S+) from (?P<ip>\S+)"),
             },
-            # 2. Sudo Execution (Captures source user and target user)
+            # 2. Sudo Execution
             {
                 "type": "sudo_elevation",
                 "regex": re.compile(r"sudo:\s+(?P<src_user>\S+) : TTY=.* ; USER=(?P<user>\S+) ; COMMAND=(?P<cmd>.*)"),
@@ -629,30 +662,64 @@ class DebianAuthParser(BaseParser):
             }
         ]
         
-        # Enhanced ISO8601 Pattern to handle micro-seconds and timezones accurately
-        self.ts_pattern = re.compile(
-            r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})T(?P<time>[\d:]+)(?P<subsecond>\.[\d]+)?(?P<timezone>[+-]\d{2}:\d{2}|Z)"
+        # Capture either:
+        # Group 1 (ISO): 2026-03-13T02:59:42.123456+00:00
+        # Group 2 (Legacy): Mar 13 02:11:41
+        self.ts_wrapper_pattern = re.compile(
+            r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?|[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+(.*)'
         )
 
+    def _parse_timestamp(self, ts_str):
+        """
+        Flexible timestamp parser for cross-platform log formats.
+        """
+        now = datetime.now()
+        
+        # Handle Modern ISO 8601 (Debian 12+, RHEL 9+)
+        if 'T' in ts_str:
+            try:
+                # Replace Z with +00:00 for older Python 3.x compatibility
+                clean_ts = ts_str.replace('Z', '+00:00')
+                dt = datetime.fromisoformat(clean_ts)
+                return dt.timestamp()
+            except ValueError:
+                pass
+
+        # Handle Legacy Syslog (Alpine, FreeBSD, Debian 11-)
+        try:
+            # Format: Mar 13 02:11:41
+            dt = datetime.strptime(ts_str, "%b %d %H:%M:%S")
+            
+            # Syslog is yearless; inject current year
+            dt = dt.replace(year=now.year)
+            
+            # Handle the New Year's Eve rollover edge case
+            if dt > now + timedelta(days=1):
+                dt = dt.replace(year=now.year - 1)
+                
+            return dt.timestamp()
+        except ValueError:
+            pass
+
+        return None
+
     def parse_line(self, line):
-        ts_match = self.ts_pattern.match(line)
-        if not ts_match:
+        match = self.ts_wrapper_pattern.match(line)
+        if not match:
             return None
             
-        # Robust ISO8601 parsing
-        ts_str = f"{ts_match.group('year')}-{ts_match.group('month')}-{ts_match.group('day')}T{ts_match.group('time')}"
-        try:
-            # Use fromisoformat for reliable cross-platform epoch conversion
-            dt = datetime.fromisoformat(ts_str)
-            epoch = dt.timestamp()
-        except ValueError:
+        ts_str = match.group(1)
+        remaining_content = match.group(2)
+        
+        epoch = self._parse_timestamp(ts_str)
+        if epoch is None:
             return None
 
         for sig in self.signatures:
-            match = sig['regex'].search(line)
-            if match:
-                # Calls the unified BaseParser logic
-                return self._format_record(sig['type'], match, epoch)
+            # We search the remaining_content to avoid regex overlap with the timestamp
+            attr_match = sig['regex'].search(remaining_content)
+            if attr_match:
+                return self._format_record(sig['type'], attr_match, epoch)
         
         return None
 
@@ -661,34 +728,20 @@ class DebianAuthParser(BaseParser):
 
 class RedHatParser(BaseParser):
     def __init__(self):
-        # Patterns match both /var/log/secure and 'journalctl -o short-iso'
         self.signatures = [
-            {
-                "type": "ssh_auth", 
-                "regex": re.compile(r"sshd\[\d+\]: (?P<status>Accepted|Failed) password for (?P<user>\S+) from (?P<ip>\S+)")
-            },
-            {
-                "type": "ssh_invalid", 
-                "regex": re.compile(r"sshd\[\d+\]: Invalid user (?P<user>\S+) from (?P<ip>\S+)")
-            }
+            {"type": "ssh_auth", "regex": re.compile(r"sshd\[\d+\]: (?P<status>Accepted|Failed) \S+ for (?P<user>\S+) from (?P<ip>\S+)")},
+            {"type": "ssh_invalid", "regex": re.compile(r"sshd\[\d+\]: Invalid user (?P<user>\S+) from (?P<ip>\S+)")}
         ]
-        # Matches 2026-03-13T02:11:41-0400
-        self.ts_pattern = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")
 
     def parse_line(self, line):
-        ts_match = self.ts_pattern.match(line)
-        if not ts_match:
-            return None
+        m = self.TS_WRAPPER.match(line)
+        if not m: return None
+        epoch = self._parse_timestamp(m.group(1))
+        if not epoch: return None
         
-        # Convert to epoch
-        try:
-            dt = datetime.fromisoformat(ts_match.group('ts'))
-            epoch = dt.timestamp()
-        except ValueError:
-            return None
-
+        content = m.group(2)
         for sig in self.signatures:
-            match = sig['regex'].search(line)
+            match = sig['regex'].search(content)
             if match:
                 return self._format_record(sig['type'], match, epoch)
         return None
@@ -700,39 +753,19 @@ class AlpineParser(BaseParser):
     """Parses /var/log/messages for Alpine (BusyBox)."""
     def __init__(self):
         self.signatures = [
-            # SSH attempts (Optional 'auth.info' prefix for BusyBox)
-            {
-                "type": "ssh_auth", 
-                "regex": re.compile(r"(?:auth\.info )?sshd\[\d+\]: (?P<status>Accepted|Failed) \S+ for (?P<user>\S+) from (?P<ip>\S+)")
-            },
-            # Sudo elevation (Updated to capture src_user)
-            {
-                "type": "sudo_elevation", 
-                "regex": re.compile(r"(?:auth\.info )?sudo:\s+(?P<src_user>\S+) :.*USER=(?P<user>\S+) ; COMMAND=(?P<cmd>.*)")
-            }
+            {"type": "ssh_auth", "regex": re.compile(r"(?:auth\.info )?sshd\[\d+\]: (?P<status>Accepted|Failed) \S+ for (?P<user>\S+) from (?P<ip>\S+)")},
+            {"type": "sudo_elevation", "regex": re.compile(r"(?:auth\.info )?sudo:\s+(?P<src_user>\S+) :.*USER=(?P<user>\S+) ; COMMAND=(?P<cmd>.*)")}
         ]
-        # Pattern for "Mar 13 02:11:41"
-        self.ts_pattern = re.compile(r"^(?P<month>[A-Z][a-z]{2})\s+(?P<day>\d+)\s+(?P<time>\d{2}:\d{2}:\d{2})")
 
     def parse_line(self, line):
-        ts_match = self.ts_pattern.match(line)
-        if not ts_match:
-            return None
+        m = self.TS_WRAPPER.match(line)
+        if not m: return None
+        epoch = self._parse_timestamp(m.group(1))
+        if not epoch: return None
 
-        # Handle the missing year in BusyBox logs
-        now = datetime.now()
-        ts_str = f"{now.year} {ts_match.group('month')} {ts_match.group('day')} {ts_match.group('time')}"
-        try:
-            dt = datetime.strptime(ts_str, "%Y %b %d %H:%M:%S")
-            # Logic: If it's Jan and log is Dec, it's from last year
-            if dt > now + timedelta(days=1): 
-                dt = dt.replace(year=now.year - 1)
-            epoch = dt.timestamp()
-        except ValueError:
-            return None
-
+        content = m.group(2)
         for sig in self.signatures:
-            match = sig['regex'].search(line)
+            match = sig['regex'].search(content)
             if match:
                 return self._format_record(sig['type'], match, epoch)
         return None
@@ -741,15 +774,18 @@ class AlpineParser(BaseParser):
         return f"AlpineParser"
 
 class FreeBSDParser(BaseParser):
-    """Parses /var/log/auth.log for FreeBSD."""
+    """
+    Parses /var/log/auth.log for FreeBSD.
+    Handles traditional BSD syslog format and local auth utilities like su and login.
+    """
     def __init__(self):
         self.signatures = [
-            # 1. SSH attempts
+            # 1. SSH attempts (FreeBSD format includes 'port' detail)
             {
                 "type": "ssh_auth", 
                 "regex": re.compile(r"sshd\[\d+\]: (?P<status>Accepted|Failed) (?P<method>\S+) for (?P<user>\S+) from (?P<ip>\S+) port")
             },
-            # 2. su elevation (Captures source user and target user)
+            # 2. su elevation (Captures source user and target user: "alice to root")
             {
                 "type": "su_elevation", 
                 "regex": re.compile(r"su\[\d+\]: (?P<src_user>\S+) to (?P<user>\S+) on (?P<tty>\S+)")
@@ -758,48 +794,51 @@ class FreeBSDParser(BaseParser):
             {
                 "type": "console_fail", 
                 "regex": re.compile(r"login: FAIL on (?P<tty>\S+) for (?P<user>\S+), password incorrect")
+            },
+            # 4. Invalid User SSH Attempt
+            {
+                "type": "ssh_invalid",
+                "regex": re.compile(r"sshd\[\d+\]: Invalid user (?P<user>\S+) from (?P<ip>\S+)")
             }
         ]
-        # Pattern for "Mar 13 02:11:41"
-        self.ts_pattern = re.compile(r"^(?P<month>[A-Z][a-z]{2})\s+(?P<day>\d+)\s+(?P<time>\d{2}:\d{2}:\d{2})")
 
     def parse_line(self, line):
-        ts_match = self.ts_pattern.match(line)
-        if not ts_match:
+        # 1. Use the BaseParser wrapper to split timestamp from the rest of the line
+        match = self.TS_WRAPPER.match(line)
+        if not match:
+            return None
+            
+        ts_str = match.group(1)
+        remaining_content = match.group(2)
+        
+        # 2. Resolve the timestamp using the inherited logic (handles yearless BSD logs)
+        epoch = self._parse_timestamp(ts_str)
+        if epoch is None:
             return None
 
-        # Add current year and convert to epoch
-        now = datetime.now()
-        ts_str = f"{now.year} {ts_match.group('month')} {ts_match.group('day')} {ts_match.group('time')}"
-        try:
-            dt = datetime.strptime(ts_str, "%Y %b %d %H:%M:%S")
-            # New Year's Eve safety: if log is Dec but it's now Jan, it's last year
-            if dt > now + timedelta(days=1):
-                dt = dt.replace(year=now.year - 1)
-            epoch = dt.timestamp()
-        except ValueError:
-            return None
-
+        # 3. Match against FreeBSD specific security signatures
         for sig in self.signatures:
-            match = sig['regex'].search(line)
-            if match:
-                # Pass the calculated epoch, not the raw line
-                return self._format_record(sig['type'], match, epoch)
+            attr_match = sig['regex'].search(remaining_content)
+            if attr_match:
+                # _format_record handles the transition logic for su(src->target)
+                return self._format_record(sig['type'], attr_match, epoch)
+        
         return None
 
     def __repr__(self):
         return f"FreeBSDParser"
 
 class WindowsAuthParser(BaseParser):
-    """Parses Windows Security Event Logs for login attempts (4624/4625)."""
+    """
+    Parses Windows Security Event Logs.
+    Optimized for 4624/4625 with LogonType filtering to reduce noise.
+    """
     def __init__(self):
         self.log_type = "Security"
         self.event_ids = {4624: True, 4625: False}
-        # Common system accounts to ignore to prevent log flooding
         self.ignored_users = ["SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE", "ANONYMOUS LOGON"]
-
-    def _get_timestamp(self, event):
-        return int(event.TimeGenerated.timestamp())
+        # Only monitor Interactive (2), RDP (10), and Cached (11) logons
+        self.interesting_logon_types = ["2", "10", "11"]
 
     def parse_event(self, event):
         event_id = event.EventID & 0xFFFF
@@ -807,27 +846,33 @@ class WindowsAuthParser(BaseParser):
             return None
 
         inserts = event.StringInserts
-        # Boundary check: Ensure we have enough fields
+        # Ensure we have the minimum required fields for a standard 4624/4625 event
         if not inserts or len(inserts) < 19:
             return None
 
         try:
-            # Standard indices for 4624/4625:
-            # [5] = TargetUserName, [6] = TargetDomainName, [18] = IpAddress
+            # Standard indices (Vista through Server 2022):
             user = inserts[5]
             domain = inserts[6]
+            logon_type = inserts[8]
             ip = inserts[18]
 
-            # 1. Filter out high-volume System noise
+            # 1. Filter out background system noise
             if user.upper() in self.ignored_users or user.endswith('$'):
                 return None
 
-            # 2. IP Normalization
+            # 2. Filter by Logon Type (The 'Noise Filter')
+            # If it's a success (4624), only care about interactive/RDP sessions.
+            # We usually keep all failures (4625) to catch brute force attempts.
+            if event_id == 4624 and logon_type not in self.interesting_logon_types:
+                return None
+
+            # 3. IP Normalization
             if ip in ["-", "::1", "127.0.0.1"]:
                 ip = "127.0.0.1"
 
-            # 3. Format for your new universal _format_record standard
-            # We create a "dummy" match object to reuse your BaseParser logic
+            # 4. Use your existing _format_record logic
+            # Note: We pass the event.RecordNumber as part of the unique ID context
             class MockMatch:
                 def __init__(self, data): self.data = data
                 def groupdict(self): return self.data
@@ -836,14 +881,16 @@ class WindowsAuthParser(BaseParser):
                 "user": user,
                 "domain": domain,
                 "ip": ip,
+                "logon_type_code": logon_type, # Useful for debugging
                 "status": "success" if self.event_ids[event_id] else "failed"
             })
 
-            # Use the universal formatter you just built
-            return self._format_record("win_auth", mock_match, self._get_timestamp(event))
+            # Get the epoch from the event object
+            epoch = int(event.TimeGenerated.timestamp())
+            
+            return self._format_record("win_auth", mock_match, epoch)
 
-        except Exception as e:
-            # print_debug(f"Error parsing Event {event_id}: {e}")
+        except Exception:
             return None
 
     def __repr__(self):
@@ -854,32 +901,52 @@ class WindowsAuthParser(BaseParser):
 #region##################
 
 class AlertThrottler:
-    def __init__(self, threshold=10, window=60):
+    def __init__(self, threshold=10, window=60, max_entries=1000):
         self.threshold = threshold
         self.window = window
+        self.max_entries = max_entries  # Hard limit on unique IPs in memory
         self.history = {}
         self.suppressed = set()
         self.last_cleanup = time.time()
 
     def _cleanup_all(self):
-        """Prevents memory exhaustion from one-off attacker IPs."""
+        """
+        Hybrid cleanup: 
+        1. Time-based (Every 10 mins) to clear stale records.
+        2. Size-based (Immediate) if memory exceeds max_entries.
+        """
         now = time.time()
-        # Only cleanup every 10 minutes to save CPU
-        if now - self.last_cleanup < 600:
-            return
+        
+        # 1. Periodic Time-Based Cleanup
+        if now - self.last_cleanup >= 600:
+            expired_ips = []
+            for ip, timestamps in self.history.items():
+                # Prune old timestamps from the list
+                self.history[ip] = [t for t in timestamps if now - t < self.window]
+                if not self.history[ip]:
+                    expired_ips.append(ip)
             
-        expired_ips = []
-        for ip, timestamps in self.history.items():
-            self.history[ip] = [t for t in timestamps if now - t < self.window]
-            if not self.history[ip]:
-                expired_ips.append(ip)
-        
-        for ip in expired_ips:
+            for ip in expired_ips:
+                self._purge_ip(ip)
+            
+            self.last_cleanup = now
+
+        # 2. Urgent Size-Based Cleanup (LRU Eviction)
+        if len(self.history) > self.max_entries:
+            # Sort IPs by their most recent activity (the last timestamp in their list)
+            # and remove the oldest ones until we are back under the limit.
+            sorted_ips = sorted(self.history.keys(), key=lambda x: self.history[x][-1])
+            excess_count = len(self.history) - self.max_entries
+            
+            for i in range(excess_count):
+                self._purge_ip(sorted_ips[i])
+
+    def _purge_ip(self, ip):
+        """Helper to cleanly remove an IP from all tracking sets."""
+        if ip in self.history:
             del self.history[ip]
-            if ip in self.suppressed:
-                self.suppressed.remove(ip)
-        
-        self.last_cleanup = now
+        if ip in self.suppressed:
+            self.suppressed.remove(ip)
 
     def should_throttle(self, ip):
         now = time.time()
@@ -888,29 +955,27 @@ class AlertThrottler:
         if ip not in self.history:
             self.history[ip] = []
         
-        # 1. Clean current IP history
+        # Clean current IP history to ensure 'attempt_count' is accurate for this window
         self.history[ip] = [t for t in self.history[ip] if now - t < self.window]
         
-        # 2. Logic Check
         currently_suppressed = ip in self.suppressed
         attempt_count = len(self.history[ip])
 
-        # State: Moving from PROCEED -> THROTTE
+        # State: Moving from PROCEED -> THROTTLE
         if attempt_count >= self.threshold and not currently_suppressed:
             self.suppressed.add(ip)
-            # We DON'T append the 'now' here yet to keep the count stable 
-            # for the START_THROTTLE signal
+            # Return immediately; the calling logic sends the START_THROTTLE alert
             return "START_THROTTLE"
 
         # State: Already suppressed
         if currently_suppressed:
-            # Check for recovery: count has dropped significantly
+            # Check for recovery: count has dropped significantly (hysteresis)
             if attempt_count < (self.threshold / 2):
                 self.suppressed.remove(ip)
-                self.history[ip].append(now) # Add this recovery attempt
+                self.history[ip].append(now)
                 return "END_THROTTLE"
             
-            # Still flooding: record the attempt but keep silencing
+            # Still flooding: record attempt for window tracking but signal silence
             self.history[ip].append(now)
             return "SILENCE"
 
@@ -925,6 +990,7 @@ class AuthWatcher:
         self.config = self.fetch_config()
         self.last_scan_time = self.load_state()
         self.throttler = AlertThrottler(threshold=5, window=60)
+        self.seen_signatures = set()
 
     def fetch_config(self):
         """
@@ -979,8 +1045,15 @@ class AuthWatcher:
         return int(time.time())# - 3600 # Default to now if no state exists
 
     def save_state(self, timestamp):
-        with open(STATE_FILE, 'w') as f:
-            json.dump({"last_scan": int(timestamp)}, f)
+        temp_file = f"{STATE_FILE}.tmp"
+        try:
+            with open(temp_file, 'w') as f:
+                json.dump({"last_scan": int(timestamp)}, f)
+                f.flush()
+                os.fsync(f.fileno()) # Ensure data is physically on disk
+            os.replace(temp_file, STATE_FILE) # Atomic swap
+        except Exception as e:
+            print_debug(f"save_state(): Failed to save state: {e}")
 
     def analyze_log(self):
         new_last_scan = self.load_state()
@@ -1025,16 +1098,30 @@ class AuthWatcher:
                 for line in reversed(lines):
                     decoded_line = line.decode('utf-8', errors='replace')
                     record = self.parser.parse_line(decoded_line)
+                    if not record: continue
 
-                    if record:
-                        if record['timestamp'] > self.last_scan_time:
-                            records_to_process.append(record)
-                            # Track the highest timestamp found for the state update
-                            if record['timestamp'] > new_last_scan:
-                                new_last_scan = record['timestamp']
-                        else:
-                            reached_cutoff = True
-                            break
+                    # Generate a unique hash for this log line
+                    import hashlib
+                    line_sig = hashlib.md5(line).hexdigest()
+
+                    # CHANGE: Don't stop on equality, only stop if strictly OLDER
+                    if record['timestamp'] < self.last_scan_time:
+                        reached_cutoff = True
+                        break
+                    
+                    # If the timestamp is the same as our cutoff, check if we've seen this exact line
+                    if record['timestamp'] == self.last_scan_time:
+                        if line_sig in self.seen_signatures:
+                            continue
+                            
+                    records_to_process.append(record)
+                    # Track signatures of logs that occurred at the NEW highest timestamp
+                    if record['timestamp'] > new_last_scan:
+                        new_last_scan = record['timestamp']
+                        # Reset signatures for the new "current" second
+                        self.temp_signatures = {line_sig}
+                    elif record['timestamp'] == new_last_scan:
+                        self.temp_signatures.add(line_sig)
             
             # FIX: Process the leftover buffer if we haven't reached the cutoff
             if not reached_cutoff and buffer:
@@ -1051,6 +1138,7 @@ class AuthWatcher:
                 sent_msg = True
 
         # Update state to the timestamp of the newest log we've seen
+        self.seen_signatures = self.temp_signatures
         self.save_state(new_last_scan)
         return sent_msg
 
@@ -1118,9 +1206,16 @@ class JournalAuthWatcher(AuthWatcher):
     def get_journal_logs(self, since_timestamp):
         # Format: 2026-03-13 02:11:41
         since_str = datetime.fromtimestamp(since_timestamp).strftime('%Y-%m-%d %H:%M:%S')
-        
-        # We query the sshd unit specifically for efficiency
-        cmd = ["journalctl", "_SYSTEMD_UNIT=sshd.service", "--since", since_str, "--output=short-iso", "--no-pager"]
+    
+        # CHANGE: Listen for both SSHD and general AUTH logs (sudo/su)
+        cmd = [
+            "journalctl", 
+            "SYSLOG_FACILITY=4", # 4 is the 'auth' facility
+            "SYSLOG_FACILITY=10", # 10 is 'authpriv'
+            "--since", since_str, 
+            "--output=short-iso", 
+            "--no-pager"
+        ]
         
         try:
             # Note: This requires the agent to run with sudo/root privileges to read the journal
@@ -1157,46 +1252,67 @@ class JournalAuthWatcher(AuthWatcher):
 
         self.save_state(new_last_scan)
         return sent_msg
-  
-class WindowsAuthWatcher(AuthWatcher):
-    def analyze_log(self):
-        """Overrides analyze_log to use Windows Event API."""
-        server = 'localhost'
-        handle = win32evtlog.OpenEventLog(server, self.parser.log_type)
-        flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
-        
-        sent_msg = False
-        records_to_process = []
-        reached_cutoff = False
-        new_last_scan = self.last_scan_time
 
-        while not reached_cutoff:
-            events = win32evtlog.ReadEventLog(handle, flags, 0)
-            if not events:
-                break
+if WINDOWS_LIBS_LOADED:
+    class WindowsAuthWatcher(AuthWatcher):
+        def load_state(self):
+            if os.path.exists(STATE_FILE):
+                with open(STATE_FILE, 'r') as f:
+                    state = json.load(f)
+                    # Support both Linux (last_scan) and Windows (last_record)
+                    return state.get("last_record", 0), state.get("last_scan", time.time())
+            return 0, int(time.time())
+
+        def analyze_log(self):
+            """Overrides analyze_log to use Windows Event API."""
+            last_record, last_timestamp = self.load_state()
+            server = 'localhost'
+            handle = win32evtlog.OpenEventLog(server, self.parser.log_type)
+            flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
             
-            for event in events:
-                record = self.parser.parse_event(event)
-                if record:
-                    if record['timestamp'] > self.last_scan_time:
-                        records_to_process.append(record)
-                        if record['timestamp'] > new_last_scan:
-                            new_last_scan = record['timestamp']
-                    else:
+            sent_msg = False
+            records_to_process = []
+            reached_cutoff = False
+            new_last_scan = self.last_scan_time
+
+            while not reached_cutoff:
+                events = win32evtlog.ReadEventLog(handle, flags, 0)
+                if not events:
+                    break
+                
+                for event in events:
+                    # CHANGE: Use RecordNumber as the primary cutoff
+                    if event.RecordNumber <= last_record:
                         reached_cutoff = True
                         break
-            
-            if reached_cutoff: break
+                        
+                    record = self.parser.parse_event(event)
+                    if record:
+                        records_to_process.append(record)
+                        # Update state with the highest record number seen
+                        if event.RecordNumber > new_last_record:
+                            new_last_record = event.RecordNumber
+                        
+                        if reached_cutoff: break
 
-        records_to_process.reverse()
-        for record in records_to_process:
-            # FIX: Capture the threat return value
-            if self.evaluate_threat(record):
-                sent_msg = True
+            records_to_process.reverse()
+            for record in records_to_process:
+                # FIX: Capture the threat return value
+                if self.evaluate_threat(record):
+                    sent_msg = True
 
-        self.save_state(new_last_scan)
-        win32evtlog.CloseEventLog(handle)
-        return sent_msg
+            self.save_state(new_last_scan)
+            win32evtlog.CloseEventLog(handle)
+            return sent_msg
+else:
+    # This prevents the program from crashing if WindowsAuthWatcher is referenced 
+    # in an OS-generic loop or factory.
+    class WindowsAuthWatcher:
+        def __init__(self, *args, **kwargs):
+            pass
+        def analyze_log(self):
+            # Log a debug message or just return False
+            return False
 
 #endregion###############
 ######### Main ##########

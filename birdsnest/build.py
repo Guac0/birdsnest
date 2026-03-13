@@ -13,8 +13,8 @@ from jsmin import jsmin
 # CONFIGURATION
 # -----------------------------
 SOURCE_ITEMS = [
-                "agents\\owlet\\.gitignore","agents\\owlet\\agent.py","agents\\owlet\\requirements_windows.txt","agents\\owlet\\requirements_unix.txt","agents\\owlet\\nssm-2.24_win64.exe",
-                "agents\\stabvest\\.gitignore","agents\\stabvest\\agent.py","agents\\stabvest\\agent_tester.py","agents\\stabvest\\requirements_windows.txt","agents\\stabvest\\requirements_unix.txt","agents\\stabvest\\nssm-2.24_win64.exe",
+                "agents\\owlet\\.gitignore","agents\\owlet\\agent.py","agents\\owlet\\requirements.txt","agents\\owlet\\nssm-2.24_win64.exe",
+                "agents\\stabvest\\.gitignore","agents\\stabvest\\agent.py","agents\\stabvest\\agent_tester.py","agents\\stabvest\\requirements.txt","agents\\stabvest\\nssm-2.24_win64.exe",
                 "templates","static","modules",
                 "models.py","server.py","shared.py","utilities.py","worker.py"
                 ]
