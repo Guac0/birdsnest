@@ -190,7 +190,7 @@
             <a href="/web/">Back to Home</a>
         </div>
     </div>
-    <p>Adjust the parameters below and hit submit to deploy a new Stabvest Agent via Ansible.</p>
+    <p>Adjust the parameters below and hit submit to deploy a new Magpie Agent via Ansible.</p>
 
     <div class="form-field checkbox-container">
         <input type="checkbox" id="toggle_advanced_fields">
@@ -212,7 +212,7 @@
                 </div>
                 <div class="form-field auth-hidden">
                     <label for="ansible_playbook">Ansible Playbook File Name:</label>
-                    <input type="text" id="ansible_playbook" value="stabvest_playbook.yaml" required>
+                    <input type="text" id="ansible_playbook" value="magpie_playbook.yaml" required>
                 </div>
                 <div class="form-field auth-hidden">
                     <label for="ansible_inventory">Ansible Inventory File Name:</label>
@@ -243,87 +243,87 @@
         </div>
 
         <div class="form-section">
-            <h2>Stabvest Agent Deployment Settings</h2>
+            <h2>Magpie Agent Deployment Settings</h2>
             <div class="form-grid">
                 <div class="form-field">
-                    <label for="stabvest_deploy_dir_win">Deploy Folder [Windows]:</label>
-                    <input type="text" id="stabvest_deploy_dir_win" value="C:\\stabvest" required>
+                    <label for="magpie_deploy_dir_win">Deploy Folder [Windows]:</label>
+                    <input type="text" id="magpie_deploy_dir_win" value="C:\\magpie" required>
                 </div>
                 <div class="form-field">
-                    <label for="stabvest_deploy_dir_unix">Deploy Folder [Unix]:</label>
-                    <input type="text" id="stabvest_deploy_dir_unix" value="/stabvest" required>
+                    <label for="magpie_deploy_dir_unix">Deploy Folder [Unix]:</label>
+                    <input type="text" id="magpie_deploy_dir_unix" value="/magpie" required>
                 </div>
                 <div class="form-field">
-                    <label for="stabvest_agent_executable">Agent Executable:</label>
-                    <input type="text" id="stabvest_agent_executable" value="agent_Windows_10.exe" required>
+                    <label for="magpie_agent_executable">Agent Executable:</label>
+                    <input type="text" id="magpie_agent_executable" value="agent_Windows_10.exe" required>
                 </div>
                 <div class="form-field auth-hidden">
-                    <label for="stabvest_tester_executable">Tester Executable:</label>
-                    <input type="text" id="stabvest_tester_executable" value="agent_tester_Windows_10.exe" required>
+                    <label for="magpie_tester_executable">Tester Executable:</label>
+                    <input type="text" id="magpie_tester_executable" value="agent_tester_Windows_10.exe" required>
                 </div>
                 <div class="form-field">
-                    <label for="stabvest_task_name">Task/Cron Name:</label>
-                    <input type="text" id="stabvest_task_name" value="stabvest" required>
+                    <label for="magpie_task_name">Task/Cron Name:</label>
+                    <input type="text" id="magpie_task_name" value="magpie" required>
                 </div>
                 <div class="form-field auth-hidden">
-                    <label for="stabvest_task_interval">Task Interval (seconds) [must be /60 for cron]:</label>
-                    <input type="number" id="stabvest_task_interval" value="60" step="1" required>
+                    <label for="magpie_task_interval">Task Interval (seconds) [must be /60 for cron]:</label>
+                    <input type="number" id="magpie_task_interval" value="60" step="1" required>
                 </div>
                 <div class="form-field checkbox-container">
-                    <input type="checkbox" id="stabvest_task_create" checked>
-                    <label for="stabvest_task_create">Create Scheduled Task</label>
+                    <input type="checkbox" id="magpie_task_create" checked>
+                    <label for="magpie_task_create">Create Scheduled Task</label>
                 </div>
                 <div class="form-field checkbox-container auth-hidden">
-                    <input type="checkbox" id="stabvest_include_tester" checked>
-                    <label for="stabvest_include_tester">Include Tester Executable</label>
+                    <input type="checkbox" id="magpie_include_tester" checked>
+                    <label for="magpie_include_tester">Include Tester Executable</label>
                 </div>
             </div>
         </div>
 
         <div class="form-section">
-            <h2>Stabvest Agent Core Settings</h2>
+            <h2>Magpie Agent Core Settings</h2>
             <div class="form-grid">
                 <div class="form-field">
-                    <label for="stabvest_agent_name">Agent Name:</label>
-                    <input type="text" id="stabvest_agent_name" value="" required>
+                    <label for="magpie_agent_name">Agent Name:</label>
+                    <input type="text" id="magpie_agent_name" value="" required>
                 </div>
                 <div class="form-field auth-hidden">
-                    <label for="stabvest_auth_token">Auth Token:</label>
-                    <input type="text" id="stabvest_auth_token" value="testtoken" required>
+                    <label for="magpie_auth_token">Auth Token:</label>
+                    <input type="text" id="magpie_auth_token" value="testtoken" required>
                 </div>
                 <div class="form-field auth-hidden">
-                    <label for="stabvest_agent_type">Agent Type:</label>
-                    <input type="text" id="stabvest_agent_type" value="stabvest" required>
+                    <label for="magpie_agent_type">Agent Type:</label>
+                    <input type="text" id="magpie_agent_type" value="magpie" required>
                 </div>
                 
                 <div class="form-field auth-hidden">
-                    <label for="stabvest_server_url">Server URL:</label>
-                    <input type="text" id="stabvest_server_url" value="https://127.0.0.1:8000/agent/beacon" required>
+                    <label for="magpie_server_url">Server URL:</label>
+                    <input type="text" id="magpie_server_url" value="https://127.0.0.1:8000/agent/beacon" required>
                 </div>
                 <div class="form-field auth-hidden">
-                    <label for="stabvest_server_timeout">Server Timeout:</label>
-                    <input type="number" id="stabvest_server_timeout" value="5" required>
+                    <label for="magpie_server_timeout">Server Timeout:</label>
+                    <input type="number" id="magpie_server_timeout" value="5" required>
                 </div>
                 <div class="form-field auth-hidden">
-                    <label for="stabvest_sleeptime">Sleep Time:</label>
-                    <input type="number" id="stabvest_sleeptime" value="60" required>
+                    <label for="magpie_sleeptime">Sleep Time:</label>
+                    <input type="number" id="magpie_sleeptime" value="60" required>
                 </div>
 
                 <div class="form-field checkbox-container">
-                    <input type="checkbox" id="stabvest_disarm" checked>
-                    <label for="stabvest_disarm">Disarm (Detection Only Mode)</label>
+                    <input type="checkbox" id="magpie_disarm" checked>
+                    <label for="magpie_disarm">Disarm (Detection Only Mode)</label>
                 </div>
                 <div class="form-field checkbox-container auth-hidden">
-                    <input type="checkbox" id="stabvest_debug_print" checked>
-                    <label for="stabvest_debug_print">Debug Print to Console</label>
+                    <input type="checkbox" id="magpie_debug_print" checked>
+                    <label for="magpie_debug_print">Debug Print to Console</label>
                 </div>
                 <div class="form-field auth-hidden">
-                    <label for="stabvest_logfile">Logfile:</label>
-                    <input type="text" id="stabvest_logfile" value="log.txt" required>
+                    <label for="magpie_logfile">Logfile:</label>
+                    <input type="text" id="magpie_logfile" value="log.txt" required>
                 </div>
                 <div class="form-field full-width">
-                    <label for="stabvest_backupdir">Backup Directory:</label>
-                    <input type="text" id="stabvest_backupdir" value="">
+                    <label for="magpie_backupdir">Backup Directory:</label>
+                    <input type="text" id="magpie_backupdir" value="">
                 </div>
             </div>
         </div>
@@ -332,20 +332,20 @@
             <h2>Network Protection Settings</h2>
             <div class="form-grid" style="gap: 10px;">
                 <div class="form-field" style="flex: 1 1 calc(25% - 10px);">
-                    <label for="stabvest_mtu_min">MTU Min:</label>
-                    <input type="number" id="stabvest_mtu_min" value="1200" required>
+                    <label for="magpie_mtu_min">MTU Min:</label>
+                    <input type="number" id="magpie_mtu_min" value="1200" required>
                 </div>
                 <div class="form-field" style="flex: 1 1 calc(25% - 10px);">
-                    <label for="stabvest_mtu_default">MTU Default:</label>
-                    <input type="number" id="stabvest_mtu_default" value="1300" required>
+                    <label for="magpie_mtu_default">MTU Default:</label>
+                    <input type="number" id="magpie_mtu_default" value="1300" required>
                 </div>
                 <div class="form-field" style="flex: 1 1 calc(25% - 10px);">
-                    <label for="stabvest_mtu_max">MTU Max:</label>
-                    <input type="number" id="stabvest_mtu_max" value="1514" required>
+                    <label for="magpie_mtu_max">MTU Max:</label>
+                    <input type="number" id="magpie_mtu_max" value="1514" required>
                 </div>
                 <div class="form-field" style="flex: 1 1 calc(25% - 10px);">
-                    <label for="stabvest_linux_default_ttl">Linux TTL:</label>
-                    <input type="number" id="stabvest_linux_default_ttl" value="64" required>
+                    <label for="magpie_linux_default_ttl">Linux TTL:</label>
+                    <input type="number" id="magpie_linux_default_ttl" value="64" required>
                 </div>
             </div>
         </div>
@@ -354,21 +354,21 @@
             <h2>Scored Service Protection Settings</h2>
             <div class="form-grid">
                 <div class="form-field">
-                    <label for="stabvest_ports">Ports [Int Array]:</label>
-                    <textarea id="stabvest_ports" rows="2">[81]</textarea>
+                    <label for="magpie_ports">Ports [Int Array]:</label>
+                    <textarea id="magpie_ports" rows="2">[81]</textarea>
                 </div>
                 <div class="form-field">
-                    <label for="stabvest_services">Services [Str Array]:</label>
-                    <textarea id="stabvest_services" rows="2">["AxInstSV"]</textarea>
+                    <label for="magpie_services">Services [Str Array]:</label>
+                    <textarea id="magpie_services" rows="2">["AxInstSV"]</textarea>
                 </div>
                 <div class="form-field">
-                    <label for="stabvest_packages">Unix Packages/Windows Optional Features [Str Array]:</label>
-                    <textarea id="stabvest_packages" rows="2">[""]</textarea>
+                    <label for="magpie_packages">Unix Packages/Windows Optional Features [Str Array]:</label>
+                    <textarea id="magpie_packages" rows="2">[""]</textarea>
                 </div>
 
                 <div class="form-field full-width">
-                    <label for="stabvest_service_backups">Windows Service Details [Dict]:</label>
-                    <textarea id="stabvest_service_backups" rows="7">{
+                    <label for="magpie_service_backups">Windows Service Details [Dict]:</label>
+                    <textarea id="magpie_service_backups" rows="7">{
     "PathName": "C:\\Windows\\system32\\svchost.exe -k AxInstSVGroup",
     "StartName": "LocalSystem",
     "Dependencies": null,
@@ -470,40 +470,40 @@ const FIELDS_MAP = {
     'ansible_port': 'ansible_port',
 
     // Deployment Settings
-    'stabvest_deploy_dir_win': 'stabvest_deploy_dir_win',
-    'stabvest_deploy_dir_unix': 'stabvest_deploy_dir_unix',
-    'stabvest_task_create': 'stabvest_task_create',
-    'stabvest_task_name': 'stabvest_task_name',
-    'stabvest_task_interval': 'stabvest_task_interval',
-    'stabvest_agent_executable': 'stabvest_agent_executable',
-    'stabvest_tester_executable': 'stabvest_tester_executable',
-    'stabvest_include_tester': 'stabvest_include_tester',
+    'magpie_deploy_dir_win': 'magpie_deploy_dir_win',
+    'magpie_deploy_dir_unix': 'magpie_deploy_dir_unix',
+    'magpie_task_create': 'magpie_task_create',
+    'magpie_task_name': 'magpie_task_name',
+    'magpie_task_interval': 'magpie_task_interval',
+    'magpie_agent_executable': 'magpie_agent_executable',
+    'magpie_tester_executable': 'magpie_tester_executable',
+    'magpie_include_tester': 'magpie_include_tester',
 
-    // Stabvest Functionality Settings
-    'stabvest_disarm': 'stabvest_disarm', 
-    'stabvest_debug_print': 'stabvest_debug_print', 
-    'stabvest_backupdir': 'stabvest_backupdir',
-    'stabvest_logfile': 'stabvest_logfile',
+    // Magpie Functionality Settings
+    'magpie_disarm': 'magpie_disarm', 
+    'magpie_debug_print': 'magpie_debug_print', 
+    'magpie_backupdir': 'magpie_backupdir',
+    'magpie_logfile': 'magpie_logfile',
     
-    // Stabvest Network/MTU Settings
-    'stabvest_mtu_min': 'stabvest_mtu_min',
-    'stabvest_mtu_default': 'stabvest_mtu_default',
-    'stabvest_mtu_max': 'stabvest_mtu_max',
-    'stabvest_linux_default_ttl': 'stabvest_linux_default_ttl',
+    // Magpie Network/MTU Settings
+    'magpie_mtu_min': 'magpie_mtu_min',
+    'magpie_mtu_default': 'magpie_mtu_default',
+    'magpie_mtu_max': 'magpie_mtu_max',
+    'magpie_linux_default_ttl': 'magpie_linux_default_ttl',
 
-    // Stabvest Agent Configuration
-    'stabvest_agent_name': 'stabvest_agent_name',
-    'stabvest_auth_token': 'stabvest_auth_token',
-    'stabvest_agent_type': 'stabvest_agent_type',
-    'stabvest_server_url': 'stabvest_server_url',
-    'stabvest_server_timeout': 'stabvest_server_timeout',
-    'stabvest_sleeptime': 'stabvest_sleeptime',
+    // Magpie Agent Configuration
+    'magpie_agent_name': 'magpie_agent_name',
+    'magpie_auth_token': 'magpie_auth_token',
+    'magpie_agent_type': 'magpie_agent_type',
+    'magpie_server_url': 'magpie_server_url',
+    'magpie_server_timeout': 'magpie_server_timeout',
+    'magpie_sleeptime': 'magpie_sleeptime',
 
-    // Stabvest Complex Data Structures
-    'stabvest_ports': 'stabvest_ports',
-    'stabvest_services': 'stabvest_services',
-    'stabvest_packages': 'stabvest_packages',
-    'stabvest_service_backups': 'stabvest_service_backups'
+    // Magpie Complex Data Structures
+    'magpie_ports': 'magpie_ports',
+    'magpie_services': 'magpie_services',
+    'magpie_packages': 'magpie_packages',
+    'magpie_service_backups': 'magpie_service_backups'
 };
 
 

@@ -1,4 +1,4 @@
-# Implements unit testing for the stabvest agent
+# Implements unit testing for the magpie agent
 # Usage: run program with python and follow the prompts
 
 from datetime import datetime
@@ -652,7 +652,7 @@ def main():
     while True:
         print("="*LINE_SIZE)
         print(f"={'':^{LINE_SIZE-2}}=")
-        print(f"={'Stabvest Tester':^{LINE_SIZE-2}}=")
+        print(f"={'Magpie Tester':^{LINE_SIZE-2}}=")
         print(f"={'':^{LINE_SIZE-2}}=")
         print("="*LINE_SIZE)
         print()

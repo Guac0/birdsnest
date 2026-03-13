@@ -1,15 +1,15 @@
-# Stabvest Agent
-The Stabvest v2 Agent provides a local agent for assessing and maintaining file integrity on a system, and communicating status updates back to a central visualizer. Each agent provides full service coverage for a core function of the system, such as a Apache2 webserver, by protecting its config files, execution binaries, service, and networking stack.
+# Magpie Agent
+The Magpie v2 Agent provides a local agent for assessing and maintaining file integrity on a system, and communicating status updates back to a central visualizer. Each agent provides full service coverage for a core function of the system, such as a Apache2 webserver, by protecting its config files, execution binaries, service, and networking stack.
 
 ## Applications / configuration:
 * Operator modifies the config section to list a series of files/directories, services, and ports to protect.
 * Automated deployment helper installs the program as an always-running executable that uses a service to restart on failure
 * Multiple agents may be deployed onto a single box to protect multiple services/other custom items. It is intended that each agent act as a self contained executable that protects only one designated suite (such as one for Apache2, another for mysql, etc)
-* Additionally, a helper program is also provided for interactions with the Stabvest agent(s)
+* Additionally, a helper program is also provided for interactions with the Magpie agent(s)
 * Written in Python for cross-platform comaptibility
 
 ## Helper Program
-* Provides a command-line utility for temporarily pausing the stabvest agent and re-registering the current state of protected items (for config changes to the core service). Full assisted agent deletion is not implemented for live deployments for security purposes.
+* Provides a command-line utility for temporarily pausing the magpie agent and re-registering the current state of protected items (for config changes to the core service). Full assisted agent deletion is not implemented for live deployments for security purposes.
 * Written in Python for cross-platform compatibility
 * Supported commands: add, pause, reregister, delete (only in testing environment; code removed from live deployment)
 * Each command must be paired with the name of the agent to modify. The "add" command is used to locally register a new agent to the helper, which consists of the agent's name, service, and executable file location (not the full config details of the client). A list command is intentionally not implemented for security reasons; agents on a machine will call back their details to the central server. TODO: figure out how to protect the agent details at rest in the helper program
@@ -31,7 +31,7 @@ The Stabvest v2 Agent provides a local agent for assessing and maintaining file 
 
 ### Supported Service Protection Methods
 * The Agent automatically detects if the protected service is in a "stopped" state, and will attempt to restart it and set it to auto-restart on failure
-* In the event of a protected service exiting with a failure code, the Stabvest agent will attempt to restart it once (after performing emergency file/serivce/network integrity checks). If this results in another failure, the protection system de-activates until the service correctly comes online again, as this requires manual intervention to remediate.
+* In the event of a protected service exiting with a failure code, the Magpie agent will attempt to restart it once (after performing emergency file/serivce/network integrity checks). If this results in another failure, the protection system de-activates until the service correctly comes online again, as this requires manual intervention to remediate.
 * If the protected service is installed through a package manager, the Agent can re-install it. This is not needed for the config file and main binary as those are typically protected, but may fix missing dependencies that arise from uninstalling the full package. (Linux only)
 
 ### Supported Network Protection Methods

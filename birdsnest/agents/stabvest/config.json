@@ -25,5 +25,5 @@
     "MTU_DEFAULT": 1300,
     "MTU_MAX": 1514,
     "LINUX_DEFAULT_TTL": 64,
-    "AGENT_TYPE": "stabvest"
+    "AGENT_TYPE": "magpie"
 }

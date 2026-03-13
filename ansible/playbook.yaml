@@ -1,5 +1,5 @@
 ---
-# ansible-playbook stabvest_playbook.yaml -i inventory.yaml -t stabvest_server -vv
+# ansible-playbook magpie_playbook.yaml -i inventory.yaml -t magpie_server -vv
 - name: Cleanup
   #hosts: ansible-controller
   hosts: active
@@ -9,18 +9,18 @@
     - cleanup
     - full
     
-- name: Deploy Stabvest Server
+- name: Deploy Magpie Server
   hosts: ansible-controller
   roles:
-    - stabvest_server
+    - magpie_server
   tags:
-    - stabvest
-    - stabvest_server
+    - magpie
+    - magpie_server
     - owlet
     - owlet_server
     - full
 
-- name: Deploy Stabvest Client
+- name: Deploy Magpie Client
   #hosts: iis-winserv22
   hosts: new-test-deb11
   #hosts: new-test-ubu24
@@ -30,10 +30,10 @@
   #hosts: testing-rocky9
   #hosts: testing-alpine
   roles:
-    - stabvest_client
+    - magpie_client
   tags:
-    - stabvest
-    - stabvest_client
+    - magpie
+    - magpie_client
     - full
 
 - name: Deploy Owlet Client
@@ -50,12 +50,12 @@
     - owlet_client
     - full
 
-- name: Deploy Stabvest Client Automated (do not touch)
+- name: Deploy Magpie Client Automated (do not touch)
   hosts: all
   roles:
-    - stabvest_client
+    - magpie_client
   tags:
-    - stabvest_client_auto
+    - magpie_client_auto
 
 - name: Deploy Owlet Client Automated (do not touch)
   hosts: all

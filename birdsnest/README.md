@@ -1,5 +1,5 @@
-# Stabvest Server
-The Stabvest Server provides a single node from which to view and manage Stabvest Agents deployed in your environment. The Server lists the status of each agent and their latest actions, and flags malicious actions (whether they were successfully auto-remediated or not) for operator follow-up. The Server also allows for deployment of new agents and limited interaction with existing agents, mindful of the Server potentially operating in a contested environment and as such limiting access accordingly.
+# Magpie Server
+The Magpie Server provides a single node from which to view and manage Magpie Agents deployed in your environment. The Server lists the status of each agent and their latest actions, and flags malicious actions (whether they were successfully auto-remediated or not) for operator follow-up. The Server also allows for deployment of new agents and limited interaction with existing agents, mindful of the Server potentially operating in a contested environment and as such limiting access accordingly.
 
 ## Server Implementation
 * The server is implemented as a Flask webapp with database backups saved as a json file. It provides web endpoints for agents to use, and a website for human operators.
@@ -8,9 +8,9 @@ The Stabvest Server provides a single node from which to view and manage Stabves
 * The website features a number of dashboards containing information detailed below. The page is seamlessly refreshed every 30 seconds.
 
 ### Incidents Dashboard
-* When a Stabvest Agent detects a malicious action, the appropriate information (agent name, change details, auto-remediation status) are sent to the server. These trigger the creation of an Incident, which is highlighted on the Incidents Dashboard for human operators to view.
+* When a Magpie Agent detects a malicious action, the appropriate information (agent name, change details, auto-remediation status) are sent to the server. These trigger the creation of an Incident, which is highlighted on the Incidents Dashboard for human operators to view.
 * Incidents can be tagged as "in progress", allowing multiple human operators to collaborate without accidentally working on the same alert, and can also be tagged as "completed", which will remove them from the dashboard.
-* Lack of logs from a Stabvest Agent for a prolonged period of time will also trigger an Incident.
+* Lack of logs from a Magpie Agent for a prolonged period of time will also trigger an Incident.
 * Incidents include the agent name, host machine, and incident type (lack of logs / malicious action and the remediation status). By default, Incidents are sorted by date, and different types of incidents (no logs, failed remediation, successful remediation) are color coded and filterable for easy prioritization.
 * Incident creation causes an alert to fire at the top of the page regardless of what dashboard the human operator is currently viewing.
 

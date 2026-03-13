@@ -96,15 +96,15 @@ def beacon_generic(endpoint):
     Otherwise, you can safely discard the return values and return whatever makes sense for your agent's context.
     
     Example:
-    returnMsg, returnCode, registered, agent_id, current_time = beacon_generic("/beacon_stabvest")
+    returnMsg, returnCode, registered, agent_id, current_time = beacon_generic("/beacon_magpie")
     if returnCode != 200:
         return returnMsg, returnCode
     """
 
     data = request.json
     request_info = {
-        "agent_name": data.get("name",""), # Agent name. Should be unique per agent_type per host. Ex: apache2 (for a stabvest agent protecting apache2)
-        "agent_type": data.get("agent_type",""), # Agent type. Ex: stabvest
+        "agent_name": data.get("name",""), # Agent name. Should be unique per agent_type per host. Ex: apache2 (for a magpie agent protecting apache2)
+        "agent_type": data.get("agent_type",""), # Agent type. Ex: magpie
         "hostname": data.get("hostname",""), # Client machine hostname
         "ip": data.get("ip",""), # Client machine ip WITHOUT subnet mask
         "os_name": data.get("os",""), # Client machine OS string in format Ubuntu 10.04 lucid, debian 4.0 , fedora 17 Beefy Miracle, redhat 5.6 Tikanga, redhat 5.9 Final, Windows 10, Windows 2016Server, FreeBSD format

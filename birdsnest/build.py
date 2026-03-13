@@ -14,7 +14,7 @@ from jsmin import jsmin
 # -----------------------------
 SOURCE_ITEMS = [
                 "agents\\owlet\\.gitignore","agents\\owlet\\agent.py","agents\\owlet\\requirements.txt","agents\\owlet\\nssm-2.24_win64.exe",
-                "agents\\stabvest\\.gitignore","agents\\stabvest\\agent.py","agents\\stabvest\\agent_tester.py","agents\\stabvest\\requirements.txt","agents\\stabvest\\nssm-2.24_win64.exe",
+                "agents\\magpie\\.gitignore","agents\\magpie\\agent.py","agents\\magpie\\agent_tester.py","agents\\magpie\\requirements.txt","agents\\magpie\\nssm-2.24_win64.exe",
                 "templates","static","modules",
                 "models.py","server.py","shared.py","utilities.py","worker.py"
                 ]

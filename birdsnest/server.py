@@ -41,11 +41,11 @@ from modules.generic_web import (
 from modules.generic_agent import (
     beacon_generic_handler, beacon_generic, get_pause
 )
-from modules.stabvest_web import (
+from modules.magpie_web import (
     list_git_overall, get_repo_history, get_commit_diff, save_git_note, set_good_branch
 )
-from modules.stabvest_agent import (
-    beacon_stabvest, git_backend
+from modules.magpie_agent import (
+    beacon_magpie, git_backend
 )
 from modules.owlet_web import (
     list_authconfig, list_auth_records, update_global_config, 
@@ -244,9 +244,9 @@ def beacon_generic_redirect():
     # This endpoint shouldn't actually be used. However, it is kept for future proofing a generic callback of some kind.
     return beacon_generic_handler()
 
-@app.route("/agent/beacon/stabvest", methods=["POST"])
-def beacon_stabvest_redirect():
-    return beacon_stabvest()
+@app.route("/agent/beacon/magpie", methods=["POST"])
+def beacon_magpie_redirect():
+    return beacon_magpie()
 
 @app.route("/agent/beacon/owlet", methods=["POST"])
 def beacon_owlet_redirect():
