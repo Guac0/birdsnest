@@ -14,6 +14,8 @@ services:
       - ./key.pem:/etc/nginx/key.pem:ro
     depends_on:
       - webserver
+    networks:
+      - birdsnest_net
 
   webserver:
     image: ghcr.io/ccdc-rit/birdsnest:latest
@@ -29,6 +31,10 @@ services:
     depends_on:
       worker:
         condition: service_healthy
+    networks:
+      - birdsnest_net
+    expose:
+      - "80"
   
   worker:
     image: ghcr.io/ccdc-rit/birdsnest:latest
@@ -43,11 +49,13 @@ services:
       database:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/worker_ready"]
-      interval: 2s
-      timeout: 1s
+      test: ["CMD-SHELL", "test -f /tmp/worker_ready"]
+      interval: 3s
+      timeout: 2s
       retries: 5
       start_period: 10s
+    networks:
+      - birdsnest_net
 
   database:
     image: postgres:18.3
@@ -56,8 +64,8 @@ services:
       POSTGRES_USER: birdsnest
       POSTGRES_PASSWORD: birdsnestpwd
       POSTGRES_DB: birdsnestdb
-    ports:
-      - "5432:5432"
+    #ports:
+    #  - "5432:5432"
     volumes:
       #- pgdata:/var/lib/postgresql/data # <v18
       - pgdata:/var/lib/postgresql # >=v18
@@ -66,7 +74,15 @@ services:
       interval: 3s
       timeout: 2s
       retries: 5
+    networks:
+      - birdsnest_net
+    expose:
+      - "5432"
 
 # docker volume ls; docker volume rm birdsnest_pgdata; docker volume ls; 
 volumes:
   pgdata:
+
+networks:
+  birdsnest_net:
+    driver: bridge

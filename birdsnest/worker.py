@@ -476,9 +476,9 @@ if __name__ == "__main__":
         t.start()
     
     #notifier.notify("READY=1")
-    logger.info("Started background worker threads.")
     with open("/tmp/worker_ready", "w") as f:
         f.write("ready")
+    logger.info("Started background worker threads.")
 
     # Keep the main process alive
     try:
