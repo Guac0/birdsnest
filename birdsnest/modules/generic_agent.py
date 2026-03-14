@@ -140,7 +140,7 @@ def beacon_generic(endpoint):
         auth_token_record = AuthToken.query.filter_by(token=request_info["auth"]).first()
         if not auth_token_record:
             logger.warning(f"{endpoint} - Failed connection from {request.remote_addr} - invalid auth token. Full details: {request_info}")
-            return "unauthorized", 403, False, "", current_time
+            return "unauthorized - no/bad auth", 403, False, "", current_time
 
     try:
         agent = db.session.get(Agent,agent_id)
@@ -158,17 +158,6 @@ def beacon_generic(endpoint):
                 db.session.delete(auth_token_agent_record)
             agent = None # Set to None so it gets re-created in the next block
             logger.info(f"{endpoint} - Reregistering and deleting old agent record for agent {agent_id} with details: {request_info}")
-
-        if not auth_token_agent_record:
-            # let's create a permanent token for this agent
-            new_token_value = os.urandom(6).hex()
-            new_token = AuthTokenAgent(
-                token=new_token_value,
-                added_by="registration",
-                agent_id=agent_id
-            )
-            db.session.add(new_token)
-            db.session.commit()
         
         # Register or update client
         if not agent:
@@ -191,6 +180,17 @@ def beacon_generic(endpoint):
             # UPDATE EXISTING AGENT
             agent.lastSeenTime = current_time
             agent.lastStatus = request_info["newStatus"]
+
+        if not auth_token_agent_record:
+            # let's create a permanent token for this agent
+            new_token_value = os.urandom(6).hex()
+            new_token = AuthTokenAgent(
+                token=new_token_value,
+                added_by="registration",
+                agent_id=agent_id
+            )
+            db.session.add(new_token)
+            db.session.commit()
             
         db.session.commit()
         
@@ -287,7 +287,7 @@ def get_pause():
     #auth_token_record = AuthToken.query.filter_by(token=auth).first()
     if not auth_token_record:
         logger.warning(f"/beacon - Failed connection from {request.remote_addr} - invalid auth token. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
-        return "Unauthorized", 403
+        return "unauthorized - no/bad auth", 403
 
     # Get agent identity
     agent_id = hash_id(agent_name, hostname, ip, os_name)
@@ -295,6 +295,7 @@ def get_pause():
     agent = db.session.get(Agent,agent_id)
 
     if not agent:
-        return "Unauthorized", 403
+        logger.warning(f"/beacon - Failed connection from {request.remote_addr} - no agent. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
+        return "unauthorized - no agent", 403
     
     return str(float(agent.pausedUntil)), 200

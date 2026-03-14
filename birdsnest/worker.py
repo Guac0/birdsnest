@@ -439,6 +439,7 @@ def periodic_ansible(interval=5):
 
 def periodic_cleanup():
     # Periodically removes expired Flask-Sessions from the database
+    logger.info("periodic_cleanup() started.")
     while True:
         try:
             with app.app_context():
