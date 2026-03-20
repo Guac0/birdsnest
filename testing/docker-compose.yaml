@@ -1,0 +1,160 @@
+   
+services:
+  ansible:
+    build:
+      context: .
+      dockerfile_inline: | #debian:bookworm-slim
+        FROM debian:bookworm
+        RUN apt-get update && apt-get install -y ansible openssh-client openssh-server python3 python3-pip sshpass curl nano
+        WORKDIR /ansible
+        RUN mkdir /var/run/sshd
+        RUN useradd -m -s /bin/bash -G sudo blackteam && \
+            echo "blackteam:blackteam" | chpasswd
+        RUN echo "blackteam ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+        EXPOSE 22
+        CMD ["/usr/sbin/sshd", "-D"]
+    volumes:
+      - ../ansible:/ansible
+    networks:
+      - siem_net
+    container_name: ansible
+
+  # Target Nodes
+  ubuntu:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM ubuntu:22.04
+        # Install standard tools (apt works for both Ubuntu and Debian)
+        RUN apt-get update && apt-get install -y \
+            python3 \
+            openssh-server \
+            sudo \
+            curl \
+            nano \
+            apache2 \
+            && rm -rf /var/lib/apt/lists/*
+
+        # Setup SSH run directory
+        RUN mkdir /var/run/sshd
+
+        # Create 'blackteam' user with sudo privileges
+        # -m: create home, -s: shell, -G: add to sudo group
+        RUN useradd -m -s /bin/bash -G sudo blackteam && \
+            echo "blackteam:blackteam" | chpasswd
+
+        # Ensure sudoers doesn't require password for the blackteam (useful for automation)
+        RUN echo "blackteam ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+        # Expose SSH port
+        EXPOSE 22
+        EXPOSE 80
+
+        # Start SSH service
+        CMD ["/usr/sbin/apache2", "-D", "FOREGROUND"]
+        CMD ["/usr/sbin/sshd", "-D"]
+    networks: [siem_net]
+    container_name: ubuntu
+
+  debian:
+    build:
+      context: .
+      dockerfile_inline: | #debian:bookworm-slim
+        FROM debian:bookworm
+        # Install standard tools (apt works for both Ubuntu and Debian)
+        RUN apt-get update && apt-get install -y \
+            python3 \
+            openssh-server \
+            sudo \
+            curl \
+            nano \
+            apache2 \
+            && rm -rf /var/lib/apt/lists/*
+
+        # Setup SSH run directory
+        RUN mkdir /var/run/sshd
+
+        # Create 'blackteam' user with sudo privileges
+        # -m: create home, -s: shell, -G: add to sudo group
+        RUN useradd -m -s /bin/bash -G sudo blackteam && \
+            echo "blackteam:blackteam" | chpasswd
+
+        # Ensure sudoers doesn't require password for the blackteam (useful for automation)
+        RUN echo "blackteam ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+        # Expose SSH port
+        EXPOSE 22
+        EXPOSE 80
+
+        # Start SSH service
+        CMD ["/usr/sbin/apache2", "-D", "FOREGROUND"]
+        CMD ["/usr/sbin/sshd", "-D"]
+    networks: [siem_net]
+    container_name: debian
+
+  alpine:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM alpine:latest
+        # Install necessary packages
+        RUN apk add --no-cache python3 shadow openssh sudo curl nano apache2
+        
+        # Setup SSH
+        RUN ssh-keygen -A && mkdir /var/run/sshd
+        
+        # Create 'blackteam' user
+        # Alpine adduser: -D (no pass prompt), -s (shell), -G (group)
+        RUN adduser -D -s /bin/sh blackteam && \
+            echo "blackteam:blackteam" | chpasswd && \
+            addgroup blackteam wheel
+            
+        # Enable passwordless sudo for wheel group
+        RUN echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+        
+        EXPOSE 22
+        EXPOSE 80
+
+        CMD ["/usr/sbin/apache2", "-D", "FOREGROUND"]
+        CMD ["/usr/sbin/sshd", "-D"]
+    networks: [siem_net]
+    container_name: alpine
+
+  rocky:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM rockylinux:9
+        # Install necessary packages - no curl as that errors
+        RUN dnf clean all && \
+          dnf makecache && \
+          dnf install -y \
+              python3 \
+              shadow-utils \
+              sudo \
+              openssh-server \
+              httpd \
+              nano && \
+          dnf clean all
+            
+        # Setup SSH
+        RUN ssh-keygen -A && mkdir /var/run/sshd
+        
+        # Create 'blackteam' user
+        # Rocky useradd: -m (home), -G (group)
+        RUN useradd -m -s /bin/bash -G wheel blackteam && \
+            echo "blackteam:blackteam" | chpasswd
+            
+        # Enable passwordless sudo for wheel group
+        RUN echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+        
+        EXPOSE 22
+        EXPOSE 80
+        CMD ["/usr/sbin/httpd", "-D", "FOREGROUND"]
+        CMD ["/usr/sbin/sshd", "-D"]
+    networks: [siem_net]
+    container_name: rocky
+
+networks:
+  siem_net:
+    driver: bridge

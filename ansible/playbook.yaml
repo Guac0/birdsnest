@@ -1,65 +1,51 @@
 ---
-# ansible-playbook magpie_playbook.yaml -i inventory.yaml -t magpie_server -vv
-- name: Cleanup
-  #hosts: ansible-controller
-  hosts: active
+- name: Populate Users
+  hosts: all
   roles:
-    - cleanup
+    - setup-boxes
+  vars:
+    lab_users:
+      - { name: "twilight", admin: yes, lock: no, login: yes }
+      - { name: "pinkie", admin: no, lock: no, login: yes }
+      - { name: "dash", admin: no, lock: yes, login: no }
+      - { name: "rarity", admin: yes, lock: no, login: no }
+      - { name: "applejack", admin: no, lock: no, login: yes }
+      - { name: "fluttershy", admin: no, lock: yes, login: no }
+      - { name: "spike", admin: no, lock: no, login: no }
+      - { name: "celestia", admin: yes, lock: no, login: yes }
+      - { name: "luna", admin: yes, lock: yes, login: no }
+      - { name: "derpy", admin: no, lock: no, login: yes }
   tags:
-    - cleanup
-    - full
+    - setup
     
-- name: Deploy Magpie Server
-  hosts: ansible-controller
-  roles:
-    - magpie_server
-  tags:
-    - magpie
-    - magpie_server
-    - owlet
-    - owlet_server
-    - full
-
-- name: Deploy Magpie Client
-  #hosts: iis-winserv22
-  hosts: new-test-deb11
-  #hosts: new-test-ubu24
-  #hosts: new-test-rocky9
-  #hosts: testing-deb12
-  #hosts: testing-centos8
-  #hosts: testing-rocky9
-  #hosts: testing-alpine
-  roles:
-    - magpie_client
-  tags:
-    - magpie
-    - magpie_client
-    - full
-
-- name: Deploy Owlet Client
-  #hosts: iis-winserv22
-  hosts: testing-ubu24
-  #hosts: testing-deb12
-  #hosts: testing-centos8
-  #hosts: testing-rocky9
-  #hosts: testing-alpine
-  roles:
-    - owlet
-  tags:
-    - owlet
-    - owlet_client
-    - full
-
-- name: Deploy Magpie Client Automated (do not touch)
+- name: Deploy Birdsnest
   hosts: all
   roles:
-    - magpie_client
+    - birdsnest
   tags:
-    - magpie_client_auto
+    - birdsnest
+    - full
 
-- name: Deploy Owlet Client Automated (do not touch)
+- name: Deploy Magpie
   hosts: all
   roles:
-    - owlet
+    - birdsnest-magpie
   tags:
-    - owlet_auto
+    - magpie
+    - full
+
+- name: Deploy Owlet
+  hosts: all
+  roles:
+    - birdsnest-owlet
+  tags:
+    - owlet
+    - full
+
+- name: Deploy Kingfisher
+  hosts: all
+  roles:
+    - birdsnest-kingfisher
+  tags:
+    - kingfisher
+    - full

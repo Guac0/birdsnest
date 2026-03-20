@@ -1,0 +1,35 @@
+---
+- name: Create users
+  user:
+    name: "{{ item.name }}"
+    password: "{{ 'password123' | password_hash('sha512') }}"
+    groups: "{{ 'wheel' if (ansible_os_family == 'RedHat' or ansible_os_family == 'Alpine') else 'sudo' if item.admin else '' }}"
+    append: yes
+    state: present
+  loop: "{{ lab_users }}"
+
+- name: Lock specified accounts
+  shell: "usermod -L {{ item.name }}"
+  when: item.lock
+  loop: "{{ lab_users }}"
+
+- name: Simulate login (touch lastlog)
+  file:
+    path: "/var/log/lastlog"
+    state: touch
+  when: item.login
+  loop: "{{ lab_users }}"
+
+- name: Install apache2 package
+  ansible.builtin.apt:
+    name: apache2
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Ensure apache2 is started and enabled on boot
+  ansible.builtin.service:
+    name: apache2
+    state: started
+    enabled: yes
+  when: ansible_os_family == "Debian"
