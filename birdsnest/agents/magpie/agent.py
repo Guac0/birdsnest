@@ -20,6 +20,7 @@ from pathlib import Path
 import ast
 import sys
 import signal
+import hashlib
 #import winreg
 #import win32serviceutil
 #import win32service
@@ -439,9 +440,7 @@ def hash_id(*args):
     # hash any number of args so that we have a single value to use as the id that remains unique if multiple items have similar fields
     # Does not need to be secure
     combined = "|".join(map(str, args))
-    encoded = base64.b64encode(combined.encode("utf-8")).decode("utf-8")
-    return encoded
-    #return hashlib.sha256(f"{ip}|{hostname}".encode()).hexdigest() #sha256 hash - too complex to use on frontend
+    return hashlib.sha256(combined.encode("utf-8")).hexdigest() 
 
 def run_powershell(cmd,noisy=True):
     """
@@ -670,6 +669,7 @@ def send_message(endpoint,oldStatus=True,newStatus=True,message="",systemInfo=ge
     Args: message(any)
     Returns: status(Bool)
     """
+    global AUTH_TOKEN
     if not SERVER_URL:
         # Server comms are intentionally disabled
         # Maybe redirect to print_debug instead?
@@ -711,7 +711,7 @@ def send_message(endpoint,oldStatus=True,newStatus=True,message="",systemInfo=ge
                 #result = json.loads(response_body)
                 print_debug(f"send_message({url}): sent msg to server: [{oldStatus,newStatus,message}]")
                 response_text = response.read().decode('utf-8')
-                if endpoint == "agent/beacon/owlet":
+                if endpoint == "agent/beacon/magpie":
                     if response_text != AUTH_TOKEN:
                         AUTH_TOKEN = response_text
                         print_debug(f"send_message({url}): updating auth token value to new value from server {AUTH_TOKEN}")
@@ -1091,7 +1091,7 @@ def interface_mtu_linux(interface=interface_get_primary(), mtu_minimum=MTU_MIN, 
     # 5. MTU is within the acceptable range
     return True, True, []
 
-def interface_ttl(interface=interface_get_primary()):
+def interface_ttl():
     """
     Wrapper for interface_ttl_*
 
@@ -1103,9 +1103,9 @@ def interface_ttl(interface=interface_get_primary()):
     system = platform.system()
 
     if system == "Windows":
-        return interface_ttl_windows(interface)
+        return interface_ttl_windows()
     else:
-        return interface_ttl_linux(interface)
+        return interface_ttl_linux()
 
 def interface_ttl_windows():
     """
@@ -2202,6 +2202,7 @@ def get_latest_commit_stats(branch_name, repo_dir):
 def file_protect_main(repo_dir, protected_folders):
     """Main logic for the agent sync loop supporting multiple paths."""
     try:
+        assert len(repo_dir) > 60, f"invalid repo_dir - suspiciously short (may lead to bad path). value: {repo_dir}"
         # 1. Standardize local repo state
         run_git(["checkout", "good"], repo_dir)
         run_git(["pull", "origin", "good"], repo_dir)
@@ -3167,7 +3168,7 @@ def main(stop_event=None):
     systemInfo = get_system_details()
     agent_id = hash_id(AGENT_NAME, systemInfo["hostname"], systemInfo["ipadd"], systemInfo["os"])
     repo_url = os.path.join(f"{SERVER_URL}agent/git",f"{agent_id}.git")
-    repo_dir = f"{os.path.join(os.path.dirname(os.path(__file__).resolve()),f'{agent_id}.git')}"
+    repo_dir = f"{os.path.join(os.path.dirname(os.path.abspath(__file__)),f'{agent_id}.git')}"
 
     send_message("agent/beacon/magpie",True,True,f"Register")
     

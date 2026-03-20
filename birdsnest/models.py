@@ -3,6 +3,7 @@
 from flask_sqlalchemy import SQLAlchemy
 import time
 from datetime import datetime
+from sqlalchemy import func
 
 from shared import (
 setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
@@ -43,7 +44,9 @@ class Agent(db.Model):
 
     messages = db.relationship('Message', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == Message.agent_id")
     incidents = db.relationship('Incident', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == Incident.agent_id")
-    messages = db.relationship('AuthTokenAgent', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == AuthTokenAgent.agent_id")
+    auth_token_agents = db.relationship('AuthTokenAgent', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == AuthTokenAgent.agent_id")
+    agent_tasks = db.relationship('AgentTask', backref='agent', lazy='select', primaryjoin="Agent.agent_id == AgentTask.agent_id")
+    system_users = db.relationship('SystemUser', backref='agent', lazy='select', primaryjoin="Agent.agent_id == SystemUser.agent_id")
 
     def __repr__(self):
         return f"<Agent {self.agent_name} ({'Online' if self.lastStatus else 'Down'})>"
@@ -254,3 +257,46 @@ class AnsibleQueue(db.Model):
     extra_vars = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class AgentTask(db.Model):
+    __tablename__ = 'agent_tasks'
+
+    id = db.Column(db.Integer, primary_key=True)
+    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
+    local_index = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    task = db.Column(db.String(255), nullable=False)
+    result = db.Column(db.Text, default="", nullable=False)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if self.local_index is None:
+            # Atomic increment: find the current max index for THIS agent and add 1
+            last_index = db.session.query(func.max(AgentTask.local_index)).filter(
+                AgentTask.agent_id == self.agent_id
+            ).scalar()
+            self.local_index = (last_index or 0) + 1
+    def to_dict(self):
+        return {column.name: getattr(self, column.name) for column in self.__table__.columns}
+
+class SystemUser(db.Model):
+    __tablename__ = 'system_users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
+    local_index = db.Column(db.Integer, nullable=False)
+    username = db.Column(db.String(64), nullable=False)
+    admin = db.Column(db.Boolean, nullable=False)
+    locked = db.Column(db.Boolean, nullable=False)
+    last_login = db.Column(db.Integer, nullable=False)
+    account_type = db.Column(db.String(8), nullable=False)
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if self.local_index is None:
+            # Atomic increment: find the current max index for THIS agent and add 1
+            last_index = db.session.query(func.max(SystemUser.local_index)).filter(
+                SystemUser.agent_id == self.agent_id
+            ).scalar()
+            self.local_index = (last_index or 0) + 1
+    def to_dict(self):
+        return {column.name: getattr(self, column.name) for column in self.__table__.columns}

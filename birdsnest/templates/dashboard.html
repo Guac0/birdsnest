@@ -82,8 +82,10 @@ header p.lead{margin:0;color:var(--muted);font-size:14px;}
     <a href="/web/configmgmt">Config Mgmt</a>
     <a href="/web/authrecords">Auth Records</a>
     <a href="/web/authconfig">Auth Config</a>
+    <a href="/web/users">User Mgmt</a>
     <a href="/web/agents">Agents</a>
     <a href="/web/messages">Messages</a>
+    <a href="/web/tasks">Agent Tasks</a>
     <a href="/web/deployment">Deployment</a>
     <a href="/web/management">Management</a>
   </section>
@@ -122,6 +124,8 @@ header p.lead{margin:0;color:var(--muted);font-size:14px;}
     <div class="stat-card">
       <h3>System Queues</h3>
       <p class="desc">Pending messages and outbound notifications.</p>
+      <p class="value" id="agentTaskCountPending">Tasks (Pending): ...</p>
+      <p class="value" id="agentTaskCountSent">Tasks (Sent): ...</p>
       <p class="value" id="webhookCount">Webhooks: ...</p>
       <p class="value" id="ansibleCount">Ansible: ...</p>
       <p class="desc">Total Messages: <span id="messagesTotal">...</span></p>
@@ -211,6 +215,8 @@ async function fetchStats(){
     updateStatsElement('agentsActive', data.agents?.active ?? 0);
     updateStatsElement('agentsStale', data.agents?.stale ?? 0);
     updateStatsElement('agentsPaused', data.agents?.paused ?? 0);
+    updateStatsElement('agentTaskCountPending', `Tasks (Pending): ${data.webhooks?.agent_task_count_pending ?? 0}`);
+    updateStatsElement('agentTaskCountSent', `Tasks (Sent): ${data.webhooks?.agent_task_count_sent ?? 0}`);
     updateStatsElement('webhookCount', `Webhooks: ${data.webhooks?.queue_count ?? 0}`);
     updateStatsElement('ansibleCount', `Ansible: ${data.webhooks?.ansible_count ?? 0}`);
 

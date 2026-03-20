@@ -253,26 +253,12 @@ def interface_get_primary():
 def interface_get_primary_windows(ip):
     """
     Gets interface name on linux using "ip" or "ifconfig"
-    TODO: make this not be AI slop
     Returns: interface(String) or None
     """
-    output = subprocess.check_output(["ipconfig"], text=True, encoding="utf-8", errors="ignore")
-
-    current_iface = None
-    for line in output.splitlines():
-        line = line.strip()
-
-        # Interface header (e.g., "Ethernet adapter Ethernet:")
-        m = re.match(r"(.+?) adapter (.+?):", line, re.IGNORECASE)
-        if m:
-            current_iface = m.group(2)
-            continue
-
-        # IPv4 Address line
-        if "IPv4 Address" in line and ip in line:
-            return current_iface
-
-    return None
+    query = f"Get-NetIPAddress -IPAddress '{ip}' | Select-Object -ExpandProperty InterfaceAlias"
+    # Assuming run_powershell is defined in your project
+    output = run_powershell(query).strip()
+    return output if output else None
 
 def interface_get_primary_linux(ip):
     """
@@ -280,47 +266,32 @@ def interface_get_primary_linux(ip):
     Uses shutil.which to locate binaries dynamically across different distributions.
     """
     system = platform.system()
-    
-    # 1. Try 'ip addr' first (Standard for modern Linux: Debian, RHEL, Alpine)
-    # We check for the 'ip' binary regardless of the 'system' being Linux, 
-    # but specifically skip for FreeBSD as 'ip' usually refers to something else there.
     if system == "Linux":
         ip_bin = shutil.which("ip")
         if ip_bin:
             try:
-                output = subprocess.check_output([ip_bin, "-4", "addr"], text=True)
-                iface = None
-                for line in output.splitlines():
-                    # Match interface headers: "2: eth0: <BROADCAST...>"
-                    header_match = re.match(r"^\d+:\s+([^:@\s]+)", line.strip())
-                    if header_match:
-                        iface = header_match.group(1)
-                    # Match the IP line associated with the above interface
-                    if "inet " in line and ip in line:
-                        return iface
+                output = subprocess.check_output([ip_bin, "-j", "addr"], text=True)
+                addr_data = json.loads(output)
+                for iface in addr_data:
+                    for addr in iface.get("addr_info", []):
+                        if addr.get("local") == ip:
+                            return iface.get("ifname")
             except Exception:
                 pass
 
-    # 2. Try 'ifconfig' (Primary for FreeBSD, fallback for Alpine/BusyBox)
     ifconfig_bin = shutil.which("ifconfig")
     if ifconfig_bin:
         try:
             output = subprocess.check_output([ifconfig_bin], text=True)
             iface = None
-            
             for line in output.splitlines():
-                # Headers start at the beginning of the line: "eth0: ..." or "em0: ..."
-                # This regex works for both BSD-style and Linux-style ifconfig output.
                 header_match = re.match(r"^([a-zA-Z0-9._-]+)[:\s]", line)
                 if header_match:
                     iface = header_match.group(1)
-                
-                # Check for the IP in the indented lines following the header
                 if "inet " in line and ip in line:
                     return iface
         except Exception:
             pass
-
     return None
 
 def get_system_details():
@@ -1057,6 +1028,7 @@ class AuthWatcher:
             print_debug(f"save_state(): Failed to save state: {e}")
 
     def analyze_log(self):
+        self.temp_signatures = set()
         new_last_scan = self.load_state()
         self.last_scan_time = new_last_scan
         sent_msg = False
@@ -1352,7 +1324,7 @@ def main(stop_event=None):
         log_path = AUTH_LOG_PATH
     if AUTH_PARSER:
         parser = PARSER_MAP.get(AUTH_PARSER.lower(), parser)
-    watcher = watcherObj(parser,log_path)
+    watcher = watcherObj(parser(),log_path)
     print_debug(f"Selected parser {parser} and log path {log_path}")
 
     while True:

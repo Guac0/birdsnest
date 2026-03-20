@@ -8,7 +8,7 @@ import shutil
 from models import (
 db,
 Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
-AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
+AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
 setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
@@ -55,9 +55,24 @@ def beacon_magpie():
         logger.error(f"/beacon_magpie - Failed to create message for agent {agent_id}: {e}")
         # Not returning an error, as this is secondary / recoverable (hopefully...)
 
+    # Trigger Incident if Status Change is Critical
+    if oldStatus == False:
+        incident_data = {
+            "timestamp": current_time,
+            "agent_id": agent_id,
+            "oldStatus": oldStatus,
+            "newStatus": newStatus,
+            "message": message,
+            "sla": 0
+        }
+        create_incident(incident_data)
+
     if registered:
         # Create (new) git repo
         repo_path = os.path.join(GIT_PROJECT_ROOT,f"{agent_id}.git")
+        if len(repo_path) < 60:
+            logger.error(f"/agent/beacon/magpie - calculated repo_path is unusually short (parsing error?). agent_id: {agent_id}, repo_path: {repo_path}")
+            return "bad calculation for repo_path", 500
         if os.path.exists(repo_path):
             if os.path.isdir(repo_path):
                 shutil.rmtree(repo_path)
@@ -72,18 +87,6 @@ def beacon_magpie():
         except subprocess.CalledProcessError as e:
             logger.error(f"/beacon_magpie: Error occurred when creating git repo {repo_path} - {e.stderr}")
             return returnMsg, 500
-
-    # Trigger Incident if Status Change is Critical
-    if oldStatus == False:
-        incident_data = {
-            "timestamp": current_time,
-            "agent_id": agent_id,
-            "oldStatus": oldStatus,
-            "newStatus": newStatus,
-            "message": message,
-            "sla": 0
-        }
-        create_incident(incident_data)
 
     return returnMsg, 200
 

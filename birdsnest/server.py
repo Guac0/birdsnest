@@ -13,7 +13,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from models import (
 db,
 Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
-AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
+AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
 setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
@@ -31,15 +31,17 @@ from modules.generic_web import (
     login,
     dashboard_summary,
     list_users, list_users_simple, list_tokens, list_tokens_agent,
-    list_tokens_number, list_tokens_agent_number, list_agents, list_messages, 
+    list_tokens_number, list_tokens_agent_number, list_agents, list_messages,
     list_incidents, list_ansiblevars, list_logfile,
-    list_ansibleresult, set_ansiblevars, 
+    list_ansibleresult, set_ansiblevars,
     agent_pause, agent_resume, add_incident, add_user,
     delete_token, delete_token_agent, update_incident_tag, update_incident_assignee,
-    update_incident_sla, add_ansible, add_token, delete_user
+    update_incident_sla, add_ansible, add_token, delete_user,
+    get_task, get_tasks_all, add_task, add_task_bulk
 )
 from modules.generic_agent import (
-    beacon_generic_handler, beacon_generic, get_pause
+    beacon_generic_handler, beacon_generic, get_pause,
+    get_task_agent, set_task_result
 )
 from modules.magpie_web import (
     list_git_overall, get_repo_history, get_commit_diff, save_git_note, set_good_branch
@@ -55,6 +57,12 @@ from modules.owlet_web import (
 )
 from modules.owlet_agent import (
     beacon_owlet, get_config, get_global_config_agent
+)
+from modules.kingfisher_agent import (
+    beacon_kingfisher
+)
+from modules.kingfisher_web import (
+    list_system_users, list_system_users_all
 )
 
 # === Set Flask Config ===
@@ -175,6 +183,19 @@ def page_management():
     logger.info(f"management - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("management.html")
 
+@app.route("/web/users")
+@login_required
+def page_users():
+    logger.info(f"users - Successful connection from {current_user.id} at {request.remote_addr}")
+    return render_template("users.html")
+
+@app.route("/web/tasks")
+@login_required
+@admin_required
+def page_tasks():
+    logger.info(f"tasks - Successful connection from {current_user.id} at {request.remote_addr}")
+    return render_template("tasks.html")
+
 @app.route("/web/authrecords")
 @login_required
 def page_authrecords():
@@ -252,9 +273,21 @@ def beacon_magpie_redirect():
 def beacon_owlet_redirect():
     return beacon_owlet()
 
+@app.route("/agent/beacon/kingfisher", methods=["POST"])
+def beacon_kingfisher_redirect():
+    return beacon_kingfisher()
+
 @app.route("/agent/get_pause", methods=["POST"])
 def get_pause_redirect():
     return get_pause()
+
+@app.route("/agent/get_task", methods=["POST"])
+def get_task_agent_redirect():
+    return get_task_agent()
+
+@app.route("/agent/set_task_result", methods=["POST"])
+def set_task_result_redirect():
+    return set_task_result()
 
 @app.route('/agent/list_authconfig_agent', methods=['POST'])
 def get_config_redirect():
@@ -394,6 +427,26 @@ def list_logfile_redirect(filepath=LOGFILE, lines=50):
 def list_ansibleresult_redirect():
     return list_ansibleresult()
 
+@app.route("/web/get_task", methods=["POST"])
+@login_required
+def get_tasks_all_redirect():
+    return get_tasks_all()
+
+@app.route("/web/get_tasks_all", methods=["POST"])
+@login_required
+def get_task_redirect():
+    return get_task()
+
+@app.route("/web/list_system_users", methods=["POST"])
+@login_required
+def list_system_users_redirect():
+    return list_system_users()
+
+@app.route("/web/list_system_users_all", methods=["POST"])
+@login_required
+def list_system_users_all_redirect():
+    return list_system_users_all()
+
 # === FRONTEND INTERACTION ===
 
 @app.route("/web/set_ansiblevars", methods=["POST"])
@@ -527,6 +580,18 @@ def update_incident_sla_redirect():
 @analyst_required
 def add_ansible_redirect():
     return add_ansible()
+
+@app.route("/web/add_task", methods=["POST"])
+@login_required
+@analyst_required
+def add_task_redirect():
+    return add_task()
+
+@app.route("/web/add_task_bulk", methods=["POST"])
+@login_required
+@analyst_required
+def add_task_bulk_redirect():
+    return add_task_bulk()
 
 # =================================
 # ============= MAIN ==============

@@ -12,7 +12,7 @@ from sqlalchemy import func
 from models import (
 db,
 Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
-AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
+AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
 setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,

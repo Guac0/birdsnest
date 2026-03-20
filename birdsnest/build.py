@@ -13,6 +13,7 @@ from jsmin import jsmin
 # CONFIGURATION
 # -----------------------------
 SOURCE_ITEMS = [
+                "agents\\kingfisher\\.gitignore","agents\\kingfisher\\agent.py","agents\\kingfisher\\requirements.txt","agents\\kingfisher\\nssm-2.24_win64.exe",
                 "agents\\owlet\\.gitignore","agents\\owlet\\agent.py","agents\\owlet\\requirements.txt","agents\\owlet\\nssm-2.24_win64.exe",
                 "agents\\magpie\\.gitignore","agents\\magpie\\agent.py","agents\\magpie\\agent_tester.py","agents\\magpie\\requirements.txt","agents\\magpie\\nssm-2.24_win64.exe",
                 "templates","static","modules",

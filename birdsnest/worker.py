@@ -22,7 +22,7 @@ GIT_PROJECT_ROOT, GIT_BACKEND, DATABASE_CREDS, DATABASE_LOCATION, DATABASE_DB
 from models import (
 db,
 Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
-AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
+AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from utilities import (
 insert_initial_data, create_db_tables, serialize_model, is_safe_path,

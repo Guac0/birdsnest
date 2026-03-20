@@ -12,7 +12,7 @@ from sqlalchemy import func
 from models import (
 db,
 Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
-AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue
+AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
 setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
@@ -85,7 +85,9 @@ def dashboard_summary():
             },
             "webhooks": {
                 "queue_count": WebhookQueue.query.count() or 0,
-                "ansible_count": AnsibleQueue.query.count() or 0
+                "ansible_count": AnsibleQueue.query.count() or 0,
+                "agent_task_count_pending": AgentTask.query.filter_by(result="PENDING").count() or 0,
+                "agent_task_count_sent": AgentTask.query.filter_by(result="SENT").count() or 0
             },
             "auth_globals": {str(c.key): bool(c.value) for c in AuthConfigGlobal.query.all()},
             "auth_configs": {str(t): count for t, count in auth_config_raw},
@@ -780,5 +782,167 @@ def add_ansible():
     # We use the auto-increment ID as the taskID
     taskID = new_task.id
     
-    logger.info(f"/add_ansible - Task {taskID} queued via DB for IP {dest_ip}")
+    logger.info(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr} - Task {taskID} queued via DB for IP {dest_ip}")
     return jsonify({"status": "ok", "task": taskID}), 200
+
+def get_task():
+    try:
+        data = request.get_json(silent=True) or {}
+        task_id = data.get('id')
+        agent_id = data.get('agent_id')
+
+        query = AgentTask.query
+
+        # 1. Filter by specific Task ID (Highest specificity)
+        if task_id:
+            task = query.get(task_id)
+            if not task:
+                logger.warning(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - task not found for id {task_id}")
+                return jsonify({"error": "Task not found"}), 404
+            logger.info(f"/get_task - Successful connection from {current_user.id} at {request.remote_addr} - returning task {task_id}")
+            return jsonify(task.to_dict()), 200
+
+        # 2. Filter by Agent ID
+        if agent_id:
+            tasks = query.filter_by(agent_id=agent_id).order_by(AgentTask.created_at.desc()).all()
+        
+        # 3. Return All (No filters provided)
+        else:
+            tasks = query.order_by(AgentTask.created_at.desc()).all()
+
+        returned_tasks = [t.to_dict() for t in tasks]
+        logger.info(f"/get_task - Successful connection from {current_user.id} at {request.remote_addr} - returning all tasks for agent {agent_id} ({len(returned_tasks)} tasks)")
+        return jsonify(returned_tasks), 200
+
+    except Exception as e:
+        logger.error(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - internal error when fetching (task {task_id}) or (agent_id {agent_id}): {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+def get_tasks_all():
+    try:
+        # 1. Fetch all agents and their tasks in a single optimized query
+        # We order by Agent ID, and nested tasks are typically handled by the relationship logic
+        agents = Agent.query.options(joinedload(Agent.agent_tasks)).all()
+
+        results = []
+        for agent in agents:
+            # Skip the custom dashboard agent
+            if agent.agent_id == 'custom':
+                continue
+
+            # 2. Build the nested structure
+            # We sort the tasks by created_at descending so the newest tasks appear first in the list
+            sorted_tasks = sorted(
+                agent.agent_tasks, 
+                key=lambda x: x.created_at, 
+                reverse=True
+            )
+
+            agent_data = {
+                "agent_id": agent.agent_id,
+                "hostname": agent.hostname,
+                "ip": agent.ip,
+                "os": agent.os,
+                "lastSeenTime": agent.lastSeenTime,
+                "task_count": len(sorted_tasks),
+                # Nest the tasks here
+                "tasks": [t.to_dict() for t in sorted_tasks]
+            }
+            results.append(agent_data)
+
+        logger.info(
+            f"/get_tasks_all - Successful connection from {current_user.id} at "
+            f"{request.remote_addr} - Returning {len(results)} agents with nested task history"
+        )
+        
+        return jsonify(results), 200
+
+    except Exception as e:
+        logger.error(
+            f"/get_tasks_all - Failed connection from {current_user.id} at "
+            f"{request.remote_addr} - internal error: {e}"
+        )
+        return jsonify({"error": "Internal server error"}), 500
+    
+def add_task():
+    try:
+        data = request.get_json()
+        
+        # Validation
+        agent_id = data.get('agent_id')
+        task_command = data.get('task')
+
+        if not agent_id or not task_command:
+            logger.warning(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - missing agent_id ({agent_id}) and/or task ({task_command}) fields")
+            return jsonify({"error": "agent_id and task are required fields"}), 400
+
+        # Check if agent exists before queueing (Optional but recommended)
+        agent = Agent.query.get(agent_id)
+        if not agent:
+            logger.warning(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - target agent_id {agent_id} does not exist")
+            return jsonify({"error": "Target agent does not exist"}), 404
+
+        # Create new task
+        # The __init__ in AgentTask handles the local_index incrementing
+        new_task = AgentTask(
+            agent_id=agent_id,
+            task=task_command,
+            result="PENDING"
+        )
+
+        db.session.add(new_task)
+        db.session.commit()
+
+        logger.info(f"/get_task - Successful connection from {current_user.id} at {request.remote_addr} - created task {new_task.id}")
+        return jsonify({
+            "message": "Task queued successfully",
+            "task_id": new_task.id,
+            "local_index": new_task.local_index
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - internal error when adding task for agent_id {agent_id} with task {task_command}: {e}")
+        return jsonify({"error": "Failed to queue task"}), 500
+    
+def add_task_bulk():
+    """
+    Enqueues the same task for every agent currently in the database.
+    """
+    try:
+        data = request.get_json()
+        task_command = data.get('task')
+
+        if not task_command:
+            return jsonify({"error": "Task command is required"}), 400
+
+        # Get all agent IDs
+        agents = Agent.query.all()
+        if not agents:
+            return jsonify({"error": "No agents found"}), 404
+
+        new_tasks = []
+        for agent in agents:
+            # We create a new instance for each agent
+            # The AgentTask __init__ handles the local_index per agent_id
+            t = AgentTask(
+                agent_id=agent.agent_id,
+                task=task_command,
+                result="PENDING"
+            )
+            new_tasks.append(t)
+
+        db.session.add_all(new_tasks)
+        db.session.commit()
+
+        logger.info(f"/add_task_bulk - {current_user.id} queued '{task_command}' for {len(new_tasks)} agents")
+        
+        return jsonify({
+            "message": f"Task queued for {len(new_tasks)} agents",
+            "count": len(new_tasks)
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/add_task_bulk - Error: {e}")
+        return jsonify({"error": "Internal server error"}), 500
