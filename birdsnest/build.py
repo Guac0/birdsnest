@@ -19,7 +19,8 @@ SOURCE_ITEMS = [
                 "templates","static","modules",
                 "models.py","server.py","shared.py","utilities.py","worker.py"
                 ]
-BUILD_DIR = "build_assets"
+#BUILD_DIR = "build_assets"
+BUILD_DIR = "..\\ansible\\roles\\birdsnest\\files"
 
 #TARGET_FILE = "server.py"
 #NUITKA_ARGS = [
