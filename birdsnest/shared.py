@@ -101,13 +101,6 @@ AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL = CONFIG["AUTHCONFIG_LOG_ATTEMPT_SUCCESSFUL"]
 CREATE_TEST_DATA = CONFIG["CREATE_TEST_DATA"]
 SECRET_KEY = CONFIG["SECRET_KEY"]
 
-# Path to the git-http-backend executable
-# On Linux: /usr/lib/git-core/git-http-backend
-# On Windows: C:/Program Files/Git/mingw64/libexec/git-core/git-http-backend.exe
-if "windows" in platform.system().lower():
-    GIT_BACKEND = "C:/Program Files/Git/mingw64/libexec/git-core/git-http-backend.exe"
-else:
-    GIT_BACKEND = "/usr/lib/git-core/git-http-backend"
 GIT_PROJECT_ROOT = os.path.join(os.path.dirname(Path(__file__).resolve()),"repos")
 if not os.path.exists(GIT_PROJECT_ROOT):
     os.mkdir(GIT_PROJECT_ROOT)
@@ -153,6 +146,19 @@ def setup_logging(argname="default"): #note that argname is now unused
     
     return logger
 
+# Path to the git-http-backend executable
+# On Linux: /usr/lib/git-core/git-http-backend
+# On Windows: C:/Program Files/Git/mingw64/libexec/git-core/git-http-backend.exe
+if "windows" in platform.system().lower():
+    GIT_BACKEND = "C:/Program Files/Git/mingw64/libexec/git-core/git-http-backend.exe"
+else:
+    if Path("/usr/lib/git-core/git-http-backend").is_file():
+        GIT_BACKEND = "/usr/lib/git-core/git-http-backend"
+    else:
+        if Path("/usr/libexec/git-core/git-http-backend").is_file():
+            GIT_BACKEND = "/usr/libexec/git-core/git-http-backend"
+        else:
+            GIT_BACKEND = f"/no/backend/found/for/{platform.system().lower().split()}"
 class User(UserMixin):
     def __init__(self, id, role):
         # Password is not saved here - use webgui_users.get(username)['password']

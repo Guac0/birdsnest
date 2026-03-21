@@ -1181,6 +1181,7 @@ class JournalAuthWatcher(AuthWatcher):
         since_str = datetime.fromtimestamp(since_timestamp).strftime('%Y-%m-%d %H:%M:%S')
     
         # CHANGE: Listen for both SSHD and general AUTH logs (sudo/su)
+        # journalctl SYSLOG_FACILITY=4 SYSLOG_FACILITY=10 --since 2026-03-20 00:00:00 --output=short-iso --no-pager
         cmd = [
             "journalctl", 
             "SYSLOG_FACILITY=4", # 4 is the 'auth' facility

@@ -102,7 +102,7 @@ def git_backend(repo_name, git_path):
             # If this function crashes, it usually happens here
             git_path = clean_and_join_path(git_path)
         except Exception as e:
-            logger.eroor(f"/git: CRASH in clean_and_join_path: {str(e)}")
+            logger.error(f"/git: CRASH in clean_and_join_path: {str(e)}")
             return f"Path cleaning failed: {str(e)}", 500
 
         # Build Environment
