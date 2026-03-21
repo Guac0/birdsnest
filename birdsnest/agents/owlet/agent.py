@@ -320,11 +320,11 @@ def run_powershell(cmd,noisy=True):
     )
     if result.returncode != 0:
         if noisy:
-            print_debug(f"PowerShell error: {result.stderr}")
+            print_debug(f"PowerShell error: {result.stderr.strip()}")
         return "" # This probably breaks a lot tbh
     return result.stdout
 
-def run_bash(cmd, noisy=True):
+def run_bash(cmd, shellStatus=True, noisy=True):
     """
     Run a shell command (using Bash by default) and return stdout text.
 
@@ -332,8 +332,8 @@ def run_bash(cmd, noisy=True):
         cmd (str): The command string to execute.
         noisy (bool): If True, prints error details to stderr.
 
-    Returns: 
-        str: The output (stdout) text if successful, "" if failure.
+    Returns:
+        subprocess.CompletedProcess: Object containing .returncode, .stdout, and .stderr
     """
     # Note: On most Linux systems, omitting the shell path 
     # lets subprocess use the system's default shell, 
@@ -357,26 +357,24 @@ def run_bash(cmd, noisy=True):
     try:
         result = subprocess.run(
             cmd,
-            shell=True,
+            shell=shellStatus,
             executable=executable_path,
             capture_output=True, 
             text=True,
             check=False # Do not raise a CalledProcessError on non-zero exit code
         )
-    except FileNotFoundError:
-        if noisy:
-            print_debug(f"Error: The {executable_path} executable was not found.")
-        return ""
-    
-    if result.returncode != 0:
-        if noisy:
-            # Errors usually go to stderr, but we can also print the exit code
-            print_debug(f"Shell command failed with exit code {result.returncode}")
+
+        if result.returncode != 0 and noisy:
+            print_debug(f"run_bash(): Command failed [{result.returncode}]: {cmd}")
             if result.stderr:
-                print_debug(f"Shell stderr: {result.stderr.strip()}")
-        return ""
+                print_debug(f"Stderr: {result.stderr.strip()}")
+            return result
         
-    return result.stdout.strip()
+    except Exception as e:
+        if noisy:
+            print_debug(f"run_bash(): System error executing command: {e}")
+        # Return a mock object so calling code doesn't crash on attribute access
+        return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr=str(e))
 
 def get_pause_status(file=STATUSFILE):
     """

@@ -329,7 +329,7 @@ def run_powershell(cmd,noisy=True):
     )
     if result.returncode != 0:
         if noisy:
-            print_debug(f"PowerShell error: {result.stderr}")
+            print_debug(f"PowerShell error: {result.stderr.strip()}")
         return "" # This probably breaks a lot tbh
     return result.stdout
 
@@ -341,8 +341,8 @@ def run_bash(cmd, shellStatus=True, noisy=True):
         cmd (str): The command string to execute.
         noisy (bool): If True, prints error details to stderr.
 
-    Returns: 
-        str: The output (stdout) text if successful, "" if failure.
+    Returns:
+        subprocess.CompletedProcess: Object containing .returncode, .stdout, and .stderr
     """
     # Note: On most Linux systems, omitting the shell path 
     # lets subprocess use the system's default shell, 
@@ -372,20 +372,18 @@ def run_bash(cmd, shellStatus=True, noisy=True):
             text=True,
             check=False # Do not raise a CalledProcessError on non-zero exit code
         )
-    except FileNotFoundError:
-        if noisy:
-            print_debug(f"Error: The {executable_path} executable was not found.")
-        return ""
-    
-    if result.returncode != 0:
-        if noisy:
-            # Errors usually go to stderr, but we can also print the exit code
-            print_debug(f"Shell command failed with exit code {result.returncode}")
+
+        if result.returncode != 0 and noisy:
+            print_debug(f"run_bash(): Command failed [{result.returncode}]: {cmd}")
             if result.stderr:
-                print_debug(f"Shell stderr: {result.stderr.strip()}")
-        return ""
+                print_debug(f"    Stderr: {result.stderr.strip()}")
+        return result
         
-    return result.stdout.strip()
+    except Exception as e:
+        if noisy:
+            print_debug(f"run_bash(): System error executing command: {e}")
+        # Return a mock object so calling code doesn't crash on attribute access
+        return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr=str(e))
 
 def get_pause_status(file=STATUSFILE):
     """
@@ -814,9 +812,9 @@ class DebianProvider(UserProvider):
 
         # 3. CLI Fallback
         print_debug("_get_last_login - falling back to CLI method")
-        res = run_bash(f"lastlog -u {shlex.quote(username)}", noisy=False)
+        res = run_bash(f"lastlog -u {shlex.quote(username)}")
         # Simple check: if output doesn't contain 'Never', it's likely been used
-        if res and "**Never logged in**" not in res:
+        if "**Never logged in**" not in res.stdout.strip():
             # Note: Parsing exact timestamps from CLI is brittle; 
             # for a SIEM, binary/DB is the source of truth.
             # Just return 1 to signify that there was a login at some point.
@@ -839,10 +837,16 @@ class DebianProvider(UserProvider):
                         continue
 
                     # Lock Status via passwd -S (Replaces deprecated spwd)
-                    is_locked = True
-                    status_out = run_bash(f"passwd -S {shlex.quote(p.pw_name)}", noisy=False)
-                    if status_out and status_out.split()[1] == 'P':
-                        is_locked = False
+                    is_locked = False
+                    result = run_bash(f"passwd -S {shlex.quote(p.pw_name)}", noisy=False)
+                    
+                    try:
+                        #f result.stdout.split()[1] == 'P':
+                        if result.stdout.split()[1] == 'L':
+                            is_locked = True
+                    except Exception as E:
+                        print_debug(f"get_all_users(): Error when running passwd -S {shlex.quote(p.pw_name)}, defaulting user state to unlocked")
+                        pass
 
                     # Local vs Domain Detection
                     # If user is in /etc/passwd, they are local. 
@@ -875,8 +879,9 @@ class DebianProvider(UserProvider):
         try:
             # chpasswd is the standard for non-interactive password updates
             cmd = f"echo '{username}:{new_password}' | chpasswd"
-            if run_bash(cmd) == "": # run_bash returns "" on failure
-                raise Exception("chpasswd command failed")
+            result = run_bash(cmd)
+            if result.returncode != 0:
+                raise Exception(f"chpasswd command failed - {result.stdout.strip()}")
             
             print_debug(f"OK: Changed password for user {username} to 'REDACTED'")
             return True
@@ -890,9 +895,9 @@ class DebianProvider(UserProvider):
             return False
         try:
             action = "--lock" if should_be_locked else "--unlock"
-            if run_bash(f"usermod {action} {shlex.quote(username)}") == "":
-                # usermod does NOT return a empty string via run_bash on exit code != 0
-                raise Exception(f"usermod {action} failed")
+            result = run_bash(f"usermod {action} {shlex.quote(username)}")
+            if result.returncode != 0:
+                raise Exception(f"usermod {action} failed - {result.stderr.strip()}")
 
             status = "Locked/disabled" if should_be_locked else "Unlocked/enabled"
             print_debug(f"OK: {status} account for user {username}")
@@ -911,8 +916,8 @@ class DebianProvider(UserProvider):
             else:
                 res = run_bash(f"gpasswd -d {shlex.quote(username)} {self.admingrpname}")
             
-            if res == "" and should_be_admin: # Check failure
-                raise Exception("Admin status update failed")
+            if (res.returncode != 0) and should_be_admin: # Check failure
+                raise Exception(f"Admin status update failed - {res.stderr.strip()}")
                 
             status = "Added Admin access to" if should_be_admin else "Removed Admin access from"
             print_debug(f"OK: {status} user {username}")
@@ -927,8 +932,9 @@ class DebianProvider(UserProvider):
             return False
         try:
             # Do not remove home for later analysis
-            if run_bash(f"userdel {shlex.quote(username)}") == "":
-                raise Exception("userdel command failed")
+            result = run_bash(f"userdel {shlex.quote(username)}")
+            if result.returncode != 0:
+                raise Exception(f"userdel command failed - {result.stderr.strip()}")
             print_debug(f"OK: Deleted user {username}")
             return True
         except Exception as E:
@@ -942,8 +948,9 @@ class DebianProvider(UserProvider):
         try:
             # -m creates home dir, -s sets default shell
             create_cmd = f"useradd -m -s /bin/bash {shlex.quote(username)}"
-            if run_bash(create_cmd) == "":
-                raise Exception("useradd command failed")
+            result = run_bash(create_cmd)
+            if result.returncode != 0:
+                raise Exception(f"useradd command failed - {result.stderr.strip()}")
             
             print_debug(f"OK: Created regular user {username} with password 'REDACTED'")
             
@@ -994,7 +1001,7 @@ class RHELProvider(UserProvider):
         # 3. CLI Fallback
         print_debug("_get_last_login - falling back to CLI method")
         res = run_bash(f"lastlog -u {shlex.quote(username)}", noisy=False)
-        if res and "**Never logged in**" not in res:
+        if "**Never logged in**" not in res.stdout.strip():
             return 1 
         return 0
 
@@ -1016,11 +1023,11 @@ class RHELProvider(UserProvider):
 
                     # Lock Status via passwd -S
                     is_locked = True
-                    status_out = run_bash(f"passwd -S {shlex.quote(p.pw_name)}", noisy=False)
-                    if status_out:
+                    result = run_bash(f"passwd -S {shlex.quote(p.pw_name)}", noisy=False)
+                    if result.stdout.strip():
                         # RHEL output format: username <status> <date> ...
                         # status 'PS' or 'P' means password set; 'LK' or 'L' means locked
-                        status_char = status_out.split()[1]
+                        status_char = result.stdout.strip().split()[1]
                         if status_char in ['P', 'PS']:
                             is_locked = False
 
@@ -1054,8 +1061,9 @@ class RHELProvider(UserProvider):
         try:
             # RHEL's chpasswd works identically to Debian's
             cmd = f"echo '{username}:{new_password}' | chpasswd"
-            if run_bash(cmd) == "":
-                raise Exception("chpasswd command failed")
+            result = run_bash(cmd)
+            if result.returncode != 0:
+                raise Exception(f"chpasswd command failed - {result.stderr.strip()}")
             
             print_debug(f"OK: Changed password for user {username}")
             return True
@@ -1069,8 +1077,9 @@ class RHELProvider(UserProvider):
             return False
         try:
             action = "--lock" if should_be_locked else "--unlock"
-            if run_bash(f"usermod {action} {shlex.quote(username)}") == "":
-                raise Exception(f"usermod {action} failed")
+            result = run_bash(f"usermod {action} {shlex.quote(username)}")
+            if result.returncode != 0:
+                raise Exception(f"usermod {action} failed - {result.stdout.strip()}")
 
             status = "Locked/disabled" if should_be_locked else "Unlocked/enabled"
             print_debug(f"OK: {status} account for user {username}")
@@ -1091,8 +1100,8 @@ class RHELProvider(UserProvider):
                 # gpasswd -d is standard for removing from groups in RHEL
                 res = run_bash(f"gpasswd -d {shlex.quote(username)} {self.admingrpname}")
             
-            if res == "" and should_be_admin:
-                raise Exception("Admin status update failed")
+            if (res.returncode != 0) and should_be_admin:
+                raise Exception(f"Admin status update failed - {res.stderr}")
                 
             status = "Added Admin access to" if should_be_admin else "Removed Admin access from"
             print_debug(f"OK: {status} user {username}")
@@ -1107,8 +1116,9 @@ class RHELProvider(UserProvider):
             return False
         try:
             # Keep home dir for later analysis
-            if run_bash(f"userdel {shlex.quote(username)}") == "":
-                raise Exception("userdel command failed")
+            result = run_bash(f"userdel {shlex.quote(username)}")
+            if result.returncode != 0:
+                raise Exception(f"userdel command failed - {result.stderr.strip()}")
             print_debug(f"OK: Deleted user {username}")
             return True
         except Exception as E:
@@ -1122,8 +1132,9 @@ class RHELProvider(UserProvider):
         try:
             # RHEL useradd -m is explicit home directory creation
             create_cmd = f"useradd -m {shlex.quote(username)}"
-            if run_bash(create_cmd) == "":
-                raise Exception("useradd command failed")
+            result = run_bash(create_cmd)
+            if result.returncode != 0:
+                raise Exception(f"useradd command failed - {result.stderr.split()}")
             
             if not self.change_password(username, password):
                 raise Exception("Initial password set failed")
@@ -1155,7 +1166,9 @@ class AlpineProvider(UserProvider):
         # Most Alpine containers/installs rely on 'last' from the 'util-linux' package
         # if telemetry is needed. Otherwise, BusyBox 'last' is very limited.
         res = run_bash(f"last | grep {shlex.quote(username)}", noisy=False)
-        return 1 if res else 0
+        if res.stdout.strip():
+            return 1
+        return 0
 
     def get_all_users(self):
         try:
@@ -1174,13 +1187,23 @@ class AlpineProvider(UserProvider):
 
                     # Lock Status: Alpine's BusyBox passwd -S output is different.
                     # It usually shows 'L' for locked, 'P' for password.
-                    is_locked = True
-                    status_out = run_bash(f"passwd -S {shlex.quote(p.pw_name)}", noisy=False)
-                    if status_out:
-                        parts = status_out.split()
+                    is_locked = False
+                    result = run_bash(f"passwd -S {shlex.quote(p.pw_name)}")
+                    if result.returncode == 0:
+                        parts = result.stdout.strip().split()
                         # BusyBox passwd -S: "username L 03/15/2026 ..."
-                        if len(parts) >= 2 and parts[1] == 'P':
-                            is_locked = False
+                        # BusyBox / standard Linux passwd -S format:
+                        # Index 0: username
+                        # Index 1: status flag ('L'=locked, 'P'=unlocked/password, 'NP'=no password)
+                        
+                        if len(parts) >= 2:
+                            # 3. Only flip to True if we explicitly see the 'L' flag
+                            if parts[1] == 'L':
+                                is_locked = True
+                        #if len(parts) >= 2 and parts[1] == 'P':
+                        #    is_locked = False
+                    else:
+                        print_debug(f"get_all_users() - failed to execute passwd -S - {result.stderr.stdout()}")
 
                     users.append({
                         'username': p.pw_name,
@@ -1204,8 +1227,9 @@ class AlpineProvider(UserProvider):
         try:
             # Alpine's chpasswd works similarly
             cmd = f"echo '{username}:{new_password}' | chpasswd"
-            if run_bash(cmd) == "":
-                raise Exception("chpasswd failed")
+            result = run_bash(cmd)
+            if result.returncode != 0:
+                raise Exception(f"chpasswd failed - {result.stderr.strip()}")
             return True
         except Exception as E:
             print_debug(f"ERROR: change_password({username}) - {E}")
@@ -1218,8 +1242,9 @@ class AlpineProvider(UserProvider):
         try:
             # BusyBox usermod uses -L and -U
             action = "-L" if should_be_locked else "-U"
-            if run_bash(f"usermod {action} {shlex.quote(username)}") == "":
-                raise Exception(f"usermod {action} failed")
+            result = run_bash(f"usermod {action} {shlex.quote(username)}")
+            if result.returncode != 0:
+                raise Exception(f"usermod {action} failed - {result.stderr.strip()}")
             return True
         except Exception as E:
             print_debug(f"ERROR: lock_account({username}) - {E}")
@@ -1237,8 +1262,8 @@ class AlpineProvider(UserProvider):
                 # Remove user from wheel group (delgroup user group)
                 res = run_bash(f"delgroup {shlex.quote(username)} {self.admingrpname}")
             
-            if res == "" and should_be_admin:
-                raise Exception("Admin status update failed")
+            if (res.returncode != 0) and should_be_admin:
+                raise Exception(f"Admin status update failed - {res.stderr.strip()}")
             return True
         except Exception as E:
             print_debug(f"ERROR: set_admin_status({username}) - {E}")
@@ -1249,8 +1274,9 @@ class AlpineProvider(UserProvider):
             print_debug(f"OK: Attempted to delete user {username}, but DISARMED")
             return False
         try:
-            if run_bash(f"deluser {shlex.quote(username)}") == "":
-                raise Exception("deluser command failed")
+            result = run_bash(f"deluser {shlex.quote(username)}")
+            if result.returncode != 0:
+                raise Exception(f"deluser command failed - {result.stderr.strip()}")
             return True
         except Exception as E:
             print_debug(f"ERROR: delete_user({username}) - {E}")
@@ -1264,8 +1290,9 @@ class AlpineProvider(UserProvider):
             # Alpine uses 'adduser' (BusyBox) or 'useradd' (shadow)
             # -D suppresses password prompt
             create_cmd = f"adduser -D -s /bin/sh {shlex.quote(username)}"
-            if run_bash(create_cmd) == "":
-                raise Exception("adduser command failed")
+            result = run_bash(create_cmd)
+            if result.returncode != 0:
+                raise Exception(f"adduser command failed - {result.stderr.strip()}")
             
             self.change_password(username, password)
             if should_be_admin:
@@ -1288,7 +1315,7 @@ class FreeBSDProvider(UserProvider):
         # -n 1: Get most recent login
         # -h: No header
         res = run_bash(f"last -n 1 {shlex.quote(username)}", noisy=False)
-        if res and "never logged in" not in res.lower():
+        if "never logged in" not in res.stdout.strip().lower():
             # For a SIEM, an existence check is the baseline; 
             # parsing BSD 'last' output to Unix Epoch is brittle via CLI.
             return 1 
@@ -1312,12 +1339,12 @@ class FreeBSDProvider(UserProvider):
                     # Lock Status: FreeBSD stores 'bool' lock status in the login class 
                     # or via a prefix in the password field in /etc/master.passwd.
                     # The 'pw' utility is the cleanest way to check.
-                    is_locked = True
+                    is_locked = False
                     # 'pw user show' returns info; we check the shell or account expiration
                     user_info = run_bash(f"pw user show {shlex.quote(p.pw_name)}", noisy=False)
                     # If account is locked, FreeBSD often appends '*LOCKED*' to the info string
-                    if user_info and "*LOCKED*" not in user_info:
-                        is_locked = False
+                    if "*LOCKED*" in user_info.stdout.strip():
+                        is_locked = True
 
                     users.append({
                         'username': p.pw_name,
@@ -1342,8 +1369,9 @@ class FreeBSDProvider(UserProvider):
         try:
             # FreeBSD 'pw' accepts password via stdin
             cmd = f"echo {shlex.quote(new_password)} | pw usermod {shlex.quote(username)} -h 0"
-            if run_bash(cmd) == "":
-                raise Exception("pw usermod password update failed")
+            result = run_bash(cmd)
+            if result.returncode != 0:
+                raise Exception(f"pw usermod password update failed - {result.stderr.split()}")
             
             print_debug(f"OK: Changed password for user {username}")
             return True
@@ -1357,8 +1385,9 @@ class FreeBSDProvider(UserProvider):
             return False
         try:
             action = "Locked/disabled" if should_be_locked else "Unlocked/enabled"
-            if run_bash(f"pw {action} {shlex.quote(username)}") == "":
-                raise Exception(f"pw {action} failed")
+            result = run_bash(f"pw {action} {shlex.quote(username)}")
+            if result.returncode != 0:
+                raise Exception(f"pw {action} failed - {result.stderr.strip()}")
 
             print_debug(f"OK: {action.capitalize()}ed account for user {username}")
             return True
@@ -1378,7 +1407,7 @@ class FreeBSDProvider(UserProvider):
                 # -d deletes user from group
                 res = run_bash(f"pw groupmod {self.admingrpname} -d {shlex.quote(username)}")
             
-            if res == "" and should_be_admin:
+            if (res.returncode != 0) and should_be_admin:
                 raise Exception("Admin status update failed")
                 
             print_debug(f"OK: Updated admin status for {username}")
@@ -1393,8 +1422,9 @@ class FreeBSDProvider(UserProvider):
             return False
         try:
             # -r removes home directory
-            if run_bash(f"pw userdel {shlex.quote(username)} -r") == "":
-                raise Exception("pw userdel failed")
+            result = run_bash(f"pw userdel {shlex.quote(username)} -r")
+            if result.returncode != 0:
+                raise Exception(f"pw userdel failed - {result.stderr.strip()}")
             print_debug(f"OK: Deleted user {username}")
             return True
         except Exception as E:
@@ -1408,8 +1438,9 @@ class FreeBSDProvider(UserProvider):
         try:
             # -n: name, -m: create home, -s: shell, -h 0: read password from stdin
             create_cmd = f"echo {shlex.quote(password)} | pw useradd {shlex.quote(username)} -m -s /bin/sh -h 0"
-            if run_bash(create_cmd) == "":
-                raise Exception("pw useradd failed")
+            result = run_bash(create_cmd)
+            if result.returncode != 0:
+                raise Exception(f"pw useradd failed - {result.stderr.strip()}")
             
             print_debug(f"OK: Created regular user {username}")
             
