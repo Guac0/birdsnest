@@ -105,7 +105,7 @@ GIT_PROJECT_ROOT = os.path.join(os.path.dirname(Path(__file__).resolve()),"repos
 if not os.path.exists(GIT_PROJECT_ROOT):
     os.mkdir(GIT_PROJECT_ROOT)
 
-def setup_logging(argname="default"): #note that argname is now unused
+def setup_logging(argname="default",app=None): #note that argname is now unused
     context = os.environ.get("APP_CONTEXT", "DEFAULT")
     name = context
     logger = logging.getLogger(name)
@@ -143,6 +143,17 @@ def setup_logging(argname="default"): #note that argname is now unused
         gunicorn_logger.addHandler(handler)
     # Optional: Catch all other library logs (SQLAlchemy, etc.)
     logging.getLogger().addHandler(stream_handler)
+
+    if app:
+        # Remove Flask's default handlers to avoid double-logging
+        app.logger.handlers = []
+        
+        # Add your custom high-performance handlers to Flask
+        app.logger.addHandler(handler)
+        app.logger.addHandler(stream_handler)
+        
+        # Ensure Flask's logger level matches your custom logger
+        app.logger.setLevel(logging.INFO)
     
     return logger
 
