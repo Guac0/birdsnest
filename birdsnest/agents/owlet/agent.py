@@ -266,32 +266,44 @@ def interface_get_primary_linux(ip):
     Uses shutil.which to locate binaries dynamically across different distributions.
     """
     system = platform.system()
+    
+    # --- Strategy 1: Modern 'ip' command (JSON-capable) ---
     if system == "Linux":
         ip_bin = shutil.which("ip")
         if ip_bin:
-            try:
-                output = subprocess.check_output([ip_bin, "-j", "addr"], text=True)
-                addr_data = json.loads(output)
-                for iface in addr_data:
-                    for addr in iface.get("addr_info", []):
-                        if addr.get("local") == ip:
-                            return iface.get("ifname")
-            except Exception:
-                pass
+            # We pass noisy=False because a failure here just means we fall back to ifconfig
+            res = run_bash(f"{ip_bin} -j addr", noisy=False)
+            
+            if res.returncode == 0 and res.stdout.strip():
+                try:
+                    addr_data = json.loads(res.stdout)
+                    for iface in addr_data:
+                        for addr in iface.get("addr_info", []):
+                            if addr.get("local") == ip:
+                                return iface.get("ifname")
+                except (json.JSONDecodeError, KeyError) as e:
+                    print_debug(f"interface_get_primary_linux(): Failed to parse 'ip -j' output: {e}")
+            else:
+                print_debug(f"interface_get_primary_linux(): falling back to ifconfig mode as ip binary not found")
 
+    # --- Strategy 2: Legacy 'ifconfig' parsing (Linux/FreeBSD fallback) ---
     ifconfig_bin = shutil.which("ifconfig")
     if ifconfig_bin:
-        try:
-            output = subprocess.check_output([ifconfig_bin], text=True)
+        res = run_bash(ifconfig_bin, noisy=False)
+        
+        if res.returncode == 0 and res.stdout.strip():
             iface = None
-            for line in output.splitlines():
+            # Standard regex to find interface names at start of lines
+            for line in res.stdout.splitlines():
                 header_match = re.match(r"^([a-zA-Z0-9._-]+)[:\s]", line)
                 if header_match:
                     iface = header_match.group(1)
+                
+                # Check if the target IP is associated with the current interface block
                 if "inet " in line and ip in line:
                     return iface
-        except Exception:
-            pass
+        elif res.returncode != 0:
+            print_debug(f"interface_get_primary_linux(): ifconfig failed with code {res.returncode} and error {res.stderr.strip()}")
     return None
 
 def get_system_details():
@@ -1180,21 +1192,16 @@ class JournalAuthWatcher(AuthWatcher):
     
         # CHANGE: Listen for both SSHD and general AUTH logs (sudo/su)
         # journalctl SYSLOG_FACILITY=4 SYSLOG_FACILITY=10 --since 2026-03-20 00:00:00 --output=short-iso --no-pager
-        cmd = [
-            "journalctl", 
-            "SYSLOG_FACILITY=4", # 4 is the 'auth' facility
-            "SYSLOG_FACILITY=10", # 10 is 'authpriv'
-            "--since", since_str, 
-            "--output=short-iso", 
-            "--no-pager"
-        ]
+        #"SYSLOG_FACILITY=4", # 4 is the 'auth' facility
+        #"SYSLOG_FACILITY=10", # 10 is 'authpriv'
         
-        try:
-            # Note: This requires the agent to run with sudo/root privileges to read the journal
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        command_str = f"journalctl SYSLOG_FACILITY=4 SYSLOG_FACILITY=10 --since {since_str} --output=short-iso --no-pager"
+
+        result = run_bash(command_str, noisy=False)
+        if result.returncode == 0:
             return result.stdout.splitlines()
-        except Exception as e:
-            print_debug(f"JournalAuthWatcher: Failed to query journalctl: {e}")
+        else:
+            print_debug(f"JournalAuthWatcher: Failed to query journalctl (Code {result.returncode}): {result.stderr.strip()}")
             return []
 
     def analyze_log(self):
