@@ -456,7 +456,7 @@ def periodic_cleanup():
         time.sleep(900)
 
 if __name__ == "__main__":
-    logger = setup_logging("worker")
+    logger = setup_logging("worker",app)
     logger.info("Starting background worker threads...")
     #notifier = sdnotify.SystemdNotifier()
 

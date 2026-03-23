@@ -89,6 +89,14 @@ app.config.update(
 )
 db.init_app(app)
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    try:
+        logger.error(f"{request.path} ({request.endpoint}) - Unhandled top level generic internal server error: {str(e)}")
+    except Exception as E:
+        logger.error(f"unknown endpoint - Unhandled top level generic internal server error: {str(e)}.\nSecondary error when handling error: {E}")
+    return "Generic Internal Server Error", 500
+
 # === Initialize Misc Vars ===
 # See load_user() for the following
 login_manager = LoginManager()
@@ -99,7 +107,7 @@ login_manager.login_message_category = "info"
 
 create_db_tables(app)
 
-logger = setup_logging("web")
+logger = setup_logging("web",app)
 logger.info(f"Starting server on {HOST}:{PORT}")
 
 # =================================
