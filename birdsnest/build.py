@@ -17,7 +17,8 @@ SOURCE_ITEMS = [
                 "agents\\owlet\\.gitignore","agents\\owlet\\agent.py","agents\\owlet\\requirements.txt","agents\\owlet\\nssm-2.24_win64.exe",
                 "agents\\magpie\\.gitignore","agents\\magpie\\agent.py","agents\\magpie\\agent_tester.py","agents\\magpie\\requirements.txt","agents\\magpie\\nssm-2.24_win64.exe",
                 "templates","static","modules",
-                "models.py","server.py","shared.py","utilities.py","worker.py"
+                "models.py","server.py","shared.py","utilities.py","worker.py",
+                "docker-setup-debian.sh", "docker-setup-rhel.sh", "docker-setup-ubuntu.sh"
                 ]
 #BUILD_DIR = "build_assets"
 BUILD_DIR = "..\\ansible\\roles\\birdsnest\\files"
