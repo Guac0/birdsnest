@@ -494,16 +494,20 @@ def add_test_data_auth_config():
 
 def run_git(args, cwd=GIT_PROJECT_ROOT):
     """Executes git commands with SSL verification disabled."""
-    # -c http.sslVerify=false disables SSL checks for the specific command
-    cmd = ["git", "-c", "http.sslVerify=false"] + args
-    result = subprocess.run(
-        cmd, 
-        cwd=cwd, 
-        capture_output=True, 
-        text=True, 
-        shell=(platform.system() == "Windows")
-    )
-    return result
+    try:
+        # -c http.sslVerify=false disables SSL checks for the specific command
+        cmd = ["git", "-c", "http.sslVerify=false"] + args
+        result = subprocess.run(
+            cmd, 
+            cwd=cwd, 
+            capture_output=True, 
+            text=True, 
+            shell=(platform.system() == "Windows")
+        )
+        return result
+    except Exception as E:
+        logger.error(f"run_git: error when executing ({["git", "-c", "http.sslVerify=false"] + args}): {E}")
+        return "" # TODO do we ever use this value
 
 def hash_id(*args):
     # Hash any number of args so that we have a single value to use as the id that remains unique if multiple items have similar fields. Does not need to be secure

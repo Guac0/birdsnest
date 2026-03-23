@@ -92,6 +92,9 @@ def beacon_magpie():
 
 def git_backend(repo_name, git_path):
     # note: does NOT check for auth as that's not really compatible with git
+
+    content_length = request.headers.get('Content-Length', '0')
+    logger.info(f"/git: Incoming push size: {content_length} bytes from {request.remote_addr}")
     
     # Log IMMEDIATELY with all inputs
     #logger.info(f"/git: START git_backend: repo={repo_name}, path={git_path}, method={request.method}")
