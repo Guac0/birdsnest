@@ -947,3 +947,67 @@ def add_task_bulk():
         db.session.rollback()
         logger.error(f"/add_task_bulk - Error: {e}")
         return jsonify({"error": "Internal server error"}), 500
+
+def list_system_users():
+    try:
+        data = request.get_json(silent=True) or {}
+        agent_id = data.get('agent_id')
+
+        query = SystemUser.query
+
+        # 1. Filter by Agent ID if provided
+        if agent_id:
+            users = query.filter_by(agent_id=agent_id).order_by(SystemUser.username.asc()).all()
+            log_msg = f"returning users for agent {agent_id}"
+        
+        # 2. Return All users across all agents
+        else:
+            users = query.order_by(SystemUser.agent_id.asc(), SystemUser.username.asc()).all()
+            log_msg = "returning all system users"
+
+        returned_users = [u.to_dict() for u in users]
+        
+        logger.info(f"/list_system_users - Successful connection from {current_user.id} at {request.remote_addr} - {log_msg} ({len(returned_users)} users)")
+        return jsonify(returned_users), 200
+
+    except Exception as e:
+        logger.error(f"/list_system_users - Failed connection from {current_user.id} at {request.remote_addr} - internal error when fetching for agent_id {agent_id}: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+def list_system_users_all():
+    try:
+        # 1. Fetch all agents and their users in a single optimized query
+        # joinedload tells SQLAlchemy to perform a SQL JOIN immediately
+        agents = Agent.query.options(joinedload(Agent.system_users)).all()
+
+        results = []
+        for agent in agents:
+            # 2. Convert Agent model to dict
+            # (Assuming you have a to_dict() or similar for Agent)
+            agent_data = {
+                "agent_id": agent.agent_id,
+                "agent_name": agent.agent_name,
+                "hostname": agent.hostname,
+                "ip": agent.ip,
+                "os": agent.os,
+                "lastStatus": agent.lastStatus,
+                "stale": agent.stale,
+                # Nest the users here
+                "users": [u.to_dict() for u in agent.system_users]
+            }
+            results.append(agent_data)
+
+        logger.info(
+            f"/list_system_users_all - Successful connection from {current_user.id} at "
+            f"{request.remote_addr} - Returning {len(results)} agents with nested user data"
+        )
+        
+        return jsonify(results), 200
+
+    except Exception as e:
+        logger.error(
+            f"/list_system_users_all - Failed connection from {current_user.id} at "
+            f"{request.remote_addr} - internal error: {e}"
+        )
+        return jsonify({"error": "Internal server error"}), 500
+  

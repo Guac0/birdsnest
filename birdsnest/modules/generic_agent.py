@@ -4,6 +4,7 @@ from flask import request, jsonify
 import time
 import os
 import json
+from datetime import datetime, timezone
 
 from models import (
 db,
@@ -267,6 +268,104 @@ def beacon_generic(endpoint):
         logger.error(f"/beacon - Error processing RESUME logic for agent {agent_id}: {e}")
     """
 
+def beacon_users():
+    returnMsg, returnCode, registered, agent_id, current_time = beacon_generic("/agent/beacon/users")
+    if returnCode != 200:
+        return returnMsg, returnCode
+    
+    data = request.json
+    oldStatus = data.get("oldStatus",False) # Client old status. ex: false if client has detected malicious activity or has had an internal error, true if nothing has been detected
+    newStatus = data.get("newStatus",False) # Client new status. Always TRUE if oldStatus is TRUE. Otherwise, serves as an indicator if the issue in oldStatus has been automatically remediated successfully.
+    message = data.get("message","") # Custom string message. Used for incident descriptions.
+    
+    # update messages table
+    try:
+        message_id = hash_id(current_time, agent_id)
+        new_message = Message(
+            message_id = message_id,
+            timestamp=current_time,
+            agent_id=agent_id,
+            oldStatus=oldStatus,
+            newStatus=newStatus,
+            message=str(message) # its a dict by default
+        )
+        db.session.add(new_message)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"/beacon/users - Failed to create message for agent {agent_id}: {e}")
+        # Not returning an error, as this is secondary / recoverable (hopefully...)
+
+    try:
+        try:
+            users = json.loads(message)
+            # Standardize 'users' to always be a list, even if a single dict was sent
+            users = data if isinstance(data, list) else [data]
+        except:
+            # not a users msg - shouldn't be happening after refactor to beacon/users
+            logger.info(f"/beacon/users - Failed connection from {request.remote_addr}. Could not load message as JSON. Message: {message}")
+            return returnMsg, 400
+        
+        # 1. Fetch all existing users for this agent in one query
+        # We index them by username for O(1) lookups
+        existing_users = {
+            u.username: u for u in SystemUser.query.filter_by(agent_id=agent_id).all()
+        }
+
+        new_records = []
+        updated_count = 0
+
+        for user_data in users:
+            username = user_data['username']
+            
+            if username in existing_users:
+                # 2. Existing User: Check for changes to reduce I/O
+                db_user = existing_users[username]
+                changed = False
+
+                fields = ['admin', 'locked', 'last_login', 'account_type', 'password', 'password_updated']
+                # Compare incoming data with DB state
+                for field in fields:
+                    val = user_data.get(field)
+                    if val is not None:
+                        if getattr(db_user, field) != val:
+                            if field == "password_updated":
+                                setattr(db_user, field, datetime.fromtimestamp(val, tz=timezone.utc))
+                            setattr(db_user, field, val)
+                            changed = True
+                if user_data.get('password') and not user_data.get('password_updated'):
+                    db_user.password_updated = datetime.now(timezone.utc)
+                    changed = True
+
+                if changed:
+                    updated_count += 1
+            else:
+                # 3. New User: Create record
+                # The local_index will be handled by your Model's __init__ logic
+                new_user = SystemUser(
+                    agent_id=agent_id,
+                    username=username,
+                    admin=user_data.get('admin'),
+                    locked=user_data.get('locked'),
+                    last_login=user_data.get('last_login'),
+                    account_type=user_data.get('account_type'),
+                    password=user_data.get('password'),
+                    password_updated=user_data.get('password_updated')
+                )
+                new_records.append(new_user)
+
+        # 4. Batch commit for efficiency
+        if new_records:
+            db.session.add_all(new_records)
+        
+        db.session.commit()
+        logger.info(f"/beacon/users - Successful connection from {request.remote_addr}. Sync Complete for Agent {agent_id}: {len(new_records)} added, {updated_count} updated.")
+        return returnMsg, 200
+    except Exception as E:
+        db.session.rollback()
+        logger.error(f"/beacon/users - Failed to update users for agent {agent_id}: {E}")
+        return "Failed to sync users due to internal error", 500
+
 def get_pause():
     try:
         data = request.json
@@ -426,6 +525,22 @@ def set_task_result():
         # Update the result field with the string provided by the agent
         task_entry.result = result_text
         db.session.commit()
+
+        # Update stored password info if relevant
+        # Currently only supports kingfisher
+        try:
+            cmd = task_entry.task
+            cmd_parts = cmd.split(" ")
+            if cmd_parts[0] == "change_password" or cmd_parts[0] == "create_user":
+                if result_text == "true":
+                    username = cmd_parts[1]
+                    password = cmd_parts[2]
+                    user = SystemUser.query.get()
+                    # TODO ANDREW APRIL make the change
+                    db.session.commit()
+        except Exception as E:
+            logger.error(f"/set_task_result - error when checking if password updated is desired: {E}")
+
         
         logger.info(f"/set_task_result - Successful connection from {request.remote_addr} - result for task {task_id} recorded: {result_text}")
         return "success", 200

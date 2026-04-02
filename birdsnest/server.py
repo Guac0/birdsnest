@@ -37,10 +37,11 @@ from modules.generic_web import (
     agent_pause, agent_resume, add_incident, add_user,
     delete_token, delete_token_agent, update_incident_tag, update_incident_assignee,
     update_incident_sla, add_ansible, add_token, delete_user,
-    get_task, get_tasks_all, add_task, add_task_bulk
+    get_task, get_tasks_all, add_task, add_task_bulk,
+    list_system_users, list_system_users_all
 )
 from modules.generic_agent import (
-    beacon_generic_handler, beacon_generic, get_pause,
+    beacon_generic_handler, beacon_generic, beacon_users, get_pause,
     get_task_agent, set_task_result
 )
 from modules.magpie_web import (
@@ -57,12 +58,6 @@ from modules.owlet_web import (
 )
 from modules.owlet_agent import (
     beacon_owlet, get_config, get_global_config_agent
-)
-from modules.kingfisher_agent import (
-    beacon_kingfisher
-)
-from modules.kingfisher_web import (
-    list_system_users, list_system_users_all
 )
 
 # === Set Flask Config ===
@@ -281,9 +276,9 @@ def beacon_magpie_redirect():
 def beacon_owlet_redirect():
     return beacon_owlet()
 
-@app.route("/agent/beacon/kingfisher", methods=["POST"])
-def beacon_kingfisher_redirect():
-    return beacon_kingfisher()
+@app.route("/agent/beacon/users", methods=["POST"])
+def beacon_users_redirect():
+    return beacon_users()
 
 @app.route("/agent/get_pause", methods=["POST"])
 def get_pause_redirect():

@@ -2,7 +2,7 @@
 
 from flask_sqlalchemy import SQLAlchemy
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import func
 
 from shared import (
@@ -245,7 +245,7 @@ class AuthRecord(db.Model):
 class WebhookQueue(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     incident_id = db.Column(db.Integer, db.ForeignKey('incidents.incident_id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 class AnsibleQueue(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -255,7 +255,7 @@ class AnsibleQueue(db.Model):
     dest_ip = db.Column(db.String(50), nullable=False)
     ansible_venv = db.Column(db.String(255), nullable=True)
     extra_vars = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 class AgentTask(db.Model):
     __tablename__ = 'agent_tasks'
@@ -263,8 +263,8 @@ class AgentTask(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
     local_index = db.Column(db.Integer, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    task = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    task = db.Column(db.String(1024), nullable=False)
     result = db.Column(db.Text, default="", nullable=False)
 
     def __init__(self, **kwargs):
@@ -285,10 +285,12 @@ class SystemUser(db.Model):
     agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
     local_index = db.Column(db.Integer, nullable=False)
     username = db.Column(db.String(64), nullable=False)
-    admin = db.Column(db.Boolean, nullable=False)
-    locked = db.Column(db.Boolean, nullable=False)
-    last_login = db.Column(db.Integer, nullable=False)
-    account_type = db.Column(db.String(8), nullable=False)
+    admin = db.Column(db.Boolean)
+    locked = db.Column(db.Boolean)
+    last_login = db.Column(db.Integer)
+    account_type = db.Column(db.String(8))
+    password = db.Column(db.String(128))
+    password_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

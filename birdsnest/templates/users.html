@@ -104,6 +104,8 @@
             <th onclick="sortTable('locked', 'userTable')">Locked</th>
             <th onclick="sortTable('last_login', 'userTable')">Last Login</th>
             <th onclick="sortTable('account_type', 'userTable')">Type</th>
+            <th onclick="sortTable('password', 'userTable')">Password</th>
+            <th onclick="sortTable('password_updated', 'userTable')">Password Updated</th>
           </tr>
         </thead>
         <tbody id="userBody"></tbody>
@@ -340,7 +342,10 @@
                 <td>${user.username}${diffNote}</td>
                 <td>${user.admin ? '✅' : '❌'}</td>
                 <td>${user.locked ? '✅' : '❌'}</td>
-                <td>${formatUnix(user.last_login)}</td> <td>${user.account_type}</td>
+                <td>${formatUnix(user.last_login)}</td>
+                <td>${user.account_type}</td>
+                <td>${user.password}</td>
+                <td>${formatUnix(user.password_updated)}</td>
             </tr>
             `;
         }).join('');

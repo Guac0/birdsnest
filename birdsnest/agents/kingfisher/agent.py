@@ -567,7 +567,7 @@ def send_message(endpoint,oldStatus=True,newStatus=True,message="",authInfo=None
                 #result = json.loads(response_body)
                 print_debug(f"send_message({url}): sent msg to server: [{oldStatus,newStatus,message}]")
                 response_text = response.read().decode('utf-8')
-                if endpoint == f"agent/beacon/{AGENT_TYPE}":
+                if "agent/beacon" in endpoint:
                     if response_text != AUTH_TOKEN:
                         AUTH_TOKEN = response_text
                         print_debug(f"send_message({url}): updating auth token value to new value from server {AUTH_TOKEN}")
@@ -1477,57 +1477,53 @@ def main_logic(provider):
 
     Note that initial register message is handled in main()
     """
-    
-    users = provider.get_all_users()
-
-    send_message(f"agent/beacon/{AGENT_TYPE}",True,True,str(users))
 
     try:
-        while True:
-            try:
-                waiting_command = send_message(f"agent/get_task",True,True,"")
-                print_debug(f"main_logic: received task msg {waiting_command}")
+        users = provider.get_all_users()
+        send_message(f"agent/beacon/users",True,True,json.dumps(users))
 
-                if not waiting_command: # error
-                    break
-                if waiting_command == "no pending tasks":
-                    break
+        waiting_command = send_message(f"agent/get_task",True,True,"")
+        print_debug(f"main_logic: received task msg {waiting_command}")
 
-                data = json.loads(waiting_command)
-                task_id = data.get('task_id')
-                task_command = data.get('task')
-                local_index = data.get('local_index')
+        if not waiting_command: # error
+            return
+        if waiting_command == "no pending tasks":
+            return
 
-                parts = task_command.split(" ")
-                status = False
-                if parts[0] == "change_password":
-                    status = provider.change_password(parts[1],parts[2])
+        data = json.loads(waiting_command)
+        task_id = data.get('task_id')
+        task_command = data.get('task')
+        #local_index = data.get('local_index')
 
-                elif parts[0] == "lock_account":
-                    boolEval = parts[2].strip().lower() == 'true'
-                    status = provider.lock_account(parts[1],boolEval)
+        parts = task_command.split(" ")
+        status = False
+        if parts[0] == "change_password":
+            status = provider.change_password(parts[1],parts[2])
 
-                elif parts[0] == "set_admin_status":
-                    boolEval = parts[2].strip().lower() == 'true'
-                    status = provider.set_admin_status(parts[1],boolEval)
+        elif parts[0] == "lock_account":
+            boolEval = parts[2].strip().lower() == 'true'
+            status = provider.lock_account(parts[1],boolEval)
 
-                elif parts[0] == "delete_user":
-                    status = provider.delete_user(parts[1])
+        elif parts[0] == "set_admin_status":
+            boolEval = parts[2].strip().lower() == 'true'
+            status = provider.set_admin_status(parts[1],boolEval)
 
-                elif parts[0] == "create_user":
-                    boolEval = parts[3].strip().lower() == 'true'
-                    status = provider.create_user(parts[1],parts[2],boolEval)
+        elif parts[0] == "delete_user":
+            status = provider.delete_user(parts[1])
 
-                else:
-                    print_debug(f"WARNING: main_logic - cmd parts[0] '{parts[0]}' does not match any known command")
-                    status = False
-                
-                send_message(f"agent/set_task_result",True,True,json.dumps({"task_id": task_id, "result": str(status).lower()}, separators=(',', ':')))
-            except Exception as E:
-                print_debug(f"ERROR: unexpected error in main_logic iteration: {E}")
+        elif parts[0] == "create_user":
+            boolEval = parts[3].strip().lower() == 'true'
+            status = provider.create_user(parts[1],parts[2],boolEval)
+
+        else:
+            print_debug(f"WARNING: main_logic - cmd parts[0] '{parts[0]}' does not match any known command")
+            status = False
+        
+        send_message(f"agent/set_task_result",True,True,json.dumps({"task_id": task_id, "result": str(status).lower()}, separators=(',', ':')))
+        return
     except Exception as E:
         print_debug(f"ERROR: unexpected error in main_logic: {E}")
-    return
+        return
 
 #endregion###############
 ######### Main ##########
@@ -1543,7 +1539,7 @@ def main(stop_event=None):
     # force the working directory to the script's location
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-    send_message(f"agent/beacon/{AGENT_TYPE}",True,True,f"Register")
+    send_message(f"agent/beacon",True,True,f"Register")
 
     print_debug(f"main(): System details - {get_system_details()}")
 
@@ -1595,9 +1591,9 @@ def main(stop_event=None):
             if PAUSED:
                 # Send alert if agent is freshly moving into PAUSED state
                 suppressed_send = True
-                send_message(f"agent/beacon/{AGENT_TYPE}",False,False,f"Agent moved into PAUSE status for {int(pausedEpochLocal - time.time())} seconds")
+                send_message(f"agent/beacon",False,False,f"Agent moved into PAUSE status for {int(pausedEpochLocal - time.time())} seconds")
             else:
-                send_message(f"agent/beacon/{AGENT_TYPE}",True,True,f"Agent moved into ACTIVE status (from PAUSE)")
+                send_message(f"agent/beacon",True,True,f"Agent moved into ACTIVE status (from PAUSE)")
 
         if not PAUSED:
             main_logic(provider)
@@ -1606,7 +1602,7 @@ def main(stop_event=None):
         else:
             if not suppressed_send:
                 # Do not trigger alert
-                send_message(f"agent/beacon/{AGENT_TYPE}",True,False,f"Agent still in PAUSE status for {int(pausedEpochLocal - time.time())} seconds remaining")
+                send_message(f"agent/beacon",True,False,f"Agent still in PAUSE status for {int(pausedEpochLocal - time.time())} seconds remaining")
         
         time.sleep(SLEEPTIME)
 
