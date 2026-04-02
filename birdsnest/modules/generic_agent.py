@@ -283,7 +283,7 @@ def get_pause():
         #if not all([agent_name, hostname, ip, os_name, executionUser, executionAdmin, auth, beacon_type, oldStatus, newStatus, message]):
         if not all([agent_name, agent_type, hostname, ip, os_name, auth]): # required data only
             logger.warning(f"/agent/get_pause - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
-            return "Missing data", 400
+            return "missing data", 400
         
         # Get agent identity
         agent_id = hash_id(agent_name, hostname, ip, os_name)
@@ -321,7 +321,7 @@ def get_task_agent():
         
         if not all([agent_name, agent_type, hostname, ip, os_name, auth]): # required data only
             logger.warning(f"/agent/get_task - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
-            return "Missing data", 400
+            return "missing data", 400
         
         agent_id = hash_id(agent_name, hostname, ip, os_name)
         
@@ -413,14 +413,14 @@ def set_task_result():
 
     if task_id is None or result_text is None:
         logger.warning(f"/set_task_result - Failed connection from {request.remote_addr} - missing task_id or result. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth, message, task_id, result_text]}")
-        return "Missing task_id or result", 400
+        return "missing task_id or result", 400
 
     # Locate the specific task
     task_entry = AgentTask.query.get(task_id)
 
     if not task_entry:
         logger.warning(f"/set_task_result - Failed connection from {request.remote_addr} - no task found for id {task_id}")
-        return "Task not found", 400
+        return "task not found", 400
 
     try:
         # Update the result field with the string provided by the agent

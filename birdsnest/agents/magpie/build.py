@@ -26,6 +26,19 @@ NUITKA_ARGS = [
     #"--enable-plugin=anti-bloat", #pywin32
     #"--python-flag=no_docstrings", # breaks sqlalchemy
 ]
+REPLACEMENTS = {
+    "RIT Tiger": "Favicon",
+    '<p>Made by the <a href="https://github.com/CCDC-RIT" target="_blank" rel="noopener noreferrer">Rochester Institute of Technology Collegiate Cyber Defense Team</a></p>': "<p>Made by CDT Alpha</p>",
+    "Made by the Rochester Institute of Technology Collegiate Cyber Defense Team": "Made by CDT Alpha",
+    "Birdsnest": "Whackamole",
+    "birdsnest": "whackamole",
+    "Magpie": "",
+    "magpie": "",
+    "Owlet": "",
+    "owlet": "",
+    "Kingfisher": "KingdomCome",
+    "kingfisher": "kingdomcome"
+}
 
 def get_platform_dist():
     sys_platform = platform.system()

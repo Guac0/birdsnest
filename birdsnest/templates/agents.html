@@ -53,6 +53,7 @@
     .btn.muted{background:transparent;color:var(--muted);border:1px solid rgba(255,255,255,0.02);cursor:not-allowed;opacity:0.6}
     .btn.pause{background:linear-gradient(180deg,#ffb870,#ff9b3b);color:#1b0f00}
     .btn.resume{background:linear-gradient(180deg,#8ef0a1,#4bd071);color:#042033}
+    .btn.task{background:linear-gradient(180deg,#71b2f0,#3e92f3);color:#042033}
 
     .small{font-size:12px;color:var(--muted)}
     .false-red{color:var(--danger);font-weight:bold}
@@ -121,6 +122,24 @@
     </div>
   </div>
 
+  <div id="taskModal" class="modal-backdrop" style="display:none">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="taskTitle">
+      <h3 id="taskTitle">Add Agent Task</h3>
+      <div class="field">
+        <label class="small">Agent ID</label>
+        <div id="modalAgentIdTask" class="muted-pill" style="font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid rgba(255,255,255,0.03);background:rgba(255,255,255,0.02);color:var(--muted)"></div>
+      </div>
+      <div class="field" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+        <label class="small">Task</label>
+        <input id="taskContent" type="text"/>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button id="cancelTask" class="btn ghost">Cancel</button>
+        <button id="confirmTask" class="btn task">Send</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast">Agents data refreshed successfully</div>
 
   <footer class="site-footer">
@@ -128,7 +147,7 @@
   </footer>
 
   <script>
-    const ENDPOINTS = { listAgents:'/web/list_agents', pause:'/web/agent_pause', resume:'/web/agent_resume' };
+    const ENDPOINTS = { listAgents:'/web/list_agents', pause:'/web/agent_pause', resume:'/web/agent_resume', add_task:'/web/add_task' };
     let agentsData = {}, columns = [], filters = {}, sortState = {key:null, dir:1}, searchTimer;
     let columnWidths = {};
 
@@ -140,9 +159,15 @@
     const pauseSecondsInput = document.getElementById('pauseSeconds');
     const cancelPauseBtn = document.getElementById('cancelPause');
     const confirmPauseBtn = document.getElementById('confirmPause');
+    const modalTask = document.getElementById('taskModal');
+    const modalAgentIdTask = document.getElementById('modalAgentIdTask');
+    const taskContent = document.getElementById('taskContent');
+    const cancelTaskBtn = document.getElementById('cancelTask');
+    const confirmTaskBtn = document.getElementById('confirmTask');
     const toastEl = document.getElementById('toast');
     const updateTimeEl = document.getElementById('lastUpdate');
     let activePauseAgent = null;
+    let activeTaskAgent = null;
 
     async function verifyClientContext() {
         const _0x_auth = "Made by the Rochester Institute of Technology Collegiate Cyber Defense Team";
@@ -191,10 +216,10 @@
     // AGGRESSIVE: Logic to shrink to exact content width
     function calculateIdealWidths(colKey = null) {
       const rows = Object.values(agentsData);
-      const colKeys = colKey ? [colKey] : ['_actions', '_resume', ...columns];
+      const colKeys = colKey ? [colKey] : ['_pause', '_resume', '_task', ...columns];
 
       colKeys.forEach(k => {
-        if (k === '_actions' || k === '_resume') { columnWidths[k] = 80; return; }
+        if (k === '_paus' || k === '_resume' || k === '_task') { columnWidths[k] = 80; return; }
         
         let maxLength = k.length;
         
@@ -230,17 +255,18 @@
     function showToast(){toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),3000);}
 
     function renderTable(){
-      const colKeys=['_actions','_resume',...columns];
+      const colKeys=['_pause','_resume','_task',...columns];
       let thead='<thead><tr>'+colKeys.map(k=>{
         const w = columnWidths[k] ? `style="width:${columnWidths[k]}px"` : '';
-        if(k==='_actions')return`<th class="col-actions" ${w}>Actions<div class="resizer"></div></th>`; 
+        if(k==='_pause')return`<th class="col-actions" ${w}>Pause<div class="resizer"></div></th>`; 
         if(k==='_resume')return`<th class="col-actions" ${w}>Resume<div class="resizer"></div></th>`; 
+        if(k==='_task')return`<th class="col-actions" ${w}>Task<div class="resizer"></div></th>`; 
         const display=escapeHtml(k); 
         const sortMark=(sortState.key===k)?(sortState.dir===1?'▲':'▼'):''; 
         return`<th class="sortable" data-key="${display}" ${w}><div class="col-head"><span>${display}</span><span class="sort-ind">${sortMark}</span></div><div class="resizer"></div></th>`;
       }).join('')+'</tr><tr>';
       
-      thead+=colKeys.map(k=>{if(k==='_actions'||k==='_resume')return`<th></th>`; const val=filters[k]||''; return `<th class="col-filter"><input data-col="${escapeHtml(k)}" placeholder="..." value="${escapeHtml(val)}" /></th>`;}).join('')+'</tr></thead>';
+      thead+=colKeys.map(k=>{if(k==='_pause'||k==='_resume')return`<th></th>`; const val=filters[k]||''; return `<th class="col-filter"><input data-col="${escapeHtml(k)}" placeholder="..." value="${escapeHtml(val)}" /></th>`;}).join('')+'</tr></thead>';
 
       const bodyRows=buildFilteredSortedRows();
       tableEl.innerHTML=thead+'<tbody>'+bodyRows.map(r=>r.html).join('')+'</tbody>';
@@ -257,6 +283,7 @@
           const agentId=btn.getAttribute('data-agent');
           try{await postJSON(ENDPOINTS.resume,{agent_id:agentId});await fetchAgents();}catch(err){alert('Failed: '+err.message);}
       }));
+      tableEl.querySelectorAll('button[data-action="task"]').forEach(btn=>btn.addEventListener('click',()=>openTaskModal(btn.getAttribute('data-agent'))));
     }
 
     function buildFilteredSortedRows(){
@@ -293,8 +320,9 @@
         const pauseBtn = `<button class="btn pause" data-action="pause" data-agent="${escapeHtml(rec.agent_id)}">Pause</button>`;
         const resumeDisabled = ((pausedUntil === 0) || (pausedUntil === 1)) ? 'disabled class="btn muted"' : 'class="btn resume"';
         const resumeBtn = `<button ${resumeDisabled} data-action="resume" data-agent="${escapeHtml(rec.agent_id)}">Resume</button>`;
+        const taskBtn = `<button class="btn task" data-action="task" data-agent="${escapeHtml(rec.agent_id)}">Task</button>`;
         
-        return `<tr><td>${pauseBtn}</td><td>${resumeBtn}</td>${values.map(v => `<td>${v}</td>`).join('')}</tr>`;
+        return `<tr><td>${pauseBtn}</td><td>${resumeBtn}</td><td>${taskBtn}</td>${values.map(v => `<td>${v}</td>`).join('')}</tr>`;
     }
 
     function toggleSort(key){if(sortState.key===key){sortState.dir=-sortState.dir;}else{sortState.key=key;sortState.dir=1;}renderTable();}
@@ -302,13 +330,16 @@
     function openPauseModal(agentId){activePauseAgent=agentId;modalAgentId.textContent=agentId;pauseSecondsInput.value=60;modal.style.display='flex';}
     function closePauseModal(){modal.style.display='none';activePauseAgent=null;}
     async function confirmPause(){const secs=Number(pauseSecondsInput.value);if(!Number.isInteger(secs)||secs<=0)return;try{await postJSON(ENDPOINTS.pause,{agent_id:activePauseAgent,seconds:secs});closePauseModal();await fetchAgents();}catch(err){alert('Failed: '+err.message);}}
+    function openTaskModal(agentId){activeTaskAgent=agentId;modalAgentIdTask.textContent=agentId;taskContent.value="";modal.style.display='flex';}
+    function closeTaskModal(){modalTask.style.display='none';activeTaskAgent=null;}
+    async function confirmTask(){try{await postJSON(ENDPOINTS.add_task,{agent_id:activeTaskAgent,task_command:taskContent.value});closeTaskModal();await fetchAgents();}catch(err){alert('Failed: '+err.message);}}
     function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));}
     function downloadJSON(){const filename='agents_'+new Date().toISOString()+'.json';const b=new Blob([JSON.stringify(agentsData,null,2)],{type:'application/json'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=filename;a.click();URL.revokeObjectURL(u);}
 
     tableEl.addEventListener('mousedown', e => {
       if (!e.target.classList.contains('resizer')) return;
       const th = e.target.parentElement;
-      const key = th.getAttribute('data-key') || (th.cellIndex === 0 ? '_actions' : '_resume');
+      const key = th.getAttribute('data-key') || (th.cellIndex === 0 ? '_pause' : '_resume');
       const startX = e.pageX; const startWidth = th.offsetWidth;
       const move = (ev) => { columnWidths[key] = Math.max(startWidth + (ev.pageX - startX), 30); th.style.width = columnWidths[key] + 'px'; };
       const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
@@ -317,13 +348,15 @@
 
     tableEl.addEventListener('dblclick', e => {
       if (e.target.classList.contains('resizer')) {
-        const key = e.target.parentElement.getAttribute('data-key') || (e.target.parentElement.cellIndex === 0 ? '_actions' : '_resume');
+        const key = e.target.parentElement.getAttribute('data-key') || (e.target.parentElement.cellIndex === 0 ? '_pause' : '_resume');
         calculateIdealWidths(key); renderTable();
       }
     });
 
     cancelPauseBtn.addEventListener('click',closePauseModal);
     confirmPauseBtn.addEventListener('click',confirmPause);
+    cancelTaskBtn.addEventListener('click',closeTaskModal);
+    confirmTaskBtn.addEventListener('click',confirmTask);
     refreshBtn.addEventListener('click',fetchAgents);
     downloadBtn.addEventListener('click',downloadJSON);
     fetchAgents();

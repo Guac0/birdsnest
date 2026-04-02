@@ -506,7 +506,7 @@ def run_git(args, cwd=GIT_PROJECT_ROOT):
         )
         return result
     except Exception as E:
-        logger.error(f"run_git: error when executing ({["git", "-c", "http.sslVerify=false"] + args}): {E}")
+        logger.error(f"run_git: error when executing ({['git', '-c', 'http.sslVerify=false'] + args}): {E}")
         return "" # TODO do we ever use this value
 
 def hash_id(*args):
