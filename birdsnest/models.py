@@ -21,18 +21,42 @@ logger = setup_logging()
 ##########################
 
 
+class Host(db.Model):
+    """
+    Records each host in the network that has an agent(s) on them.
+    
+    Relationships:
+    one:many with agents
+    one:many with system_users
+    """
+    __tablename__ = 'hosts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    hostname = db.Column(db.String(128), unique=True, nullable=False)
+    ip = db.Column(db.String(48), unique=True, nullable=False)
+    os = db.Column(db.String(64), nullable=False) # note that 'os' may vary as different agents may not be standardized on os reporting due to programming language differences. This value is only set in the initial host creation.
+
+    agents = db.relationship('Agent', backref='host')
+    system_users = db.relationship('SystemUser', backref='host')
+
+    def __repr__(self):
+        return f"<Host {self.hostname}, IP {self.ip}, OS {self.os}>"
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+    
 class Agent(db.Model):
     __tablename__ = 'agents'
 
     # Primary Key
     agent_id = db.Column(db.String(65), primary_key=True, nullable=False)
+    host_id = db.Column(db.Integer, db.ForeignKey('hosts.id'), nullable=False)
 
     # Agent details
     agent_name = db.Column(db.String(128))
     agent_type = db.Column(db.String(24))
-    hostname = db.Column(db.String(128))
-    ip = db.Column(db.String(45)) # IPv4 or IPv6
-    os = db.Column(db.String(64))
+    #hostname = db.Column(db.String(128)) # To be removed in the future
+    #ip = db.Column(db.String(45)) # IPv4 or IPv6 # To be removed in the future
+    #os = db.Column(db.String(64)) # To be removed in the future
     executionUser = db.Column(db.String(128))
     executionAdmin = db.Column(db.Boolean, default=False)
     
@@ -282,7 +306,8 @@ class SystemUser(db.Model):
     __tablename__ = 'system_users'
 
     id = db.Column(db.Integer, primary_key=True)
-    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
+    #agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False) # To be removed in the future
+    host_id = db.Column(db.Integer, db.ForeignKey('hosts.id'), nullable=False)
     local_index = db.Column(db.Integer, nullable=False)
     username = db.Column(db.String(64), nullable=False)
     admin = db.Column(db.Boolean)
@@ -297,7 +322,8 @@ class SystemUser(db.Model):
         if self.local_index is None:
             # Atomic increment: find the current max index for THIS agent and add 1
             last_index = db.session.query(func.max(SystemUser.local_index)).filter(
-                SystemUser.agent_id == self.agent_id
+                #SystemUser.agent_id == self.agent_id
+                SystemUser.host_id == self.host_id
             ).scalar()
             self.local_index = (last_index or 0) + 1
     def to_dict(self):

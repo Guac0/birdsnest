@@ -11,7 +11,7 @@ from sqlalchemy import func
 
 from models import (
 db,
-Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
+Host, Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
@@ -56,9 +56,9 @@ def list_auth_records():
         entry.pop('agent_id', None)
         
         # 2. Attach the foreign keyed agent details
-        entry['hostname'] = agent.hostname
-        entry['agent_ip'] = agent.ip  # Renamed to agent_ip to avoid confusion with srcip
-        entry['os'] = agent.os
+        entry['hostname'] = agent.host.hostname
+        entry['agent_ip'] = agent.host.ip  # Renamed to agent_ip to avoid confusion with srcip
+        entry['os'] = agent.host.os
         
         # Store in the ID-keyed dictionary format required by your frontend
         data[str(record.id)] = entry

@@ -21,7 +21,7 @@ GIT_PROJECT_ROOT, GIT_BACKEND, DATABASE_CREDS, DATABASE_LOCATION, DATABASE_DB
 )
 from models import (
 db,
-Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
+Host, Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from utilities import (
@@ -179,7 +179,7 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
         payload = json.dumps({
         "embeds": [
             {
-            "title": "Alert - {} Incident Created on {} for {}".format(incident["message"].split('-')[0].strip(),agent.hostname,agent.agent_name),
+            "title": "Alert - {} Incident Created on {} for {}".format(incident["message"].split('-')[0].strip(),agent.host.hostname,agent.agent_name),
             "color": int(color,16),
             "description": "{}".format(incident["message"]),
             #"description": "{}\n\n[Open Dashboard]({}/incidents)".format(incident["message"],PUBLIC_URL),
@@ -207,12 +207,12 @@ def discord_webhook(incident_id,incident,url=WEBHOOK_URL):
                 },
                 {
                 "name": "Hostname",
-                "value": "{}".format(agent.hostname),
+                "value": "{}".format(agent.host.hostname),
                 "inline": True
                 },
                 {
                 "name": "IP Address",
-                "value": "{}".format(agent.ip),
+                "value": "{}".format(agent.host.ip),
                 "inline": True
                 }
             ]
@@ -346,7 +346,7 @@ def periodic_stale(interval=60):
                         criteria = {
                             "agent_id": agent.agent_id,
                             "tag": ('New', 'Active'),
-                            "message": f"Agent - Agent {agent.agent_name} on {agent.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime('%Y-%m-%d_%H-%M-%S')}."
+                            "message": f"Agent - Agent {agent.agent_name} on {agent.host.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime('%Y-%m-%d_%H-%M-%S')}."
                         }
 
                         incident_id = find_incident_db(criteria, newest=True)
@@ -368,7 +368,7 @@ def periodic_stale(interval=60):
                             "agent_id": agent.agent_id,
                             "oldStatus": agent.lastStatus,
                             "newStatus": False,
-                            "message": f"Agent - Agent {agent.agent_name} on {agent.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime('%Y-%m-%d_%H-%M-%S')}.",
+                            "message": f"Agent - Agent {agent.agent_name} on {agent.host.hostname} moved to Stale state. Last seen {datetime.fromtimestamp(agent.lastSeenTime).strftime('%Y-%m-%d_%H-%M-%S')}.",
                             "sla": 0
                         }
                         # This will now trigger the DB-backed WebhookQueue

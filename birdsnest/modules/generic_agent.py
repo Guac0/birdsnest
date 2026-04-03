@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from models import (
 db,
-Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
+Host, Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
@@ -164,13 +164,25 @@ def beacon_generic(endpoint):
         # Register or update client
         if not agent:
             # CREATE NEW AGENT
+            host = Host.query.filter(
+                Host.ip == request_info["ip"], 
+                Host.hostname.ilike(request_info["hostname"]) # case insensitive
+            ).first()
+            if not host:
+                host = Host(
+                    hostname=request_info["hostname"],
+                    ip=request_info["ip"],
+                    os=request_info["os_name"]
+                )
+                db.session.add(host)
             new_agent = Agent(
                 agent_id=agent_id,
+                host_id=host.id,
                 agent_name=request_info["agent_name"],
                 agent_type=request_info["agent_type"],
-                hostname=request_info["hostname"],
-                ip=request_info["ip"],
-                os=request_info["os_name"],
+                #hostname=request_info["hostname"],
+                #ip=request_info["ip"],
+                #os=request_info["os_name"],
                 executionUser=request_info["executionUser"],
                 executionAdmin=request_info["executionAdmin"],
                 lastSeenTime=current_time,
