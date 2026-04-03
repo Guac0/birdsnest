@@ -95,6 +95,9 @@
 
     <section class="card" id="userDetailCard" style="display:none">
       <h3 id="selectedAgentTitle">Agent Users</h3>
+      <button class="btn ghost" onclick="openHostWideModal()" style="margin-bottom: 10px;">
+          Task ANY Agent on this Host
+      </button>
       <table id="userTable">
         <thead>
           <tr>
@@ -207,14 +210,25 @@
 
     function openGlobalModal() {
         isGlobalTask = true;
-        currentUser = "ALL AGENTS"; // For display
+        isHostWide = false;
+        currentUser = "ALL AGENTS";
         document.getElementById('modalTitle').innerText = `Global Fleet Task`;
+        document.getElementById('actionModal').style.display = 'flex';
+        toggleModalFields();
+    }
+
+    function openHostWideModal() {
+        isGlobalTask = false;
+        isHostWide = true; // <--- SET THIS
+        currentUser = "ANY_USER"; 
+        document.getElementById('modalTitle').innerText = `Target: Any Agent on ${currentAgent.hostname}`;
         document.getElementById('actionModal').style.display = 'flex';
         toggleModalFields();
     }
 
     function openActionModal(username) {
         isGlobalTask = false;
+        isHostWide = false;
         currentUser = username;
         document.getElementById('modalTitle').innerText = `Manage: ${username}`;
         document.getElementById('actionModal').style.display = 'flex';
@@ -224,22 +238,41 @@
     async function submitTask() {
         const type = document.getElementById('taskSelect').value;
         const pass = document.getElementById('field_pass')?.value || "";
-        const boolVal = document.getElementById('field_bool')?.value || "";
+        const boolVal = document.getElementById('field_bool')?.value || "false";
         
+        let targetUser = currentUser;
         let cmd = "";
-        if (type === 'change_password') cmd = `change_password ${currentUser} ${pass}`;
-        if (type === 'lock_account') cmd = `lock_account ${currentUser} ${boolVal}`;
-        if (type === 'set_admin_status') cmd = `set_admin_status ${currentUser} ${boolVal}`;
-        if (type === 'delete_user') cmd = `delete_user ${currentUser}`;
+
+        // 1. Construct the command string based on your valid task list
+        if (type === 'change_password') cmd = `change_password ${targetUser} ${pass}`;
+        if (type === 'lock_account') cmd = `lock_account ${targetUser} ${boolVal}`;
+        if (type === 'set_admin_status') cmd = `set_admin_status ${targetUser} ${boolVal}`;
+        if (type === 'delete_user') cmd = `delete_user ${targetUser}`;
         if (type === 'create_user') {
-            // For global creation, we might need a prompt for the username
-            let targetUser = isGlobalTask ? prompt("Enter username to create on ALL boxes:") : currentUser;
-            if(!targetUser) return;
+            if (isGlobalTask) {
+                targetUser = prompt("Enter username to create on ALL boxes:");
+                if (!targetUser) return;
+            }
             cmd = `create_user ${targetUser} ${pass} ${boolVal}`;
         }
 
-        const endpoint = isGlobalTask ? '/web/add_task_bulk' : '/web/add_task';
-        const payload = isGlobalTask ? { task: cmd } : { agent_id: currentAgent.agent_id, task: cmd };
+        // 2. Determine Endpoint and Payload
+        let endpoint = "";
+        let payload = { task: cmd };
+
+        if (isGlobalTask) {
+            endpoint = '/web/add_task_bulk';
+            // Target all types found in the current fleet
+            payload.agent_type = [...new Set(rawData.map(a => a.agent_type))]; 
+        } else if (isHostWide) {
+            endpoint = '/web/add_task';
+            payload.host_id = currentAgent.host_id;
+            payload.agent_id = null; // Explicitly null so the first available agent claims it
+        } else {
+            // Direct target to a specific agent
+            endpoint = '/web/add_task';
+            payload.agent_id = currentAgent.agent_id;
+        }
 
         try {
             const res = await fetch(endpoint, {
@@ -247,11 +280,17 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
             });
+            
             const result = await res.json();
-            showToast(isGlobalTask ? result.message : `Task Queued: ID ${result.task_id}`);
-            closeModal();
+            
+            if (res.ok) {
+                showToast(isGlobalTask ? result.message : `Task Queued: ID ${result.task_id}`);
+                closeModal();
+            } else {
+                showToast(result.error || "Server rejected task", true);
+            }
         } catch (e) {
-            showToast("Error sending task", true);
+            showToast("Network error sending task", true);
         }
     }
 
@@ -393,31 +432,6 @@
                  </select></div>`;
       }
       container.innerHTML = html;
-    }
-
-    async function submitTask() {
-      const type = document.getElementById('taskSelect').value;
-      let cmd = "";
-      
-      // Construct command strings based on your Kingfisher specs
-      if (type === 'change_password') cmd = `change_password ${currentUser} ${document.getElementById('field_pass').value}`;
-      if (type === 'lock_account') cmd = `lock_account ${currentUser} ${document.getElementById('field_bool').value}`;
-      if (type === 'set_admin_status') cmd = `set_admin_status ${currentUser} ${document.getElementById('field_bool').value}`;
-      if (type === 'delete_user') cmd = `delete_user ${currentUser}`;
-      if (type === 'create_user') cmd = `create_user ${currentUser} ${document.getElementById('field_pass').value} ${document.getElementById('field_bool').value}`;
-
-      try {
-        const res = await fetch('/web/add_task', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ agent_id: currentAgent.agent_id, task: cmd })
-        });
-        const result = await res.json();
-        showToast(`Task Queued: ID ${result.task_id}`);
-        closeModal();
-      } catch (e) {
-        showToast("Error sending task", true);
-      }
     }
 
     function showToast(msg, isError = false) {

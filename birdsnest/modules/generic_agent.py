@@ -5,6 +5,7 @@ import time
 import os
 import json
 from datetime import datetime, timezone
+from sqlalchemy import and_, or_
 
 from models import (
 db,
@@ -453,14 +454,32 @@ def get_task_agent():
             return "unauthorized - no agent", 403
         
         # Query the oldest (FIFO) task that is currently PENDING for this agent
-        task_entry = AgentTask.query.filter_by(agent_id=agent_id, result="PENDING") \
-                                    .order_by(AgentTask.created_at.asc()) \
-                                    .first()
+        task_entry = AgentTask.query.filter(
+            AgentTask.result == "PENDING",
+            or_(
+                AgentTask.agent_id == agent.agent_id, # Direct target
+                and_(
+                    AgentTask.agent_id == None,         # Unclaimed task
+                    AgentTask.host_id == agent.host_id, # Matching host
+                    or_(
+                        AgentTask.agent_type == None, # Any agent on host
+                        AgentTask.agent_type == agent.agent_type # Specific type
+                    )
+                )
+            )
+        ).order_by(AgentTask.created_at.asc()).first()
 
         if task_entry:
             try:
+                # LOCK the task to this agent if it isn't already
+                if task_entry.agent_id is None:
+                    task_entry.agent_id = agent.agent_id
+                    # Now that it has an agent, it needs a local_index for history
+                    task_entry._assign_local_index()
+
                 task_entry.result="SENT"
                 db.session.commit()
+
                 logger.info(f"/agent/get_task - Successful connection from {request.remote_addr} - returning task {task_entry.id}")
                 return jsonify({
                     "task_id": task_entry.id,

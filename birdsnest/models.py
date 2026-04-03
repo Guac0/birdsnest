@@ -37,6 +37,7 @@ class Host(db.Model):
     os = db.Column(db.String(64), nullable=False) # note that 'os' may vary as different agents may not be standardized on os reporting due to programming language differences. This value is only set in the initial host creation.
 
     agents = db.relationship('Agent', backref='host')
+    agent_tasks = db.relationship('AgentTask', backref='host')
     system_users = db.relationship('SystemUser', backref='host')
 
     def __repr__(self):
@@ -282,10 +283,21 @@ class AnsibleQueue(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 class AgentTask(db.Model):
+    """
+    An AgentTask represents a single task that is scope locked to a single host via either a host_id or an agent_id.
+    An AgentTask can target a specific agent on a specific host, a specific agent type on a specific host, or any agent on a specific host.
+
+    To submit a task that should be executed by all agents of a specific agent_type, create multiple tasks either using a
+    host_id and agent_type combo (one for each host) or iterate over each applicable agent_id to create multiple tasks.
+    """
     __tablename__ = 'agent_tasks'
 
     id = db.Column(db.Integer, primary_key=True)
     agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
+
+    host_id = db.Column(db.Integer, db.ForeignKey('hosts.id'), nullable=True)
+    agent_type = db.Column(db.String(24), nullable=True)
+
     local_index = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     task = db.Column(db.String(1024), nullable=False)
@@ -293,12 +305,14 @@ class AgentTask(db.Model):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        if self.local_index is None:
-            # Atomic increment: find the current max index for THIS agent and add 1
-            last_index = db.session.query(func.max(AgentTask.local_index)).filter(
-                AgentTask.agent_id == self.agent_id
-            ).scalar()
-            self.local_index = (last_index or 0) + 1
+        # We only set local_index if we already know the agent (Direct targeting)
+        if self.agent_id and self.local_index is None:
+            self._assign_local_index()
+    def _assign_local_index(self):
+        last_index = db.session.query(func.max(AgentTask.local_index)).filter(
+            AgentTask.agent_id == self.agent_id
+        ).scalar()
+        self.local_index = (last_index or 0) + 1
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}
 
