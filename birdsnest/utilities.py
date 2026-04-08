@@ -41,10 +41,12 @@ def insert_initial_data():
     try:
         host = Host(
             hostname="custom",
-            hostname="99.99.99.99",
-            hostname="custom"
+            ip="99.99.99.99",
+            os="custom"
         )
         db.session.add(host)
+        db.session.commit()
+        host = Host.query.filter(Host.hostname == 'custom').first()
         new_agent = Agent(
             agent_id="custom",
             host_id=host.id,
@@ -63,9 +65,9 @@ def insert_initial_data():
         db.session.add(new_agent)
         
         if CREATE_TEST_DATA:
-            add_test_data_hosts(5)
-            add_test_data_agents(10)
-            add_test_data_messages(15)
+            add_test_data_hosts(10)
+            add_test_data_agents(25)
+            add_test_data_messages(50)
             add_test_data_incidents_custom(5)
             add_test_data_incidents(10)
             #add_test_data_comp(0)
@@ -212,13 +214,13 @@ def get_random_time_offset_epoch(minutes_offset=30, direction="either"):
 
 def add_test_data_hosts(num=5):
     try:
-        if num > 5:
-            logger.warning(f"Clamping number of created hosts to 5 hosts instead of requested {num} due to not having enough test data")
-            num = 5
+        if num > 10:
+            logger.warning(f"Clamping number of created hosts to 10 hosts instead of requested {num} due to not having enough test data")
+            num = 10
         for i in range(1,num+1):
-            hostname = ["webserver1","webserver2","fileshare1","fileshare2","dc01"][i-1]
-            ip = ["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5"][i-1]
-            os_name = ["Windows 10","Windows 2016Server","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8"][i-1]
+            hostname = ["webserver1","webserver2","fileshare1","fileshare2","dc01"][i%5]
+            ip = ["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5","10.1.2.1","10.1.2.2","10.1.2.3","10.1.2.4","10.1.2.5"][i-1]
+            os_name = ["Windows 10","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8","Windows 2016Server"][i%5]
             host = Host(
                 hostname=hostname,
                 ip=ip,
@@ -234,12 +236,10 @@ def add_test_data_hosts(num=5):
 def add_test_data_agents(num=15):
     # agent_id (name, hostname, ip, os): {agent_name(str),hostname(str),ip(str),os(str),executionUser(str),executionAdmin(bool),lastSeenTime(int),lastStatus(bool),stale(bool)}
     try:
-        if num > 5:
-            logger.warning(f"Clamping number of created agents to 5 agents instead of requested {num} due to not having enough test data")
-            num = 5
         for i in range(0,num):
             #agent_name = random.choice(["apache2","iis","smb","mysql","vsftpd"])
             agent_name = ["apache2","iis","smb","mysql","vsftpd"][i%5]
+            agent_name = agent_name + f"{i}"
             agent_type = random.choice(["authwatch","pythonc2","genericc2","passwordshim"])
 
             # The agent_id is computed but we use a unique prefix for test data to avoid collisions
@@ -256,10 +256,10 @@ def add_test_data_agents(num=15):
                 #ip=ip,
                 #os=os_name,
                 executionUser=random.choice(["root", "admin", ".\\administrator", "domain\\dadmin", "user"]),
-                executionAdmin=random.choice([True, False]),
-                lastSeenTime=time.time() - ((num - i) * 100),
-                lastStatus=random.choice([True, False]),
-                stale=random.choice([True, False]),
+                executionAdmin=random.choice([True, True, False]),
+                lastSeenTime=time.time() - (((num + 1) - i) * 50),
+                lastStatus=random.choice([True, True, False]),
+                stale=random.choice([True, True, False]),
                 pausedUntil=random.choice([str(0),str(0),str(1),str(time.time()),str(time.time() + 180), str(time.time() + 600)])
             )
             db.session.add(new_agent)
@@ -335,7 +335,7 @@ def add_test_data_incidents(num=15,createAlert=True):
         agent_id = ranagent.agent_id
         agent_name = ranagent.agent_name
         #agent_name = f"agent_{random.randint(1,5)}"
-        hostname = "exampleHost"
+        hostname = ranagent.host.hostname
         lastSeenTime = time.time() - ((num - i) * 100)
         incident_data = {
             "timestamp": lastSeenTime,

@@ -82,7 +82,7 @@ def dashboard_summary():
                 "total": Agent.query.count() - 1,
                 "active": Agent.query.filter_by(lastStatus=True).count() - 1,
                 "stale": Agent.query.filter_by(stale=True).count() - 1,
-                "paused": Agent.query.filter(Agent.pausedUntil != "0").count() - 1
+                "paused": Agent.query.filter(Agent.pausedUntil != "0").count()
             },
             "webhooks": {
                 "queue_count": WebhookQueue.query.count() or 0,
@@ -127,7 +127,75 @@ def dashboard_summary():
         # This is critical: if this returns a 500, the frontend 'data' variable becomes undefined
         logger.error(f"/dashboard_summary Error: {str(e)}")
         return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
-    
+
+def get_pwnboard_data():
+    try:        
+        #hosts = Host.query.all() #filter(Host.hostname != 'custom')
+        hosts = Host.query.filter(Host.ip != '99.99.99.99').all()
+        # Sort by IP address (simple string sort, or use socket.inet_aton for true IP sort)
+        hosts.sort(key=lambda h: h.ip)
+        
+        host_data = []
+        type_stats = {} # {type_name: {alive_agents: 0, total_agents: 0, alive_hosts: set(), total_hosts: set()}}
+
+        for host in hosts:
+            alive_agents = [a for a in host.agents if not a.stale]
+            total_agents = host.agents
+            
+            # Calculate Agent Type Metrics
+            all_types = {a.agent_type for a in total_agents}
+            alive_types = {a.agent_type for a in alive_agents}
+            
+            # Last Callback Details
+            last_agent = max(total_agents, key=lambda a: a.lastSeenTime) if total_agents else None
+            last_callback_str = f"{last_agent.agent_type}_{last_agent.agent_name}" if last_agent else "N/A"
+            last_time = last_agent.lastSeenTime if last_agent else 0
+
+            host_entry = {
+                "id": host.id,
+                "hostname": host.hostname,
+                "ip": host.ip,
+                "os": host.os,
+                "agents_alive": len(alive_agents),
+                "agents_total": len(total_agents),
+                "types_alive": len(alive_types),
+                "types_total": len(all_types),
+                "last_callback_time": last_time,
+                "last_callback_name": last_callback_str
+            }
+            host_data.append(host_entry)
+
+            # Aggregate Type Statistics for the second table
+            for a in total_agents:
+                t = a.agent_type
+                if t not in type_stats:
+                    type_stats[t] = {"alive_agents": 0, "total_agents": 0, "alive_hosts": set(), "total_hosts": set()}
+                
+                type_stats[t]["total_agents"] += 1
+                type_stats[t]["total_hosts"].add(host.id)
+                if not a.stale:
+                    type_stats[t]["alive_agents"] += 1
+                    type_stats[t]["alive_hosts"].add(host.id)
+
+        # Format type stats for frontend
+        formatted_type_stats = []
+        for t_name, s in type_stats.items():
+            formatted_type_stats.append({
+                "type": t_name,
+                "agents": f"{s['alive_agents']}/{s['total_agents']}",
+                "hosts": f"{len(s['alive_hosts'])}/{len(s['total_hosts'])}",
+                "health": (s['alive_agents'] / s['total_agents']) * 100 if s['total_agents'] > 0 else 0
+            })
+
+        logger.info(f"/get_pwnboard_data - Successful connection from {current_user.id} at {request.remote_addr}")
+        return jsonify({
+            "hosts": host_data,
+            "types": formatted_type_stats
+        })
+    except Exception as E:
+        logger.error(f"/get_pwnboard_data - Generic error: {E}")
+        return jsonify({"error": "Internal error"}), 500
+
 def list_users():
     try:
         logger.info(f"/list_users - Successful connection from {current_user.id} at {request.remote_addr}")
@@ -364,7 +432,7 @@ def list_system_users():
         
         # 2. Return All users across all agents
         else:
-            users = query.order_by(SystemUser.agent_id.asc(), SystemUser.username.asc()).all()
+            users = query.order_by(SystemUser.host_id.asc(), SystemUser.username.asc()).all()
             log_msg = "returning all system users"
 
         returned_users = [u.to_dict() for u in users]
@@ -449,48 +517,39 @@ def get_task():
 
 def get_tasks_all():
     try:
-        # 1. Fetch all agents and their tasks in a single optimized query
-        # We order by Agent ID, and nested tasks are typically handled by the relationship logic
+        # Fetch agents and their associated host info
         agents = Agent.query.options(joinedload(Agent.agent_tasks)).all()
-
-        results = []
-        for agent in agents:
-            # Skip the custom dashboard agent
-            if agent.agent_id == 'custom':
-                continue
-
-            # 2. Build the nested structure
-            # We sort the tasks by created_at descending so the newest tasks appear first in the list
-            sorted_tasks = sorted(
-                agent.agent_tasks, 
-                key=lambda x: x.created_at, 
-                reverse=True
-            )
-
-            agent_data = {
-                "agent_id": agent.agent_id,
-                "hostname": agent.host.hostname,
-                "ip": agent.host.ip,
-                "os": agent.host.os,
-                "lastSeenTime": agent.lastSeenTime,
-                "task_count": len(sorted_tasks),
-                # Nest the tasks here
-                "tasks": [t.to_dict() for t in sorted_tasks]
-            }
-            results.append(agent_data)
-
-        logger.info(
-            f"/get_tasks_all - Successful connection from {current_user.id} at "
-            f"{request.remote_addr} - Returning {len(results)} agents with nested task history"
-        )
         
-        return jsonify(results), 200
+        flat_tasks = []
+        for agent in agents:
+            if agent.agent_id == 'custom': continue
+
+            # "local_index" is the task's position relative to that specific agent
+            # Reverse sorted so the newest task for that agent is index 0
+            sorted_tasks = sorted(agent.agent_tasks, key=lambda x: x.created_at, reverse=True)
+
+            for index, task in enumerate(sorted_tasks):
+                # Flattening the data structure
+                task_entry = {
+                    "task_id": task.id,
+                    "local_index": task.local_index,
+                    "created_at": task.created_at,
+                    "agent_id": agent.agent_id, # Helpful for internal ID
+                    "agent_name": agent.agent_name, # Or agent.hostname if applicable
+                    "agent_type": agent.agent_type,
+                    "ip_address": agent.host.ip,
+                    "hostname": agent.host.hostname,
+                    "task_command": task.task,
+                    "task_result": task.result
+                }
+                flat_tasks.append(task_entry)
+
+        # Sort all tasks globally by time (newest first)
+        flat_tasks.sort(key=lambda x: x['created_at'], reverse=True)
+        return jsonify(flat_tasks), 200
 
     except Exception as e:
-        logger.error(
-            f"/get_tasks_all - Failed connection from {current_user.id} at "
-            f"{request.remote_addr} - internal error: {e}"
-        )
+        logger.error(f"/get_tasks_all - Error: {e}")
         return jsonify({"error": "Internal server error"}), 500
   
 
@@ -999,11 +1058,15 @@ def add_task_bulk():
         host_id = data.get('host_id',[])
         task_command = data.get('task')
 
+        has_agents = len(agent_id) > 0
+        has_hosts = len(host_id) > 0
+        has_types = len(agent_type) > 0
+
         if not task_command:
             logger.warning(f"/add_task_bulk - Failed connection from {current_user.id} at {request.remote_addr} - task ({task_command}) field")
             return jsonify({"error": "task is a required field"}), 400
 
-        if not agent_id and not host_id and not (agent_type and host_id):
+        if not (has_agents or has_hosts or has_types):
             logger.warning(f"/add_task_bulk - Failed connection from {current_user.id} at {request.remote_addr} - missing target field(s)")
             return jsonify({"error": "must have agent_id, host_id, or combination of host_id and agent_type"}), 400
         
@@ -1018,9 +1081,9 @@ def add_task_bulk():
 
         agents = None
         # Bulk task targets one or more agent_ids
-        if len(agent_id > 0):
+        if len(agent_id) > 0:
             agents = Agent.query.filter(Agent.agent_id.in_(agent_id)).all()
-        if len(agent_type > 0) and len(host_id > 0):
+        if len(agent_type) > 0 and len(host_id) > 0:
             # Bulk task targets all agents of given types on given host
             agents = Agent.query.filter(
                 Agent.host_id.in_(host_id),
@@ -1028,10 +1091,10 @@ def add_task_bulk():
             ).all()
         else:
             # Bulk task targets one or more agent_types
-            if len(agent_type > 0):
+            if len(agent_type) > 0:
                 agents = Agent.query.filter(Agent.agent_type.in_(agent_type)).all()
             # Bulk task targets one or more host_ids
-            if len(host_id > 0):
+            if len(host_id) > 0:
                 #agent_type = ["c2_1"] # not all agents support generic shell commands
                 agents = Agent.query.filter(
                     Agent.host_id.in_(host_id)#,

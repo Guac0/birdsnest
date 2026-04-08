@@ -29,7 +29,7 @@ run_git, hash_id, create_incident, clean_and_join_path, get_git_stats, find_inci
 )
 from modules.generic_web import (
     login,
-    dashboard_summary,
+    dashboard_summary, get_pwnboard_data,
     list_users, list_users_simple, list_tokens, list_tokens_agent,
     list_tokens_number, list_tokens_agent_number, list_agents, list_messages,
     list_incidents, list_ansiblevars, list_logfile,
@@ -147,6 +147,12 @@ def load_user(id):
 def page_dashboard():
     logger.info(f"/dashboard - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("dashboard.html")
+
+@app.route("/web/pwnboard")
+@login_required
+def page_pwnboard():
+    logger.info(f"/pwnboard - Successful connection from {current_user.id} at {request.remote_addr}")
+    return render_template("pwnboard.html")
 
 @app.route("/web/agents")
 @login_required
@@ -333,6 +339,11 @@ def get_global_config_web_redirect():
 def dashboard_summary_redirect():
     return dashboard_summary()
 
+@app.route("/web/get_pwnboard_data", methods=["GET"]) # TODO standardize on POST
+@login_required
+def get_pwnboard_data_redirect():
+    return get_pwnboard_data()
+
 @app.route("/web/get_repo_history", methods=["POST"])
 @login_required
 def get_repo_history_redirect():
@@ -432,13 +443,13 @@ def list_ansibleresult_redirect():
 
 @app.route("/web/get_task", methods=["POST"])
 @login_required
-def get_tasks_all_redirect():
-    return get_tasks_all()
+def get_task_redirect():
+    return get_task()
 
 @app.route("/web/get_tasks_all", methods=["POST"])
 @login_required
-def get_task_redirect():
-    return get_task()
+def get_tasks_redirect():
+    return get_tasks_all()
 
 @app.route("/web/list_system_users", methods=["POST"])
 @login_required

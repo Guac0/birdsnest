@@ -330,9 +330,9 @@
     function openPauseModal(agentId){activePauseAgent=agentId;modalAgentId.textContent=agentId;pauseSecondsInput.value=60;modal.style.display='flex';}
     function closePauseModal(){modal.style.display='none';activePauseAgent=null;}
     async function confirmPause(){const secs=Number(pauseSecondsInput.value);if(!Number.isInteger(secs)||secs<=0)return;try{await postJSON(ENDPOINTS.pause,{agent_id:activePauseAgent,seconds:secs});closePauseModal();await fetchAgents();}catch(err){alert('Failed: '+err.message);}}
-    function openTaskModal(agentId){activeTaskAgent=agentId;modalAgentIdTask.textContent=agentId;taskContent.value="";modal.style.display='flex';}
+    function openTaskModal(agentId){activeTaskAgent=agentId;modalAgentIdTask.textContent=agentId;taskContent.value="";modalTask.style.display='flex';}
     function closeTaskModal(){modalTask.style.display='none';activeTaskAgent=null;}
-    async function confirmTask(){try{await postJSON(ENDPOINTS.add_task,{agent_id:activeTaskAgent,task_command:taskContent.value});closeTaskModal();await fetchAgents();}catch(err){alert('Failed: '+err.message);}}
+    async function confirmTask(){try{await postJSON(ENDPOINTS.add_task,{agent_id:activeTaskAgent,task:taskContent.value});closeTaskModal();await fetchAgents();}catch(err){alert('Failed: '+err.message);}}
     function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));}
     function downloadJSON(){const filename='agents_'+new Date().toISOString()+'.json';const b=new Blob([JSON.stringify(agentsData,null,2)],{type:'application/json'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=filename;a.click();URL.revokeObjectURL(u);}
 

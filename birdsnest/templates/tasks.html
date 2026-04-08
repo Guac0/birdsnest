@@ -155,7 +155,7 @@ function calculateWidths(colKey = null) {
     let maxLength = col.length; 
     rows.forEach(rec => {
       let val = ((col === 'message_id') || (col === 'agent_id')) ? Object.keys(tasksData).find(key => tasksData[key] === rec) : rec[col];
-      if (/time|timestamp/i.test(col) && val) val = formatTime(val);
+      //if (/time|timestamp|created/i.test(col) && val) val = formatTime(val);
       const len = String(val ?? '').length;
       if (len > maxLength) maxLength = len;
     });
@@ -164,19 +164,26 @@ function calculateWidths(colKey = null) {
   });
 }
 
-async function fetchTasks(){
-  try{
-    const res = await postJSON(ENDPOINTS.listTasks,{});
-    tasksData = (typeof res==='object') ? res : JSON.parse(res);
+async function fetchTasks() {
+  try {
+    const res = await postJSON(ENDPOINTS.listTasks, {});
+    // Backend now returns an array [ {...}, {...} ]
+    tasksData = (typeof res === 'object') ? res : JSON.parse(res);
+    
     await verifyClientContext();
-    columns = deriveColumns(tasksData);
+
+    // Set columns manually to ensure your specific order
+    columns = [
+        "task_id", "local_index", "created_at", "agent_name", 
+        "agent_type", "ip_address", "hostname", "task_command", "task_result"
+    ];
     
     if (Object.keys(columnWidths).length === 0) calculateWidths();
     
     renderTable();
     showToast();
     updateTimeEl.innerText = "Updated: " + new Date().toLocaleTimeString();
-  }catch(err){console.error(err);}
+  } catch (err) { console.error(err); }
 }
 
 function showToast(){toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),3000);}
@@ -210,32 +217,42 @@ function renderTable(){
   });
 }
 
-function buildFilteredSortedRows(){
+function buildFilteredSortedRows() {
   const rows = [];
-  for(const [msgId, rec] of Object.entries(tasksData)){
-    const record = Object.assign({message_id: msgId}, rec);
-    if(!recordMatchesFilters(record)) continue;
-    rows.push({msgId, record, html: buildRowHtml(record)});
-  }
-  if(sortState.key){
-    rows.sort((a,b) => {
-      const A=a.record[sortState.key], B=b.record[sortState.key];
-      if(A==null || B==null) return A==null ? -1*sortState.dir : 1*sortState.dir;
-      return (typeof A === 'number' ? (A-B) : String(A).toLowerCase().localeCompare(String(B).toLowerCase())) * sortState.dir;
+  // tasksData is now an array of task objects
+  tasksData.forEach(record => {
+    if (!recordMatchesFilters(record)) return;
+    rows.push({ record, html: buildRowHtml(record) });
+  });
+
+  if (sortState.key) {
+    rows.sort((a, b) => {
+      const A = a.record[sortState.key], B = b.record[sortState.key];
+      if (A == null || B == null) return A == null ? -1 * sortState.dir : 1 * sortState.dir;
+      return (typeof A === 'number' ? (A - B) : String(A).toLowerCase().localeCompare(String(B).toLowerCase())) * sortState.dir;
     });
   }
   return rows;
 }
 
-function buildRowHtml(rec){
+function buildRowHtml(rec) {
   const cells = columns.map(k => {
     let v = rec[k];
-    if(/time|timestamp/i.test(k) && v) v = formatTime(v);
-    let content = typeof v === 'boolean' ? (v ? `<span class="bool-dark">True</span>` : `<span class="false-red">False</span>`) : escapeHtml(String(v ?? ''));
+    //if (/time|timestamp|created/i.test(k) && v) v = formatTime(v);
     
-    // Fixed: Only 'message' column gets auto width, others use 1% to force pixel width compliance
-    const isMessage = k.toLowerCase() === 'message';
-    const wrapStyle = isMessage ? 'style="white-space:normal; overflow-wrap:anywhere; width:auto;"' : 'style="white-space:nowrap; width:1%;"';
+    // Status color coding for results
+    let content = escapeHtml(String(v ?? ''));
+    if (k === 'task_result') {
+        if (content === 'PENDING') content = `<span class="bool-dark">PENDING</span>`;
+        if (content.includes('Error')) content = `<span class="false-red">${content}</span>`;
+    }
+
+    // Assign 'auto' width logic to the command and result columns
+    const isLargeField = k === 'task_command' || k === 'task_result';
+    const wrapStyle = isLargeField ? 
+        'style="white-space:normal; overflow-wrap:anywhere; width:auto; min-width:200px;"' : 
+        'style="white-space:nowrap; width:1%;"';
+
     return `<td ${wrapStyle}>${content}</td>`;
   });
   return `<tr>${cells.join('')}</tr>`;

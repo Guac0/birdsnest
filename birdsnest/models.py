@@ -32,7 +32,7 @@ class Host(db.Model):
     __tablename__ = 'hosts'
     
     id = db.Column(db.Integer, primary_key=True)
-    hostname = db.Column(db.String(128), unique=True, nullable=False)
+    hostname = db.Column(db.String(128), nullable=False)
     ip = db.Column(db.String(48), unique=True, nullable=False)
     os = db.Column(db.String(64), nullable=False) # note that 'os' may vary as different agents may not be standardized on os reporting due to programming language differences. This value is only set in the initial host creation.
 
@@ -71,7 +71,7 @@ class Agent(db.Model):
     incidents = db.relationship('Incident', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == Incident.agent_id")
     auth_token_agents = db.relationship('AuthTokenAgent', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == AuthTokenAgent.agent_id")
     agent_tasks = db.relationship('AgentTask', backref='agent', lazy='select', primaryjoin="Agent.agent_id == AgentTask.agent_id")
-    system_users = db.relationship('SystemUser', backref='agent', lazy='select', primaryjoin="Agent.agent_id == SystemUser.agent_id")
+    #system_users = db.relationship('SystemUser', backref='agent', lazy='select', primaryjoin="Agent.agent_id == SystemUser.agent_id")
 
     def __repr__(self):
         return f"<Agent {self.agent_name} ({'Online' if self.lastStatus else 'Down'})>"
@@ -293,12 +293,12 @@ class AgentTask(db.Model):
     __tablename__ = 'agent_tasks'
 
     id = db.Column(db.Integer, primary_key=True)
-    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
+    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=True)
 
     host_id = db.Column(db.Integer, db.ForeignKey('hosts.id'), nullable=True)
     agent_type = db.Column(db.String(24), nullable=True)
 
-    local_index = db.Column(db.Integer, nullable=False)
+    local_index = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     task = db.Column(db.String(1024), nullable=False)
     result = db.Column(db.Text, default="", nullable=False)
