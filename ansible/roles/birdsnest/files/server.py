@@ -8,7 +8,7 @@ import subprocess
 from werkzeug.middleware.proxy_fix import ProxyFix
 from models import (
 db,
-Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
+Host, Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
@@ -25,7 +25,7 @@ run_git, hash_id, create_incident, clean_and_join_path, get_git_stats, find_inci
 )
 from modules.generic_web import (
     login,
-    dashboard_summary,
+    dashboard_summary, get_pwnboard_data,
     list_users, list_users_simple, list_tokens, list_tokens_agent,
     list_tokens_number, list_tokens_agent_number, list_agents, list_messages,
     list_incidents, list_ansiblevars, list_logfile,
@@ -33,10 +33,11 @@ from modules.generic_web import (
     agent_pause, agent_resume, add_incident, add_user,
     delete_token, delete_token_agent, update_incident_tag, update_incident_assignee,
     update_incident_sla, add_ansible, add_token, delete_user,
-    get_task, get_tasks_all, add_task, add_task_bulk
+    get_task, get_tasks_all, add_task, add_task_bulk,
+    list_system_users, list_system_users_all
 )
 from modules.generic_agent import (
-    beacon_generic_handler, beacon_generic, get_pause,
+    beacon_generic_handler, beacon_generic, beacon_users, get_pause,
     get_task_agent, set_task_result
 )
 from modules.magpie_web import (
@@ -53,12 +54,6 @@ from modules.owlet_web import (
 )
 from modules.owlet_agent import (
     beacon_owlet, get_config, get_global_config_agent
-)
-from modules.kingfisher_agent import (
-    beacon_kingfisher
-)
-from modules.kingfisher_web import (
-    list_system_users, list_system_users_all
 )
 SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{ DATABASE_CREDS }@{ DATABASE_LOCATION }/{ DATABASE_DB }"
 app = Flask(__name__)
@@ -121,6 +116,11 @@ def load_user(id):
 def page_dashboard():
     logger.info(f"/dashboard - Successful connection from {current_user.id} at {request.remote_addr}")
     return render_template("dashboard.html")
+@app.route("/web/pwnboard")
+@login_required
+def page_pwnboard():
+    logger.info(f"/pwnboard - Successful connection from {current_user.id} at {request.remote_addr}")
+    return render_template("pwnboard.html")
 @app.route("/web/agents")
 @login_required
 def page_agents():
@@ -224,9 +224,9 @@ def beacon_magpie_redirect():
 @app.route("/agent/beacon/owlet", methods=["POST"])
 def beacon_owlet_redirect():
     return beacon_owlet()
-@app.route("/agent/beacon/kingfisher", methods=["POST"])
-def beacon_kingfisher_redirect():
-    return beacon_kingfisher()
+@app.route("/agent/beacon/users", methods=["POST"])
+def beacon_users_redirect():
+    return beacon_users()
 @app.route("/agent/get_pause", methods=["POST"])
 def get_pause_redirect():
     return get_pause()
@@ -268,6 +268,10 @@ def get_global_config_web_redirect():
 @login_required
 def dashboard_summary_redirect():
     return dashboard_summary()
+@app.route("/web/get_pwnboard_data", methods=["GET"]) 
+@login_required
+def get_pwnboard_data_redirect():
+    return get_pwnboard_data()
 @app.route("/web/get_repo_history", methods=["POST"])
 @login_required
 def get_repo_history_redirect():
@@ -348,12 +352,12 @@ def list_ansibleresult_redirect():
     return list_ansibleresult()
 @app.route("/web/get_task", methods=["POST"])
 @login_required
-def get_tasks_all_redirect():
-    return get_tasks_all()
-@app.route("/web/get_tasks_all", methods=["POST"])
-@login_required
 def get_task_redirect():
     return get_task()
+@app.route("/web/get_tasks_all", methods=["POST"])
+@login_required
+def get_tasks_redirect():
+    return get_tasks_all()
 @app.route("/web/list_system_users", methods=["POST"])
 @login_required
 def list_system_users_redirect():
