@@ -90,11 +90,11 @@ all:
     test:
       hosts:
         test_ubuntu:
-          ansible_host: 10.1.1.10
+          ansible_host: 10.1.1.11
           default_user: "sysadmin"
           default_password: "Changeme1!"
         test_rocky:
-          ansible_host: 10.1.1.11
+          ansible_host: 10.1.1.12
           default_user: "sysadmin"
           default_password: "Changeme1!"
 
