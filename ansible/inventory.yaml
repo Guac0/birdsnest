@@ -3,9 +3,9 @@ all:
     ecomm:
       hosts:
         Ubuntu-Ecomm:
-          ansible_host: "172.16.1.30"
           external_ip: "172.16.1.30"
           internal_ip: "172.20.10.30"
+          ansible_host: "{{ internal_ip }}"
           os: "Ubuntu Server 24.04"
           default_user: "sysadmin"
           default_password: "Changeme1!"
@@ -13,9 +13,9 @@ all:
     webmail:
       hosts:
         Rocky-Webmail:
-          ansible_host: "172.16.1.40"
           external_ip: "172.16.1.40"
           internal_ip: "172.20.10.40"
+          ansible_host: "{{ internal_ip }}"
           os: "Rocky Linux 9"
           default_user: "sysadmin"
           default_password: "Changeme1!"
@@ -23,9 +23,9 @@ all:
     siem:
       hosts:
         Splunk:
-          ansible_host: "172.16.1.20"
           external_ip: "172.16.1.20"
           internal_ip: "172.20.10.20"
+          ansible_host: "{{ internal_ip }}"
           os: "Rocky Linux 9"
           default_user: "sysadmin"
           default_password: "Changeme1!"
@@ -33,25 +33,25 @@ all:
     workstations:
       hosts:
         Ubuntu-Wkst:
-          ansible_host: "172.16.1.50"
           external_ip: "172.16.1.50"
           internal_ip: "172.20.10.50"
+          ansible_host: "{{ internal_ip }}"
           default_user: "sysadmin"
           default_password: "Changeme1!"
 
         Win10-Wkst:
-          ansible_host: "172.16.1.100"
           external_ip: "172.16.1.100"
           internal_ip: "172.20.11.100"
+          ansible_host: "{{ internal_ip }}"
           default_user: "localuser"
           default_password: "password"
 
     gateways:
       hosts:
         Alpine-FW:
-          ansible_host: "172.16.1.1"
           external_ip: "172.16.1.1"
           internal_ip: "172.20.10.1"
+          ansible_host: "{{ internal_ip }}"
           default_user: "alpine"
           default_password: "alpine"
         OPNsense-FW:
@@ -61,12 +61,12 @@ all:
           default_user: "root"
           default_password: "opnsense"
 
-    ad_dns_horror:
+    ad_dns:
       hosts:
         AD-DNS:
-          ansible_host: "172.16.1.102"
           external_ip: "172.16.1.102"
           internal_ip: "172.20.11.102"
+          ansible_host: "{{ internal_ip }}"
           default_user: "domainadmin"
           default_password: "password"
 
@@ -74,23 +74,34 @@ all:
     iis:
       hosts:
         IIS-Web:
-          ansible_host: "172.16.1.101"
           external_ip: "172.16.1.101"
           internal_ip: "172.20.11.101"
+          ansible_host: "{{ internal_ip }}"
           default_user: "localuser"
           default_password: "password"
 
         IIS-FTP:
-          ansible_host: "172.16.1.104"
           external_ip: "172.16.1.104"
           internal_ip: "172.20.11.104"
+          ansible_host: "{{ internal_ip }}"
           default_user: "localuser"
           default_password: "password"
+    
+    test:
+      hosts:
+        test_ubuntu:
+          ansible_host: 10.1.1.10
+          default_user: "sysadmin"
+          default_password: "Changeme1!"
+        test_rocky:
+          ansible_host: 10.1.1.11
+          default_user: "sysadmin"
+          default_password: "Changeme1!"
 
     # --- Updated OS-based groups ---
     windows:
       children:
-        ad_dns_horror:
+        ad_dns:
       hosts:
         IIS-Web:
         IIS-FTP:
@@ -119,4 +130,4 @@ all:
         ecomm:
         webmail:
         siem:
-        ad_dns_horror:
+        windows:

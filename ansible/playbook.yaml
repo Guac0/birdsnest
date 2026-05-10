@@ -49,3 +49,62 @@
   tags:
     - kingfisher
     - full
+
+- name: Apply Firewall Script
+  hosts: inscope
+  roles:
+    - firewall
+  tags:
+    - firewall
+    - full
+
+- name: Backup Scored Services
+  hosts: inscope
+  roles:
+    - backup
+  tags:
+    - backup
+    - backups
+    - full
+
+- name: Lock unauthorized users
+  hosts: inscope
+  roles:
+    - users_red
+  tags:
+    - users
+    - users_red
+    - full
+  vars_prompt:
+    - name: "new_password"
+      prompt: "Enter the new password for all red Team accounts"
+      private: no
+      confirm: yes
+
+- name: Add Blueteam Users
+  hosts: inscope
+  roles:
+    - users_blue
+  tags:
+    - users
+    - users_blue
+    - full
+  vars_prompt:
+    - name: "new_password"
+      prompt: "Enter the new password for all blue Team accounts"
+      private: no
+      confirm: yes
+
+- name: Change password of inscope users
+  hosts: inscope
+  roles:
+    - users_inscope
+  tags:
+    - users
+    - users_inscope
+    - full
+  vars_prompt:
+    - name: "new_password"
+      prompt: "Enter the new password for all inscope Team accounts"
+      private: no
+      confirm: yes
