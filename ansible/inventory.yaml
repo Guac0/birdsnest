@@ -7,6 +7,8 @@ all:
           external_ip: "172.16.1.30"
           internal_ip: "172.20.10.30"
           os: "Ubuntu Server 24.04"
+          default_user: "sysadmin"
+          default_password: "Changeme1!"
 
     webmail:
       hosts:
@@ -15,6 +17,8 @@ all:
           external_ip: "172.16.1.40"
           internal_ip: "172.20.10.40"
           os: "Rocky Linux 9"
+          default_user: "sysadmin"
+          default_password: "Changeme1!"
 
     siem:
       hosts:
@@ -23,6 +27,8 @@ all:
           external_ip: "172.16.1.20"
           internal_ip: "172.20.10.20"
           os: "Rocky Linux 9"
+          default_user: "sysadmin"
+          default_password: "Changeme1!"
 
     workstations:
       hosts:
@@ -30,10 +36,15 @@ all:
           ansible_host: "172.16.1.50"
           external_ip: "172.16.1.50"
           internal_ip: "172.20.10.50"
+          default_user: "sysadmin"
+          default_password: "Changeme1!"
+
         Win10-Wkst:
           ansible_host: "172.16.1.100"
           external_ip: "172.16.1.100"
           internal_ip: "172.20.11.100"
+          default_user: "localuser"
+          default_password: "password"
 
     gateways:
       hosts:
@@ -41,10 +52,14 @@ all:
           ansible_host: "172.16.1.1"
           external_ip: "172.16.1.1"
           internal_ip: "172.20.10.1"
+          default_user: "alpine"
+          default_password: "alpine"
         OPNsense-FW:
           ansible_host: "172.16.1.2"
           external_ip: "172.16.1.2"
           internal_ip: "172.20.11.1"
+          default_user: "root"
+          default_password: "opnsense"
 
     ad_dns_horror:
       hosts:
@@ -52,7 +67,8 @@ all:
           ansible_host: "172.16.1.102"
           external_ip: "172.16.1.102"
           internal_ip: "172.20.11.102"
-          domain: "horrorhouse.local"
+          default_user: "domainadmin"
+          default_password: "password"
 
     # Adding to existing service groups
     iis:
@@ -61,10 +77,15 @@ all:
           ansible_host: "172.16.1.101"
           external_ip: "172.16.1.101"
           internal_ip: "172.20.11.101"
+          default_user: "localuser"
+          default_password: "password"
+
         IIS-FTP:
           ansible_host: "172.16.1.104"
           external_ip: "172.16.1.104"
           internal_ip: "172.20.11.104"
+          default_user: "localuser"
+          default_password: "password"
 
     # --- Updated OS-based groups ---
     windows:

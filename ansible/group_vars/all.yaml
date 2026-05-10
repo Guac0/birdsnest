@@ -4,13 +4,14 @@ blueteam_users:
 - two
 - three
 
-ansible_user: blueteam
-ansible_password: blueteam
+ansible_user: "{{ default_user }}"
+ansible_password: "{{ default_password }}"
 ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 birdsnest_token: testtoken
 birdsnest_host: 10.20.1.20:443
 birdsnest_host_ip: 10.20.1.20
 controller_backup_root: /backups
+domain: "horrorhouse.local"
 
 legit_ips:
   - 127.0.0.1
