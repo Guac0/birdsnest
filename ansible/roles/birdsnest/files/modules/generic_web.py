@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from models import (
 db,
-Host, Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
@@ -58,7 +58,7 @@ def dashboard_summary():
                 "total": Agent.query.count() - 1,
                 "active": Agent.query.filter_by(lastStatus=True).count() - 1,
                 "stale": Agent.query.filter_by(stale=True).count() - 1,
-                "paused": Agent.query.filter(Agent.pausedUntil != "0").count()
+                "paused": Agent.query.filter(Agent.pausedUntil != "0").count() - 1
             },
             "webhooks": {
                 "queue_count": WebhookQueue.query.count() or 0,
@@ -96,58 +96,6 @@ def dashboard_summary():
     except Exception as e:
         logger.error(f"/dashboard_summary Error: {str(e)}")
         return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
-def get_pwnboard_data():
-    try:        
-        hosts = Host.query.filter(Host.ip != '99.99.99.99').all()
-        hosts.sort(key=lambda h: h.ip)
-        host_data = []
-        type_stats = {} 
-        for host in hosts:
-            alive_agents = [a for a in host.agents if not a.stale]
-            total_agents = host.agents
-            all_types = {a.agent_type for a in total_agents}
-            alive_types = {a.agent_type for a in alive_agents}
-            last_agent = max(total_agents, key=lambda a: a.lastSeenTime) if total_agents else None
-            last_callback_str = f"{last_agent.agent_type}_{last_agent.agent_name}" if last_agent else "N/A"
-            last_time = last_agent.lastSeenTime if last_agent else 0
-            host_entry = {
-                "id": host.id,
-                "hostname": host.hostname,
-                "ip": host.ip,
-                "os": host.os,
-                "agents_alive": len(alive_agents),
-                "agents_total": len(total_agents),
-                "types_alive": len(alive_types),
-                "types_total": len(all_types),
-                "last_callback_time": last_time,
-                "last_callback_name": last_callback_str
-            }
-            host_data.append(host_entry)
-            for a in total_agents:
-                t = a.agent_type
-                if t not in type_stats:
-                    type_stats[t] = {"alive_agents": 0, "total_agents": 0, "alive_hosts": set(), "total_hosts": set()}
-                type_stats[t]["total_agents"] += 1
-                type_stats[t]["total_hosts"].add(host.id)
-                if not a.stale:
-                    type_stats[t]["alive_agents"] += 1
-                    type_stats[t]["alive_hosts"].add(host.id)
-        formatted_type_stats = []
-        for t_name, s in type_stats.items():
-            formatted_type_stats.append({
-                "type": t_name,
-                "agents": f"{s['alive_agents']}/{s['total_agents']}",
-                "hosts": f"{len(s['alive_hosts'])}/{len(s['total_hosts'])}",
-                "health": (s['alive_agents'] / s['total_agents']) * 100 if s['total_agents'] > 0 else 0
-            })
-        logger.info(f"/get_pwnboard_data - Successful connection from {current_user.id} at {request.remote_addr}")
-        return jsonify({
-            "hosts": host_data,
-            "types": formatted_type_stats
-        })
-    except Exception as E:
-        logger.error(f"/get_pwnboard_data - Generic error: {E}")
-        return jsonify({"error": "Internal error"}), 500
 def list_users():
     try:
         logger.info(f"/list_users - Successful connection from {current_user.id} at {request.remote_addr}")
@@ -204,15 +152,10 @@ def list_agents():
     try:
         logger.info(f"/list_agents - Successful connection from {current_user.id} at {request.remote_addr}")
         agents = Agent.query.filter(Agent.agent_id != 'custom').all()
-        agent_dict = {}
-        for agent in agents:
-            data = serialize_model(agent)
-            data.update({
-                "hostname": agent.host.hostname,
-                "ip": agent.host.ip,
-                "os": agent.host.os
-            })
-            agent_dict[agent.agent_id] = data
+        agent_dict = {
+            agent.agent_id: serialize_model(agent)
+            for agent in agents
+        }
         return jsonify(agent_dict)
     except Exception as e:
         logger.error(f"/list_agents - Database or serialization error: {e}")
@@ -230,8 +173,8 @@ def list_messages():
             msg_data.update({
                 "agent_name": agent.agent_name,
                 "agent_type": agent.agent_type,
-                "hostname": agent.host.hostname,
-                "ip": agent.host.ip,
+                "hostname": agent.hostname,
+                "ip": agent.ip,
             })
             message_dict[message.message_id] = msg_data
         logger.info(
@@ -299,100 +242,6 @@ def list_ansibleresult():
     except Exception as e:
         logger.error(f"/list_ansibleresult - Database or serialization error: {e}")
         return jsonify({"error": "Failed to retrieve result details"}), 
-def list_system_users():
-    try:
-        data = request.get_json(silent=True) or {}
-        agent_id = data.get('agent_id')
-        query = SystemUser.query
-        if agent_id:
-            users = query.filter_by(agent_id=agent_id).order_by(SystemUser.username.asc()).all()
-            log_msg = f"returning users for agent {agent_id}"
-        else:
-            users = query.order_by(SystemUser.host_id.asc(), SystemUser.username.asc()).all()
-            log_msg = "returning all system users"
-        returned_users = [u.to_dict() for u in users]
-        logger.info(f"/list_system_users - Successful connection from {current_user.id} at {request.remote_addr} - {log_msg} ({len(returned_users)} users)")
-        return jsonify(returned_users), 200
-    except Exception as e:
-        logger.error(f"/list_system_users - Failed connection from {current_user.id} at {request.remote_addr} - internal error when fetching for agent_id {agent_id}: {e}")
-        return jsonify({"error": "Internal server error"}), 500
-def list_system_users_all():
-    try:
-        agents = Agent.query.options(joinedload(Agent.system_users)).all()
-        results = []
-        for agent in agents:
-            agent_data = {
-                "agent_id": agent.agent_id,
-                "agent_name": agent.agent_name,
-                "hostname": agent.host.hostname,
-                "ip": agent.host.ip,
-                "os": agent.host.os,
-                "lastStatus": agent.lastStatus,
-                "stale": agent.stale,
-                "users": [u.to_dict() for u in agent.system_users],
-                "host_id": agent.host_id
-            }
-            results.append(agent_data)
-        logger.info(
-            f"/list_system_users_all - Successful connection from {current_user.id} at "
-            f"{request.remote_addr} - Returning {len(results)} agents with nested user data"
-        )
-        return jsonify(results), 200
-    except Exception as e:
-        logger.error(
-            f"/list_system_users_all - Failed connection from {current_user.id} at "
-            f"{request.remote_addr} - internal error: {e}"
-        )
-        return jsonify({"error": "Internal server error"}), 500
-def get_task():
-    try:
-        data = request.get_json(silent=True) or {}
-        task_id = data.get('id')
-        agent_id = data.get('agent_id')
-        query = AgentTask.query
-        if task_id:
-            task = query.get(task_id)
-            if not task:
-                logger.warning(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - task not found for id {task_id}")
-                return jsonify({"error": "Task not found"}), 404
-            logger.info(f"/get_task - Successful connection from {current_user.id} at {request.remote_addr} - returning task {task_id}")
-            return jsonify(task.to_dict()), 200
-        if agent_id:
-            tasks = query.filter_by(agent_id=agent_id).order_by(AgentTask.created_at.desc()).all()
-        else:
-            tasks = query.order_by(AgentTask.created_at.desc()).all()
-        returned_tasks = [t.to_dict() for t in tasks]
-        logger.info(f"/get_task - Successful connection from {current_user.id} at {request.remote_addr} - returning all tasks for agent {agent_id} ({len(returned_tasks)} tasks)")
-        return jsonify(returned_tasks), 200
-    except Exception as e:
-        logger.error(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - internal error when fetching (task {task_id}) or (agent_id {agent_id}): {e}")
-        return jsonify({"error": "Internal server error"}), 500
-def get_tasks_all():
-    try:
-        agents = Agent.query.options(joinedload(Agent.agent_tasks)).all()
-        flat_tasks = []
-        for agent in agents:
-            if agent.agent_id == 'custom': continue
-            sorted_tasks = sorted(agent.agent_tasks, key=lambda x: x.created_at, reverse=True)
-            for index, task in enumerate(sorted_tasks):
-                task_entry = {
-                    "task_id": task.id,
-                    "local_index": task.local_index,
-                    "created_at": task.created_at,
-                    "agent_id": agent.agent_id, 
-                    "agent_name": agent.agent_name, 
-                    "agent_type": agent.agent_type,
-                    "ip_address": agent.host.ip,
-                    "hostname": agent.host.hostname,
-                    "task_command": task.task,
-                    "task_result": task.result
-                }
-                flat_tasks.append(task_entry)
-        flat_tasks.sort(key=lambda x: x['created_at'], reverse=True)
-        return jsonify(flat_tasks), 200
-    except Exception as e:
-        logger.error(f"/get_tasks_all - Error: {e}")
-        return jsonify({"error": "Internal server error"}), 500
 def agent_pause():
     data = request.json
     agent_id = data.get("agent_id")
@@ -743,34 +592,82 @@ def add_ansible():
     taskID = new_task.id
     logger.info(f"/add_ansible - Successful connection from {current_user.id} at {request.remote_addr} - Task {taskID} queued via DB for IP {dest_ip}")
     return jsonify({"status": "ok", "task": taskID}), 200
+def get_task():
+    try:
+        data = request.get_json(silent=True) or {}
+        task_id = data.get('id')
+        agent_id = data.get('agent_id')
+        query = AgentTask.query
+        if task_id:
+            task = query.get(task_id)
+            if not task:
+                logger.warning(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - task not found for id {task_id}")
+                return jsonify({"error": "Task not found"}), 404
+            logger.info(f"/get_task - Successful connection from {current_user.id} at {request.remote_addr} - returning task {task_id}")
+            return jsonify(task.to_dict()), 200
+        if agent_id:
+            tasks = query.filter_by(agent_id=agent_id).order_by(AgentTask.created_at.desc()).all()
+        else:
+            tasks = query.order_by(AgentTask.created_at.desc()).all()
+        returned_tasks = [t.to_dict() for t in tasks]
+        logger.info(f"/get_task - Successful connection from {current_user.id} at {request.remote_addr} - returning all tasks for agent {agent_id} ({len(returned_tasks)} tasks)")
+        return jsonify(returned_tasks), 200
+    except Exception as e:
+        logger.error(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - internal error when fetching (task {task_id}) or (agent_id {agent_id}): {e}")
+        return jsonify({"error": "Internal server error"}), 500
+def get_tasks_all():
+    try:
+        agents = Agent.query.options(joinedload(Agent.agent_tasks)).all()
+        results = []
+        for agent in agents:
+            if agent.agent_id == 'custom':
+                continue
+            sorted_tasks = sorted(
+                agent.agent_tasks, 
+                key=lambda x: x.created_at, 
+                reverse=True
+            )
+            agent_data = {
+                "agent_id": agent.agent_id,
+                "hostname": agent.hostname,
+                "ip": agent.ip,
+                "os": agent.os,
+                "lastSeenTime": agent.lastSeenTime,
+                "task_count": len(sorted_tasks),
+                "tasks": [t.to_dict() for t in sorted_tasks]
+            }
+            results.append(agent_data)
+        logger.info(
+            f"/get_tasks_all - Successful connection from {current_user.id} at "
+            f"{request.remote_addr} - Returning {len(results)} agents with nested task history"
+        )
+        return jsonify(results), 200
+    except Exception as e:
+        logger.error(
+            f"/get_tasks_all - Failed connection from {current_user.id} at "
+            f"{request.remote_addr} - internal error: {e}"
+        )
+        return jsonify({"error": "Internal server error"}), 500
 def add_task():
     try:
         data = request.get_json()
-        agent_id = data.get('agent_id',None)
-        agent_type = data.get('agent_type',None)
-        host_id = data.get('host_id',None)
+        agent_id = data.get('agent_id')
         task_command = data.get('task')
-        if not task_command:
-            logger.warning(f"/add_task - Failed connection from {current_user.id} at {request.remote_addr} - task ({task_command}) field")
-            return jsonify({"error": "task is a required field"}), 400
-        if not agent_id and not host_id and not (agent_type and host_id):
-            logger.warning(f"/add_task - Failed connection from {current_user.id} at {request.remote_addr} - missing target field(s)")
-            return jsonify({"error": "must have agent_id, host_id, or combination of host_id and agent_type"}), 400
-        if agent_id:
-            agent = Agent.query.get(agent_id)
-            if not agent:
-                logger.warning(f"/add_task - Failed connection from {current_user.id} at {request.remote_addr} - target agent_id {agent_id} does not exist")
-                return jsonify({"error": "Target agent does not exist"}), 404
+        if not agent_id or not task_command:
+            logger.warning(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - missing agent_id ({agent_id}) and/or task ({task_command}) fields")
+            return jsonify({"error": "agent_id and task are required fields"}), 400
+        agent = Agent.query.get(agent_id)
+        if not agent:
+            logger.warning(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - target agent_id {agent_id} does not exist")
+            return jsonify({"error": "Target agent does not exist"}), 404
         new_task = AgentTask(
             agent_id=agent_id,
-            agent_type=agent_type,
-            host_id=host_id,
             task=task_command,
             result="PENDING"
         )
         db.session.add(new_task)
         db.session.commit()
-        logger.info(f"/add_task - Successful connection from {current_user.id} at {request.remote_addr} - created task {new_task.id}")
+        logger.info(f"/get_task - Successful connection from {current_user.id} at {request.remote_addr} - created task {new_task.id}")
         return jsonify({
             "message": "Task queued successfully",
             "task_id": new_task.id,
@@ -778,53 +675,22 @@ def add_task():
         }), 201
     except Exception as e:
         db.session.rollback()
-        logger.error(f"/add_task - Failed connection from {current_user.id} at {request.remote_addr} - internal error when adding task for agent_id {agent_id} with task {task_command}: {e}")
+        logger.error(f"/get_task - Failed connection from {current_user.id} at {request.remote_addr} - internal error when adding task for agent_id {agent_id} with task {task_command}: {e}")
         return jsonify({"error": "Failed to queue task"}), 500
 def add_task_bulk():
     try:
         data = request.get_json()
-        agent_id = data.get('agent_id',[])
-        agent_type = data.get('agent_type',[])
-        host_id = data.get('host_id',[])
         task_command = data.get('task')
-        has_agents = len(agent_id) > 0
-        has_hosts = len(host_id) > 0
-        has_types = len(agent_type) > 0
         if not task_command:
-            logger.warning(f"/add_task_bulk - Failed connection from {current_user.id} at {request.remote_addr} - task ({task_command}) field")
-            return jsonify({"error": "task is a required field"}), 400
-        if not (has_agents or has_hosts or has_types):
-            logger.warning(f"/add_task_bulk - Failed connection from {current_user.id} at {request.remote_addr} - missing target field(s)")
-            return jsonify({"error": "must have agent_id, host_id, or combination of host_id and agent_type"}), 400
-        if agent_id:
-            agent = Agent.query.get(agent_id)
-            if not agent:
-                logger.warning(f"/add_task_bulk - Failed connection from {current_user.id} at {request.remote_addr} - target agent_id {agent_id} does not exist")
-                return jsonify({"error": "Target agent does not exist"}), 404
-        new_tasks = []
-        agents = None
-        if len(agent_id) > 0:
-            agents = Agent.query.filter(Agent.agent_id.in_(agent_id)).all()
-        if len(agent_type) > 0 and len(host_id) > 0:
-            agents = Agent.query.filter(
-                Agent.host_id.in_(host_id),
-                Agent.agent_type.in_(agent_type)
-            ).all()
-        else:
-            if len(agent_type) > 0:
-                agents = Agent.query.filter(Agent.agent_type.in_(agent_type)).all()
-            if len(host_id) > 0:
-                agents = Agent.query.filter(
-                    Agent.host_id.in_(host_id)
-                ).all()
+            return jsonify({"error": "Task command is required"}), 400
+        agents = Agent.query.all()
         if not agents:
             return jsonify({"error": "No agents found"}), 404
+        new_tasks = []
         for agent in agents:
             t = AgentTask(
                 agent_id=agent.agent_id,
                 task=task_command,
-                agent_type=None,
-                host_id=None,
                 result="PENDING"
             )
             new_tasks.append(t)

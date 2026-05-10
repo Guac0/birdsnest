@@ -1,0 +1,12 @@
+---
+- name: Windows AD | Perform Users Blue Tasks
+  ansible.builtin.include_tasks: windows.yaml
+  when: inventory_hostname == 'fortress'
+
+- name: Windows | Perform Users Blue Tasks
+  ansible.builtin.include_tasks: windows.yaml
+  when: ansible_os_family == "Windows"
+    
+- name: Linux | Perform Users Blue Tasks
+  ansible.builtin.include_tasks: linux.yaml
+  when: ansible_os_family != "Windows"

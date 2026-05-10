@@ -2,11 +2,9 @@ from flask import request, jsonify
 import time
 import os
 import json
-from datetime import datetime, timezone
-from sqlalchemy import and_, or_
 from models import (
 db,
-Host, Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
@@ -27,8 +25,8 @@ def beacon_generic_handler():
     if returnCode != 200:
         return returnMsg, returnCode
     data = request.json
-    oldStatus = data.get("oldStatus",True)
-    newStatus = data.get("newStatus",True)
+    oldStatus = data.get("oldStatus",True), 
+    newStatus = data.get("newStatus",True), 
     message = data.get("message","") 
     if message:
         try:
@@ -95,22 +93,13 @@ def beacon_generic(endpoint):
             agent = None 
             logger.info(f"{endpoint} - Reregistering and deleting old agent record for agent {agent_id} with details: {request_info}")
         if not agent:
-            host = Host.query.filter(
-                Host.ip == request_info["ip"], 
-                Host.hostname.ilike(request_info["hostname"]) 
-            ).first()
-            if not host:
-                host = Host(
-                    hostname=request_info["hostname"],
-                    ip=request_info["ip"],
-                    os=request_info["os_name"]
-                )
-                db.session.add(host)
             new_agent = Agent(
                 agent_id=agent_id,
-                host_id=host.id,
                 agent_name=request_info["agent_name"],
                 agent_type=request_info["agent_type"],
+                hostname=request_info["hostname"],
+                ip=request_info["ip"],
+                os=request_info["os_name"],
                 executionUser=request_info["executionUser"],
                 executionAdmin=request_info["executionAdmin"],
                 lastSeenTime=current_time,
@@ -190,81 +179,6 @@ def beacon_generic(endpoint):
         db.session.rollback() 
         logger.error(f"/beacon - Error processing RESUME logic for agent {agent_id}: {e}")
     """
-def beacon_users():
-    returnMsg, returnCode, registered, agent_id, current_time = beacon_generic("/agent/beacon/users")
-    if returnCode != 200:
-        return returnMsg, returnCode
-    data = request.json
-    oldStatus = data.get("oldStatus",False) 
-    newStatus = data.get("newStatus",False) 
-    message = data.get("message","") 
-    try:
-        message_id = hash_id(current_time, agent_id)
-        new_message = Message(
-            message_id = message_id,
-            timestamp=current_time,
-            agent_id=agent_id,
-            oldStatus=oldStatus,
-            newStatus=newStatus,
-            message=str(message) 
-        )
-        db.session.add(new_message)
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"/beacon/users - Failed to create message for agent {agent_id}: {e}")
-    try:
-        try:
-            users = json.loads(message)
-            users = data if isinstance(data, list) else [data]
-        except:
-            logger.info(f"/beacon/users - Failed connection from {request.remote_addr}. Could not load message as JSON. Message: {message}")
-            return returnMsg, 400
-        existing_users = {
-            u.username: u for u in SystemUser.query.filter_by(agent_id=agent_id).all()
-        }
-        new_records = []
-        updated_count = 0
-        for user_data in users:
-            username = user_data['username']
-            if username in existing_users:
-                db_user = existing_users[username]
-                changed = False
-                fields = ['admin', 'locked', 'last_login', 'account_type', 'password', 'password_updated']
-                for field in fields:
-                    val = user_data.get(field)
-                    if val is not None:
-                        if getattr(db_user, field) != val:
-                            if field == "password_updated":
-                                setattr(db_user, field, datetime.fromtimestamp(val, tz=timezone.utc))
-                            setattr(db_user, field, val)
-                            changed = True
-                if user_data.get('password') and not user_data.get('password_updated'):
-                    db_user.password_updated = datetime.now(timezone.utc)
-                    changed = True
-                if changed:
-                    updated_count += 1
-            else:
-                new_user = SystemUser(
-                    agent_id=agent_id,
-                    username=username,
-                    admin=user_data.get('admin'),
-                    locked=user_data.get('locked'),
-                    last_login=user_data.get('last_login'),
-                    account_type=user_data.get('account_type'),
-                    password=user_data.get('password'),
-                    password_updated=user_data.get('password_updated')
-                )
-                new_records.append(new_user)
-        if new_records:
-            db.session.add_all(new_records)
-        db.session.commit()
-        logger.info(f"/beacon/users - Successful connection from {request.remote_addr}. Sync Complete for Agent {agent_id}: {len(new_records)} added, {updated_count} updated.")
-        return returnMsg, 200
-    except Exception as E:
-        db.session.rollback()
-        logger.error(f"/beacon/users - Failed to update users for agent {agent_id}: {E}")
-        return "Failed to sync users due to internal error", 500
 def get_pause():
     try:
         data = request.json
@@ -278,7 +192,7 @@ def get_pause():
         auth = data.get("auth","")
         if not all([agent_name, agent_type, hostname, ip, os_name, auth]): 
             logger.warning(f"/agent/get_pause - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
-            return "missing data", 400
+            return "Missing data", 400
         agent_id = hash_id(agent_name, hostname, ip, os_name)
         auth_token_record = AuthTokenAgent.query.filter_by(agent_id=agent_id).first()
         if not auth_token_record:
@@ -305,7 +219,7 @@ def get_task_agent():
         auth = data.get("auth","")
         if not all([agent_name, agent_type, hostname, ip, os_name, auth]): 
             logger.warning(f"/agent/get_task - Failed connection from {request.remote_addr} - missing data. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
-            return "missing data", 400
+            return "Missing data", 400
         agent_id = hash_id(agent_name, hostname, ip, os_name)
         auth_token_record = AuthTokenAgent.query.filter_by(agent_id=agent_id).first()
         if not auth_token_record:
@@ -316,25 +230,9 @@ def get_task_agent():
         if not agent:
             logger.warning(f"/agent/get_task - Failed connection from {request.remote_addr} - no agent. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth]}")
             return "unauthorized - no agent", 403
-        task_entry = AgentTask.query.filter(
-            AgentTask.result == "PENDING",
-            or_(
-                AgentTask.agent_id == agent.agent_id, 
-                and_(
-                    AgentTask.agent_id == None,         
-                    AgentTask.host_id == agent.host_id, 
-                    or_(
-                        AgentTask.agent_type == None, 
-                        AgentTask.agent_type == agent.agent_type 
-                    )
-                )
-            )
-        ).order_by(AgentTask.created_at.asc()).first()
+        task_entry = AgentTask.query.filter_by(agent_id=agent_id, result="PENDING")                                    .order_by(AgentTask.created_at.asc())                                    .first()
         if task_entry:
             try:
-                if task_entry.agent_id is None:
-                    task_entry.agent_id = agent.agent_id
-                    task_entry._assign_local_index()
                 task_entry.result="SENT"
                 db.session.commit()
                 logger.info(f"/agent/get_task - Successful connection from {request.remote_addr} - returning task {task_entry.id}")
@@ -385,25 +283,14 @@ def set_task_result():
     result_text = data2.get('result')
     if task_id is None or result_text is None:
         logger.warning(f"/set_task_result - Failed connection from {request.remote_addr} - missing task_id or result. Full details: {[agent_name, agent_type, hostname, ip, os_name, executionUser, executionAdmin, auth, message, task_id, result_text]}")
-        return "missing task_id or result", 400
+        return "Missing task_id or result", 400
     task_entry = AgentTask.query.get(task_id)
     if not task_entry:
         logger.warning(f"/set_task_result - Failed connection from {request.remote_addr} - no task found for id {task_id}")
-        return "task not found", 400
+        return "Task not found", 400
     try:
         task_entry.result = result_text
         db.session.commit()
-        try:
-            cmd = task_entry.task
-            cmd_parts = cmd.split(" ")
-            if cmd_parts[0] == "change_password" or cmd_parts[0] == "create_user":
-                if result_text == "true":
-                    username = cmd_parts[1]
-                    password = cmd_parts[2]
-                    user = SystemUser.query.get()
-                    db.session.commit()
-        except Exception as E:
-            logger.error(f"/set_task_result - error when checking if password updated is desired: {E}")
         logger.info(f"/set_task_result - Successful connection from {request.remote_addr} - result for task {task_id} recorded: {result_text}")
         return "success", 200
     except Exception as e:

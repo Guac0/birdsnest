@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy import func
 from shared import (
 setup_logging, User, CONFIG, HOST, PORT, PUBLIC_URL, LOGFILE, STALE_TIME, DEFAULT_WEBHOOK_SLEEP_TIME,
@@ -10,25 +10,14 @@ GIT_PROJECT_ROOT, GIT_BACKEND, DATABASE_CREDS, DATABASE_LOCATION, DATABASE_DB
 )
 db = SQLAlchemy()
 logger = setup_logging()
-class Host(db.Model):
-    __tablename__ = 'hosts'
-    id = db.Column(db.Integer, primary_key=True)
-    hostname = db.Column(db.String(128), nullable=False)
-    ip = db.Column(db.String(48), unique=True, nullable=False)
-    os = db.Column(db.String(64), nullable=False) 
-    agents = db.relationship('Agent', backref='host')
-    agent_tasks = db.relationship('AgentTask', backref='host')
-    system_users = db.relationship('SystemUser', backref='host')
-    def __repr__(self):
-        return f"<Host {self.hostname}, IP {self.ip}, OS {self.os}>"
-    def to_dict(self):
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 class Agent(db.Model):
     __tablename__ = 'agents'
     agent_id = db.Column(db.String(65), primary_key=True, nullable=False)
-    host_id = db.Column(db.Integer, db.ForeignKey('hosts.id'), nullable=False)
     agent_name = db.Column(db.String(128))
     agent_type = db.Column(db.String(24))
+    hostname = db.Column(db.String(128))
+    ip = db.Column(db.String(45)) 
+    os = db.Column(db.String(64))
     executionUser = db.Column(db.String(128))
     executionAdmin = db.Column(db.Boolean, default=False)
     lastSeenTime = db.Column(db.Integer, default=lambda: int(time.time())) 
@@ -39,6 +28,7 @@ class Agent(db.Model):
     incidents = db.relationship('Incident', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == Incident.agent_id")
     auth_token_agents = db.relationship('AuthTokenAgent', backref='agent', lazy='dynamic', primaryjoin="Agent.agent_id == AuthTokenAgent.agent_id")
     agent_tasks = db.relationship('AgentTask', backref='agent', lazy='select', primaryjoin="Agent.agent_id == AgentTask.agent_id")
+    system_users = db.relationship('SystemUser', backref='agent', lazy='select', primaryjoin="Agent.agent_id == SystemUser.agent_id")
     def __repr__(self):
         return f"<Agent {self.agent_name} ({'Online' if self.lastStatus else 'Down'})>"
 class Message(db.Model):
@@ -184,7 +174,7 @@ class AuthRecord(db.Model):
 class WebhookQueue(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     incident_id = db.Column(db.Integer, db.ForeignKey('incidents.incident_id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 class AnsibleQueue(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     ansible_folder = db.Column(db.String(255), nullable=False)
@@ -193,45 +183,39 @@ class AnsibleQueue(db.Model):
     dest_ip = db.Column(db.String(50), nullable=False)
     ansible_venv = db.Column(db.String(255), nullable=True)
     extra_vars = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 class AgentTask(db.Model):
     __tablename__ = 'agent_tasks'
     id = db.Column(db.Integer, primary_key=True)
-    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=True)
-    host_id = db.Column(db.Integer, db.ForeignKey('hosts.id'), nullable=True)
-    agent_type = db.Column(db.String(24), nullable=True)
-    local_index = db.Column(db.Integer, nullable=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    task = db.Column(db.String(1024), nullable=False)
+    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
+    local_index = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    task = db.Column(db.String(255), nullable=False)
     result = db.Column(db.Text, default="", nullable=False)
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        if self.agent_id and self.local_index is None:
-            self._assign_local_index()
-    def _assign_local_index(self):
-        last_index = db.session.query(func.max(AgentTask.local_index)).filter(
-            AgentTask.agent_id == self.agent_id
-        ).scalar()
-        self.local_index = (last_index or 0) + 1
+        if self.local_index is None:
+            last_index = db.session.query(func.max(AgentTask.local_index)).filter(
+                AgentTask.agent_id == self.agent_id
+            ).scalar()
+            self.local_index = (last_index or 0) + 1
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}
 class SystemUser(db.Model):
     __tablename__ = 'system_users'
     id = db.Column(db.Integer, primary_key=True)
-    host_id = db.Column(db.Integer, db.ForeignKey('hosts.id'), nullable=False)
+    agent_id = db.Column(db.String(65), db.ForeignKey('agents.agent_id'), nullable=False)
     local_index = db.Column(db.Integer, nullable=False)
     username = db.Column(db.String(64), nullable=False)
-    admin = db.Column(db.Boolean)
-    locked = db.Column(db.Boolean)
-    last_login = db.Column(db.Integer)
-    account_type = db.Column(db.String(8))
-    password = db.Column(db.String(128))
-    password_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    admin = db.Column(db.Boolean, nullable=False)
+    locked = db.Column(db.Boolean, nullable=False)
+    last_login = db.Column(db.Integer, nullable=False)
+    account_type = db.Column(db.String(8), nullable=False)
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if self.local_index is None:
             last_index = db.session.query(func.max(SystemUser.local_index)).filter(
-                SystemUser.host_id == self.host_id
+                SystemUser.agent_id == self.agent_id
             ).scalar()
             self.local_index = (last_index or 0) + 1
     def to_dict(self):

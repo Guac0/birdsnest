@@ -9,7 +9,7 @@ from urllib.parse import unquote_plus
 from sqlalchemy import func
 from models import (
 db,
-Host, Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
@@ -36,9 +36,9 @@ def list_auth_records():
     for record, agent in results:
         entry = record.to_dict()
         entry.pop('agent_id', None)
-        entry['hostname'] = agent.host.hostname
-        entry['agent_ip'] = agent.host.ip  
-        entry['os'] = agent.host.os
+        entry['hostname'] = agent.hostname
+        entry['agent_ip'] = agent.ip  
+        entry['os'] = agent.os
         data[str(record.id)] = entry
     return jsonify(data)
 def update_global_config():

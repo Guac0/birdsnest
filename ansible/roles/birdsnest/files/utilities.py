@@ -10,10 +10,9 @@ from sqlalchemy.orm import class_mapper
 from werkzeug.security import generate_password_hash
 from urllib.parse import urlparse, unquote_plus
 import hashlib
-from sqlalchemy import func
 from models import (
 db,
-Host, Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
+Agent, Message, Incident, AuthToken, AuthTokenAgent, WebUser, AnsibleResult, AnsibleVars,
 AuthConfig, AuthConfigGlobal, AuthRecord, WebhookQueue, AnsibleQueue, AgentTask, SystemUser
 )
 from shared import (
@@ -25,19 +24,13 @@ GIT_PROJECT_ROOT, GIT_BACKEND, DATABASE_CREDS, DATABASE_LOCATION, DATABASE_DB
 logger = setup_logging()
 def insert_initial_data():
     try:
-        host = Host(
-            hostname="custom",
-            ip="99.99.99.99",
-            os="custom"
-        )
-        db.session.add(host)
-        db.session.commit()
-        host = Host.query.filter(Host.hostname == 'custom').first()
         new_agent = Agent(
             agent_id="custom",
-            host_id=host.id,
             agent_name="custom",
             agent_type="custom",
+            hostname="N/A",
+            ip="255.255.255.255",
+            os="N/A",
             executionUser="N/A",
             executionAdmin=True,
             lastSeenTime=0,
@@ -47,9 +40,8 @@ def insert_initial_data():
         )
         db.session.add(new_agent)
         if CREATE_TEST_DATA:
-            add_test_data_hosts(10)
-            add_test_data_agents(25)
-            add_test_data_messages(50)
+            add_test_data_agents(5)
+            add_test_data_messages(10)
             add_test_data_incidents_custom(5)
             add_test_data_incidents(10)
             add_test_data_auth_records(20)
@@ -128,44 +120,30 @@ def get_random_time_offset_epoch(minutes_offset=30, direction="either"):
     else:
         raise ValueError("direction must be 'past', 'future', or 'either'")
     return current_epoch_time + random_offset
-def add_test_data_hosts(num=5):
+def add_test_data_agents(num=5):
     try:
-        if num > 10:
-            logger.warning(f"Clamping number of created hosts to 10 hosts instead of requested {num} due to not having enough test data")
-            num = 10
-        for i in range(1,num+1):
-            hostname = ["webserver1","webserver2","fileshare1","fileshare2","dc01"][i%5]
-            ip = ["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5","10.1.2.1","10.1.2.2","10.1.2.3","10.1.2.4","10.1.2.5"][i-1]
-            os_name = ["Windows 10","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8","Windows 2016Server"][i%5]
-            host = Host(
-                hostname=hostname,
-                ip=ip,
-                os=os_name
-            )
-            db.session.add(host)
-        db.session.commit()
-        logger.info(f"Successfully added {num} test hosts to the database.")
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Failed to add test hosts data: {e}")
-def add_test_data_agents(num=15):
-    try:
-        for i in range(0,num):
-            agent_name = ["apache2","iis","smb","mysql","vsftpd"][i%5]
-            agent_name = agent_name + f"{i}"
-            agent_type = random.choice(["authwatch","pythonc2","genericc2","passwordshim"])
-            host = Host.query.order_by(func.random()).first()
-            computed_agent_id = hash_id(agent_name, host.hostname, host.ip, host.os)
+        for i in range(1,num + 1):
+            agent_name = ["apache2","iis","smb","mysql","vsftpd"][i-1]
+            agent_type = random.choice(["magpie","owlet"])
+            possible_hostnames = ["webserver1","webserver2","fileshare1","fileshare2","dc01"]
+            hostname = possible_hostnames[i-1]
+            possible_ips = ["10.1.1.1","10.1.1.2","10.1.1.3","10.1.1.4","10.1.1.5"]
+            ip = possible_ips[i-1]
+            possible_oses = ["Windows 10","Windows 2016Server","Ubuntu 16.03 Bookworm","RHEL 9.3","Rocky 8"]
+            os_name = possible_oses[i-1]
+            computed_agent_id = hash_id(agent_name, hostname, ip, os)
             new_agent = Agent(
                 agent_id=computed_agent_id,
-                host_id=host.id,
                 agent_name=agent_name,
                 agent_type=agent_type,
+                hostname=hostname,
+                ip=ip,
+                os=os_name,
                 executionUser=random.choice(["root", "admin", ".\\administrator", "domain\\dadmin", "user"]),
-                executionAdmin=random.choice([True, True, False]),
-                lastSeenTime=time.time() - (((num + 1) - i) * 50),
-                lastStatus=random.choice([True, True, False]),
-                stale=random.choice([True, True, False]),
+                executionAdmin=random.choice([True, False]),
+                lastSeenTime=time.time() - ((num - i) * 100),
+                lastStatus=random.choice([True, False]),
+                stale=random.choice([True, False]),
                 pausedUntil=random.choice([str(0),str(0),str(1),str(time.time()),str(time.time() + 180), str(time.time() + 600)])
             )
             db.session.add(new_agent)
@@ -232,7 +210,7 @@ def add_test_data_incidents(num=15,createAlert=True):
         ranagent = random.choice(all_agents)
         agent_id = ranagent.agent_id
         agent_name = ranagent.agent_name
-        hostname = ranagent.host.hostname
+        hostname = "exampleHost"
         lastSeenTime = time.time() - ((num - i) * 100)
         incident_data = {
             "timestamp": lastSeenTime,
@@ -481,8 +459,8 @@ def get_git_stats(db,repos_root=os.path.join(GIT_PROJECT_ROOT,"")):
                     "repo_name": repo_folder,
                     "branch": branch,
                     "agent_name": agent.agent_name if agent else "UNK",
-                    "hostname": agent.host.hostname if agent else "UNK",
-                    "ip": agent.host.ip if agent else "UNK",
+                    "hostname": agent.hostname if agent else "UNK",
+                    "ip": agent.ip if agent else "UNK",
                     "latest_commit_name": name,
                     "latest_commit_time": datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S'),
                     "diffs": {

@@ -1,0 +1,31 @@
+---
+blueteam_users:
+- one
+- two
+- three
+
+ansible_user: blueteam
+ansible_password: blueteam
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+birdsnest_token: testtoken
+birdsnest_host: 10.20.1.20:443
+birdsnest_host_ip: 10.20.1.20
+controller_backup_root: /backups
+
+legit_ips:
+  - 127.0.0.1
+
+out_of_scope_users:
+  - greyteam
+  - grayteam
+
+legit_local_admins:
+  - ladmin
+legit_local_users:
+  - luser
+legit_domain_users:
+  - duser
+legit_domain_admins:
+  - dadmin
+legit_local_all: "{{ legit_local_admins + legit_local_users }}"
+legit_domain_all: "{{ legit_domain_admins + legit_domain_users }}"
