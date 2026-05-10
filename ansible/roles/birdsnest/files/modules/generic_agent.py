@@ -27,8 +27,8 @@ def beacon_generic_handler():
     if returnCode != 200:
         return returnMsg, returnCode
     data = request.json
-    oldStatus = data.get("oldStatus",True), 
-    newStatus = data.get("newStatus",True), 
+    oldStatus = data.get("oldStatus",True)
+    newStatus = data.get("newStatus",True)
     message = data.get("message","") 
     if message:
         try:

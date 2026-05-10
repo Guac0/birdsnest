@@ -46,8 +46,8 @@ def beacon_generic_handler():
 
     # Grab relevant fields from the agent's request
     data = request.json
-    oldStatus = data.get("oldStatus",True), # Client old status. ex: false if client has detected malicious activity or has had an internal error, true if nothing has been detected
-    newStatus = data.get("newStatus",True), # Client new status. Always TRUE if oldStatus is TRUE. Otherwise, serves as an indicator if the issue in oldStatus has been automatically remediated successfully.
+    oldStatus = data.get("oldStatus",True) # Client old status. ex: false if client has detected malicious activity or has had an internal error, true if nothing has been detected
+    newStatus = data.get("newStatus",True) # Client new status. Always TRUE if oldStatus is TRUE. Otherwise, serves as an indicator if the issue in oldStatus has been automatically remediated successfully.
     message = data.get("message","") # Custom string message. Used for incident descriptions.
     # You can do a failure case here if they're missing, but all of these have good defaults so not necessary.
 
