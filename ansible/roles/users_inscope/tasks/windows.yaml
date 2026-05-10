@@ -7,10 +7,10 @@
 
 - name: Windows Local | Case-Insensitive Matching
   vars:
-    system_users: "{{ win_local_raw.output | map('lower') | list }}"
+    system_users: "{{ [win_local_raw.output] | flatten | map('lower') | list }}"
     legit_local_list: "{{ (legit_local_admins + legit_local_users) | map('lower') | list }}"
   ansible.builtin.set_fact:
-    found_targets: "{{ legit_local_list | intersect(system_users) | union(['Administrator']) }}"
+    found_targets: "{{ legit_local_list | intersect(system_users) | union(['administrator']) }}"
     missing_targets: "{{ legit_local_list | difference(system_users) }}"
 
 - name: Windows Local | Warning for Missing Users

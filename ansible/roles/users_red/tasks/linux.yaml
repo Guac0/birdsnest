@@ -3,14 +3,9 @@
   ansible.builtin.getent:
     database: passwd
 
-- name: Linux | Get Password Database
-  ansible.builtin.getent:
-    database: passwd
-
 - name: Linux | Identify Unauthorized Users
   vars:
     allowed_list: "{{ (blueteam_users + out_of_scope_users + legit_local_admins + legit_local_users) | map('lower') | list }}"
-    # We build the list and then ensure Ansible treats it as a list, not a string
     human_users_list: >-
       {% set users = [] %}
       {% for name, details in getent_passwd.items() %}
@@ -20,9 +15,8 @@
       {% endfor %}
       {{ users }}
   ansible.builtin.set_fact:
-    # Use | from_yaml if the string conversion persists
-    unauthorized_users: "{{ human_users_list | difference(allowed_list) }}"
-    
+    unauthorized_users: "{{ human_users_list | difference(allowed_list) | difference(['nobody', 'nfsnobody']) }}"
+
 - name: Linux | Review Unauthorized Users
   ansible.builtin.pause:
     prompt: |
@@ -33,12 +27,24 @@
   when: unauthorized_users | length > 0
   throttle: 1
 
+- name: Linux | Find nologin shell path
+  ansible.builtin.shell: "which nologin || which false"
+  register: nologin_path
+  changed_when: false
+  when: unauthorized_users | length > 0
+
 - name: Linux | Lock Unauthorized Accounts
   ansible.builtin.user:
     name: "{{ item }}"
-    shell: /usr/sbin/nologin
+    shell: "{{ nologin_path.stdout | default('/sbin/nologin') }}"
     password_lock: yes
   loop: "{{ unauthorized_users }}"
+  when: unauthorized_users | length > 0
+
+- name: Linux | Report Results
+  ansible.builtin.debug:
+    msg: "Successfully locked: {{ unauthorized_users | join(', ') }}"
+  when: unauthorized_users | length > 0
 
 #- name: Linux | Rotate Passwords
 #  ansible.builtin.user:

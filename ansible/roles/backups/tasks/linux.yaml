@@ -21,24 +21,31 @@
 #    flat: no
 #  loop: "{{ magpie_protected_folders }}"
 
+- name: Linux | Filter Existing Protected Folders
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ magpie_protected_folders }}"
+  register: folder_stats
+
+- name: Linux | Set Fact for Existing Paths
+  ansible.builtin.set_fact:
+    existing_paths: "{{ folder_stats.results | selectattr('stat.exists') | map(attribute='item') | list }}"
+
 - name: Linux | Create Archive of Protected Folders
   ansible.builtin.archive:
-    path: "{{ magpie_protected_folders }}"
-    dest: "/tmp/{{ inventory_hostname }}_backup.tar.gz"
+    path: "{{ existing_paths }}"
+    dest: "{{ local_backup_root }}/{{ inventory_hostname }}_backup.tar.gz"
     format: gz
     mode: '0600'
   register: archive_result
-
-- name: Linux | Copy Archive to Local Backup Folder
-  ansible.builtin.copy:
-    src: "{{ archive_result.dest }}"
-    dest: "{{ local_backup_root }}/{{ inventory_hostname }}_backup.tar.gz"
-    remote_src: yes
-    mode: '0700'
-  when: archive_result.state == 'file'
+  when: existing_paths | length > 0
 
 - name: Linux | Fetch Archive to Controller
   ansible.builtin.fetch:
     src: "{{ archive_result.dest }}"
+    # Ensure the path ends in a slash so 'flat: yes' treats it as a directory
     dest: "{{ controller_backup_root }}/{{ inventory_hostname }}/"
     flat: yes
+  when: 
+    - archive_result.state is defined 
+    - archive_result.state == 'file'

@@ -6,7 +6,8 @@
 
 - name: Linux | Case-Insensitive Matching
   vars:
-    system_users: "{{ linux_passwd.ansible_facts.getent_passwd.keys() | map('lower') | list }}"
+    #system_users: "{{ linux_passwd.ansible_facts.getent_passwd.keys() | map('lower') | list }}"
+    system_users: "{{ linux_passwd.getent_passwd.keys() | map('lower') | list }}"
     legit_list: "{{ (legit_local_admins + legit_local_users) | map('lower') | list }}"
   ansible.builtin.set_fact:
     found_targets: "{{ legit_list | intersect(system_users) | union(['root']) }}"
@@ -34,3 +35,4 @@
     name: "{{ item }}"
     password: "{{ new_password | password_hash('sha512') }}"
   loop: "{{ found_targets }}"
+  when: found_targets | length > 0

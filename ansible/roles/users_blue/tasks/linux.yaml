@@ -1,6 +1,5 @@
 ---
 - name: Linux | Check for existing users
-  when: ansible_os_family != "Windows"
   ansible.builtin.getent:
     database: passwd
     key: "{{ item }}"
@@ -11,24 +10,27 @@
 - name: Safety | Warn if users exist
   ansible.builtin.pause:
     prompt: "WARNING: One or more Blue Team users already exist on this host. Press ENTER to continue or Ctrl+C to abort."
-  when: >
-    (existing_linux_users.results | selectattr('failed', 'sameas', false) | list | length > 0)
+  when:
+    - existing_linux_users.results | selectattr('failed', 'sameas', false) | list | length > 0
   throttle: 1
 
 - name: Linux | Create Users
-  when: ansible_os_family != "Windows"
   ansible.builtin.user:
     name: "{{ item }}"
     password: "{{ new_password | password_hash('sha512') }}"
-    groups: sudo
+    groups: "{{ sudo_grp_name }}"
     append: yes
     shell: /bin/bash
   loop: "{{ blueteam_users }}"
 
+- name: Linux | Find nologin shell path
+  ansible.builtin.shell: "which nologin || which false"
+  register: nologin_path
+  changed_when: false
+
 - name: Linux | Setup Primary Blueteam User
-  when: ansible_os_family != "Windows"
   ansible.builtin.user:
     name: "{{ blueteam_users[0] }}"
     groups: ""
-    shell: /usr/sbin/nologin
+    shell: "{{ nologin_path.stdout | default('/sbin/nologin') }}"
     password_lock: yes

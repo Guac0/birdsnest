@@ -15,6 +15,7 @@
 - name: Create AD User Objects
   community.windows.win_ad_user:
     name: "{{ item }}"
+    sam_account_name: "{{ item }}"
     password: "{{ new_password }}"
     state: present
     groups:

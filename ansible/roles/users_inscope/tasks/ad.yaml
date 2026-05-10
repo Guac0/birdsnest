@@ -9,7 +9,7 @@
     ad_users: "{{ ad_user_info.objects | map(attribute='SamAccountName') | map('lower') | list }}"
     legit_ad_list: "{{ (legit_domain_users + legit_domain_admins) | map('lower') | list }}"
   ansible.builtin.set_fact:
-    found_targets: "{{ legit_ad_list | intersect(ad_users) | union(['Administrator']) }}"
+    found_targets: "{{ legit_ad_list | intersect(ad_users) | union(['administrator']) }}"
     missing_targets: "{{ legit_ad_list | difference(ad_users) }}"
 
 - name: Windows AD | Warning for Missing Domain Users
@@ -31,7 +31,9 @@
 
 - name: Windows AD | Rotate Domain Passwords
   community.windows.win_ad_user:
-    name: "{{ item }}"
+    # Identity is the key to using SamAccountNames successfully
+    # name: "{{ item }}"
+    identity: "{{ item }}"
     password: "{{ new_password }}"
   loop: "{{ found_targets }}"
   when: found_targets | length > 0
